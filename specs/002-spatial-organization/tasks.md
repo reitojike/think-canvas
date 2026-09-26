@@ -59,7 +59,7 @@
 
 - [x] T027 `app/src/main/java/com/reitojike/thinkcanvas/canvas/CanvasScreen.kt` と `app/src/main/java/com/reitojike/thinkcanvas/canvas/CanvasControls.kt` に各 gesture の代替操作、48dp 以上の新しいつまみ、保存失敗時の無効状態を確認して不足を直す
 - [x] T028 `specs/002-spatial-organization/quickstart.md` の受け入れシナリオと HTML モックの対象状態を照合し、実機で未確認の事項は明示する
-- [ ] T029 `app/src/test/java/com/reitojike/thinkcanvas/canvas/BoardStateTest.kt` と `app/src/test/java/com/reitojike/thinkcanvas/data/CanvasDatabaseTest.kt` の全種・一操作履歴・再起動のテストを通し、lint、デバッグビルド、公開情報境界、`git diff --check` を実行する
+- [x] T029 `app/src/test/java/com/reitojike/thinkcanvas/canvas/BoardStateTest.kt` と `app/src/test/java/com/reitojike/thinkcanvas/data/CanvasDatabaseTest.kt` の全種・一操作履歴・再起動のテストを通し、lint、デバッグビルド、公開情報境界、`git diff --check` を実行する
 
 ## 依存関係
 
