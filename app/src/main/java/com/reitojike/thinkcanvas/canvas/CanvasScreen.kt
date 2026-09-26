@@ -126,6 +126,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val keyboard = LocalSoftwareKeyboardController.current
     val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
+    val regionNameFocusRequester = remember { FocusRequester() }
     val touchSlop = LocalViewConfiguration.current.touchSlop
     val longPressMillis = LocalViewConfiguration.current.longPressTimeoutMillis
     val imeBottom = WindowInsets.ime.getBottom(density)
@@ -293,6 +294,12 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
 
     LaunchedEffect(menuTarget) { if (menuTarget == null) chromeBounds.remove("menu") }
     LaunchedEffect(regionNameId) { if (regionNameId == null) chromeBounds.remove("regionName") }
+    LaunchedEffect(regionNameId) {
+        if (regionNameId != null) {
+            regionNameFocusRequester.requestFocus()
+            keyboard?.show()
+        }
+    }
     LaunchedEffect(guidance, tool, selectedIds) {
         if (guidance == null && tool == SpatialTool.NONE && selectedIds.size <= 1)
             chromeBounds.remove("guidance")
@@ -915,6 +922,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     }, verticalAlignment = Alignment.CenterVertically) {
                     BasicTextField(regionName, onValueChange = { regionName = it },
                         singleLine = true, modifier = Modifier.width(140.dp).padding(8.dp)
+                            .focusRequester(regionNameFocusRequester)
                             .semantics { contentDescription = regionNameLabel },
                         decorationBox = { inner ->
                             Box {
