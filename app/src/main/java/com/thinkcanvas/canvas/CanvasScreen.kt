@@ -287,17 +287,20 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             latestProjection.value.visible(arrow.id) &&
                 snapshot.distanceToArrow(world, arrow, 6f / view.scale) <= 12f / view.scale
         }?.let { return it.id }
-        return snapshot.shapes.asReversed().firstOrNull { shape ->
-            if (!latestProjection.value.visible(shape.id)) return@firstOrNull false
+        val visibleShapes = snapshot.shapes.asReversed().filter { latestProjection.value.visible(it.id) }
+        visibleShapes.firstOrNull { shape ->
             val (nameX, nameY) = view.worldToScreen(shape.x + 8f, shape.y - 22f)
             val nameWidth = with(density) { maxOf(48.dp.toPx(), shape.name.length * 14.dp.toPx()) }
             val nameHit = shape.kind == ShapeKind.REGION && shape.name.isNotBlank() &&
                 point.x in nameX..(nameX + nameWidth) &&
                 point.y in (nameY - with(density) { 8.dp.toPx() })..(nameY + with(density) { 28.dp.toPx() })
-            val collapsedBody = shape.kind == ShapeKind.REGION &&
-                latestProjection.value.farLikeRegion(shape.id) && shape.bounds().contains(world)
-            shape.hitStroke(world, 12f / view.scale) || nameHit || collapsedBody
-        }?.id
+            shape.hitStroke(world, 12f / view.scale) || nameHit
+        }?.let { return it.id }
+        visibleShapes.firstOrNull { it.kind != ShapeKind.REGION &&
+            it.bounds().contains(world) }?.let { return it.id }
+        return visibleShapes.filter { it.kind == ShapeKind.REGION &&
+            latestProjection.value.farLikeRegion(it.id) && it.bounds().contains(world) }
+            .minByOrNull { it.bounds().area }?.id
     }
 
     fun hitCanvas(point: Offset): Pair<TextElement?, String?> {
