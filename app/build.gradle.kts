@@ -11,7 +11,7 @@ room3 {
 
 android {
     namespace = "com.reitojike.thinkcanvas"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.reitojike.thinkcanvas"

@@ -7,17 +7,19 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 
 ## 開発環境
 
-- Android Studio と Android SDK Platform 37.0 / Build Tools 36.0.0
+- Android Studio と Android SDK Platform 36 / Build Tools 36.0.0
 - JDK 17（Android Studio 同梱の JDK も利用できます）
 - インターネット接続（初回の Gradle と Android 依存関係の取得に必要）
 - Spec Kit の操作には Python 環境と `uv` が必要です
 
-現在の構成は AGP 9.4.0、Gradle 9.7.1、`compileSdk 37`、`targetSdk 36`、
+現在の構成は AGP 9.4.0、Gradle 9.7.1、`compileSdk 36`、`targetSdk 36`、
 Compose BOM `2026.09.00` を使用します。[AGP 9.4 の互換表](https://developer.android.com/build/releases/agp-9-4-0-release-notes)
-を基準にしています。`targetSdk 37` は Android 17 の動作変更を端末で確認してから判断します。
+を基準にしています。[Android 17 SDK](https://developer.android.com/about/versions/17/setup-sdk) は
+現在 Preview として案内されているため、`compileSdk 37` は stable channel で入手できるように
+なってから再検討します。`targetSdk 37` は、その後 Android 17 の動作変更を端末で確認してから判断します。
 
-リポジトリを clone して Android Studio で開き、SDK Platform 37.0 をインストールしてください。
-コマンドラインでは `sdkmanager --channel=3 "platforms;android-37.0" "build-tools;36.0.0"` を使います。
+リポジトリを clone して Android Studio で開き、SDK Platform 36 をインストールしてください。
+コマンドラインでは `sdkmanager "platforms;android-36" "build-tools;36.0.0"` を使います。
 Android Studio が作成する `local.properties` は追跡しません。コマンドラインでは JDK 17 と
 `ANDROID_HOME` または `ANDROID_SDK_ROOT` を設定し、Windows なら次を実行します。
 
