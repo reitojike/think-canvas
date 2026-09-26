@@ -706,6 +706,20 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 }
             },
             onRemove = { id -> removeSelection(id) },
+            onRename = { id ->
+                val shape = board.shapes.firstOrNull { it.id == id && it.kind == ShapeKind.REGION }
+                if (shape == null || saving || saveFailed) false else {
+                    regionNameId = id
+                    regionName = shape.name
+                    true
+                }
+            },
+            onColor = { id ->
+                val shape = board.shapes.firstOrNull { it.id == id && it.kind != ShapeKind.REGION }
+                if (shape == null || saving || saveFailed) false else
+                    board.updateShape(id, color = if (shape.color == TextColor.INK)
+                        TextColor.VERMILION else TextColor.INK).also { if (it) saveSnapshot() }
+            },
             onMove = { id, dx, dy ->
                 val ids = if (id in selectedIds) selectedIds else setOf(id)
                 if (saving || saveFailed) false else board.moveSelection(ids, dx, dy).also {
@@ -921,11 +935,14 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                             menuTarget = null
                         }
                     } else if (board.shapes.any { it.id == id }) {
-                        EditorOption(stringResource(R.string.menu_color), false, true, enabled = !saving && !saveFailed) {
-                            val shape = board.shapes.first { it.id == id }
-                            if (board.updateShape(id, color = if (shape.color == TextColor.INK)
-                                TextColor.VERMILION else TextColor.INK)) saveSnapshot()
-                            menuTarget = null
+                        if (board.shapes.any { it.id == id && it.kind != ShapeKind.REGION }) {
+                            EditorOption(stringResource(R.string.menu_color), false, true,
+                                enabled = !saving && !saveFailed) {
+                                val shape = board.shapes.first { it.id == id }
+                                if (board.updateShape(id, color = if (shape.color == TextColor.INK)
+                                    TextColor.VERMILION else TextColor.INK)) saveSnapshot()
+                                menuTarget = null
+                            }
                         }
                         if (board.shapes.any { it.id == id && it.kind == ShapeKind.REGION }) {
                             EditorOption(stringResource(R.string.menu_name), false, false, enabled = !saving && !saveFailed) {

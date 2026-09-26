@@ -54,6 +54,8 @@ fun SpatialElements(
     onSelect: (String) -> Unit,
     onAdd: (String) -> Boolean,
     onRemove: (String) -> Boolean,
+    onRename: (String) -> Boolean,
+    onColor: (String) -> Boolean,
     onMove: (String, Float, Float) -> Boolean,
     onDelete: (String) -> Boolean,
     onReverse: (String) -> Boolean,
@@ -213,6 +215,9 @@ fun SpatialElements(
                 CustomAccessibilityAction("上へ移動") { onMove(shape.id, 0f, -16f) },
                 CustomAccessibilityAction("下へ移動") { onMove(shape.id, 0f, 16f) },
                 CustomAccessibilityAction("大きくする") { onHandle(shape.id, HandleKind.RESIZE) },
+                if (shape.kind == ShapeKind.REGION)
+                    CustomAccessibilityAction("囲みの名前を編集") { onRename(shape.id) }
+                else CustomAccessibilityAction("色を変更") { onColor(shape.id) },
                 CustomAccessibilityAction("削除") { onDelete(shape.id) },
             )
         })
