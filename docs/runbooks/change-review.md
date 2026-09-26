@@ -1,8 +1,10 @@
 # 変更とレビューの手順
 
-この runbook は、stage-tracker の PR 前後の確認手順から、現在の ThinkCanvas に適用できる
-規則を取り込んだものです。CI の実行内容は [Android checks](../../.github/workflows/android.yml)
-を基準にします。
+この runbook は、stage-tracker の [PR 前の検証](https://github.com/reitojike/stage-tracker/blob/main/docs/runbooks/pre-pr-verification.md)、
+[PR 後の収束](https://github.com/reitojike/stage-tracker/blob/main/docs/runbooks/post-pr-convergence.md)、
+[merge 後の Issue 完了](https://github.com/reitojike/stage-tracker/blob/main/docs/runbooks/post-merge-issue-closure.md)
+から、ThinkCanvas に必要な判断を取り込んだものです。実行する CI は
+[Android checks](../../.github/workflows/android.yml) を基準にします。
 
 ## PR を作成する前
 
@@ -20,10 +22,12 @@
    .\gradlew.bat :app:assembleDebug
    pwsh -File scripts/check-public-boundary.ps1
    git diff --check
+   git diff --check origin/main...HEAD
    ```
 
-   macOS / Linux では各 Gradle コマンドの先頭を `./gradlew` に置き換えます。保存や空間配置の不変条件は、実装の形を
-   なぞるだけでなく、振る舞いを確かめるテストで検証します。
+   macOS / Linux では各 Gradle コマンドの先頭を `./gradlew` に置き換えます。
+   `git diff --check` は作業中の変更と PR の base からの差分をそれぞれ確認します。保存や空間配置の
+   不変条件は、実装の形をなぞるだけでなく、振る舞いを確かめるテストで検証します。
 4. 変更ファイルの一覧と差分を読み、秘密情報、ローカルパス、個人情報、非公開サービス、
    会話ログ、PRD の本文、HTML モックの内容が含まれていないか確認します。チェック
    script は典型的なパターンの検出補助です。PR の説明には Issue、関連する spec、
@@ -35,12 +39,28 @@ JDK、SDK、network、権限などの環境要因でローカルビルドを実�
 
 ## PR を作成した後
 
-- CI の結果とレビューの指摘は、**現在の PR head** に対して確認します。新しい commit を
-  追加した場合、以前のビルドとレビューの結果は現行の証拠にはなりません。必須の lint・
-  テスト・ビルド・公開情報境界チェックは、実際の workflow と照合します。
-- 対応が必要な指摘と review thread は解消します。指摘が該当しない場合は理由を記録します。
-  データ消失、privacy、公開情報の境界に関わる変更では、可能なら独立した観点のレビューも
-  受けます。
-- ビルド成功だけで製品の受け入れ条件を満たしたとは判断しません。Issue に記載された
-  振る舞いを確認し、残る差分を記録します。PR の作成、merge、Issue の close はそれぞれ
-  別の判断として扱います。
+1. PR の説明から Issue と spec にたどれることを確認し、レビューを依頼します。CI の結果、
+   PR の base の状態、レビューの指摘を **現在の PR head** に対して確認します。必須の
+   lint・単体テスト・ビルド・公開情報境界チェックを実際の workflow と照合します。
+2. 失敗した CI とレビューの指摘を調べ、必要な修正を行います。該当しない指摘は理由を
+   記録し、修正済み・古くなったものを含む review thread は GitHub 上で解決します。
+   データ消失、privacy、公開情報の境界に関わる変更では、可能なら独立した観点のレビューも
+   受けます。
+3. 修正を push したら、新しい head で CI とレビューを再確認します。base の更新や再レビュー
+   依頼によって確認対象が変わった場合も、古い結果を再利用しません。結果が未着・失敗・
+   不明、または未解決 thread がある間は merge しません。
+4. Issue の受け入れ条件を実装、テスト、必要な実機確認と照合します。未確認の条件は PR に
+   明記します。現行 head の必須 CI が成功し、レビュー指摘が解消され、リポジトリ側で
+   merge 可能な状態になってから merge します。
+
+## merge 後に Issue を完了する
+
+1. PR が実際に merge されたことと merge commit を確認します。main の CI がある場合は
+   その結果も確認します。PR の merge だけで Issue の完了を推定しません。
+2. Issue の最新本文と受け入れ条件を読み直し、各項目を merge 済みの成果物と検証結果に
+   照らして判定します。達成済みの checkbox だけを更新し、未達・未確認の項目は残します。
+   他の人が本文を更新していたら、最新の内容から判断し直します。
+3. 全項目を満たし、既知の残作業がない単一機能の Issue には、実装 PR、merge commit、
+   検証結果、レビュー結果を短く記録して `completed` で close します。親 Issue や進行管理の
+   Issue は、子 Issue の完了状況と残作業を確認して別に判断します。未達や証拠不足があれば
+   close せず、残る作業を記録します。
