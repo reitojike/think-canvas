@@ -1,7 +1,7 @@
 package com.reitojike.thinkcanvas.data
 
 import android.content.Context
-import com.reitojike.thinkcanvas.canvas.TextElement
+import com.reitojike.thinkcanvas.canvas.BoardSnapshot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Deferred
@@ -16,15 +16,21 @@ class CanvasStore private constructor(context: Context) {
     private val mutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    suspend fun load(): List<TextElement> = mutex.withLock {
+    suspend fun load(): BoardSnapshot = mutex.withLock {
         if (dao.firstBoard() == null) dao.putBoard(BoardRow())
-        dao.elements().map { it.toModel() }
+        BoardSnapshot(
+            texts = dao.elements().map { it.toModel() },
+            shapes = dao.spatialElements().map { it.toModel() },
+            arrows = dao.arrows().map { it.toModel() },
+        )
     }
 
-    fun save(elements: List<TextElement>): Deferred<Unit> {
-        val snapshot = elements.map(TextElementRow::fromModel)
+    fun save(snapshot: BoardSnapshot): Deferred<Unit> {
+        val texts = snapshot.texts.map(TextElementRow::fromModel)
+        val shapes = snapshot.shapes.map(SpatialElementRow::fromModel)
+        val arrows = snapshot.arrows.map(ArrowElementRow::fromModel)
         return scope.async {
-            mutex.withLock { dao.replaceAll(snapshot) }
+            mutex.withLock { dao.replaceAll(texts, shapes, arrows) }
         }
     }
 

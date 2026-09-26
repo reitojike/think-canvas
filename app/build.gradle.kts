@@ -48,4 +48,5 @@ dependencies {
     ksp("androidx.room3:room3-compiler:3.0.3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("androidx.sqlite:sqlite-bundled-jvm:2.7.1")
+    testImplementation("androidx.room3:room3-testing:3.0.3")
 }
