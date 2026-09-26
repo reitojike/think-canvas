@@ -513,7 +513,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                                 tool = SpatialTool.NONE
                             }
                             "lasso" -> {
-                                selectedIds = latestSnapshot.value.lassoSelection(lassoPoints)
+                                val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
+                                selectedIds = latestSnapshot.value.lassoSelection(lassoPoints + WorldPoint(x, y))
                                 selectedId = selectedIds.singleOrNull()?.takeIf { id -> board.elements.any { it.id == id } }
                                 guidance = "${selectedIds.size}個を選択"
                                 tool = SpatialTool.NONE
@@ -931,7 +932,54 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     onExpand = {
                         if (tool == SpatialTool.NONE) toolsExpanded = !toolsExpanded
                         else { tool = SpatialTool.NONE; toolsExpanded = false }
-                    }, onSelect = { tool = it; toolsExpanded = false; guidance = "${it.label}を配置" })
+                    }, onSelect = { tool = it; toolsExpanded = false; guidance = "${it.label}を配置" },
+                    onAccessibleAction = { item ->
+                        if (saving || saveFailed || canvasSize == IntSize.Zero) false else {
+                            val (x, y) = viewport.screenToWorld(
+                                canvasSize.width / 2f, canvasSize.height / 2f)
+                            val created = when (item) {
+                                SpatialTool.RECTANGLE, SpatialTool.ELLIPSE, SpatialTool.REGION -> {
+                                    val kind = when (item) {
+                                        SpatialTool.RECTANGLE -> ShapeKind.RECTANGLE
+                                        SpatialTool.ELLIPSE -> ShapeKind.ELLIPSE
+                                        else -> ShapeKind.REGION
+                                    }
+                                    val width = if (kind == ShapeKind.REGION) 200f else if (kind == ShapeKind.RECTANGLE) 120f else 110f
+                                    val height = if (kind == ShapeKind.REGION) 150f else 80f
+                                    val shape = board.addShape(kind, x - width / 2f, y - height / 2f, width, height)
+                                    selectedIds = setOf(shape.id)
+                                    selectedId = null
+                                    if (kind == ShapeKind.REGION) { regionNameId = shape.id; regionName = "" }
+                                    saveSnapshot()
+                                    true
+                                }
+                                SpatialTool.ARROW -> {
+                                    val arrow = board.addArrow(ArrowEnd.Free(x - 60f, y), ArrowEnd.Free(x + 60f, y))
+                                    if (arrow != null) {
+                                        selectedIds = setOf(arrow.id)
+                                        selectedId = null
+                                        saveSnapshot()
+                                    }
+                                    arrow != null
+                                }
+                                SpatialTool.LASSO -> {
+                                    val (left, top) = viewport.screenToWorld(0f, 0f)
+                                    val (right, bottom) = viewport.screenToWorld(
+                                        canvasSize.width.toFloat(), canvasSize.height.toFloat())
+                                    selectedIds = board.snapshot().lassoSelection(listOf(
+                                        WorldPoint(left, top), WorldPoint(right, top),
+                                        WorldPoint(right, bottom), WorldPoint(left, bottom),
+                                    ))
+                                    selectedId = null
+                                    guidance = "${selectedIds.size}個を選択"
+                                    true
+                                }
+                                SpatialTool.NONE -> false
+                            }
+                            if (created) { tool = SpatialTool.NONE; toolsExpanded = false }
+                            created
+                        }
+                    })
             }
 
             val message = guidance ?: when (tool) {
