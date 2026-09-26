@@ -9,7 +9,7 @@ import java.nio.file.Files
 
 class CanvasDatabaseTest {
     @Test
-    fun committedElementsSurviveDatabaseReopenAndUndoSnapshot() {
+    fun committedElementsSurviveDatabaseReopenAndReplacement() {
         runBlocking {
             val file = Files.createTempFile("think-canvas-room-", ".db").toFile()
             file.delete()

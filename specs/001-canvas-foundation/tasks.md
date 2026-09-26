@@ -53,3 +53,9 @@ T001 → T002/T003 → T004 → US1 → US2 → US3 → T013/T014/T015。US1 は
 ## 実装方針
 
 US1 を最初の MVP とし、世界座標を崩さず US2/US3 を積み上げる。実装後に全タスクと受け入れ条件を照合し、残差は converge で追記する。
+
+## Phase 8: Convergence
+
+- [x] T018 保存完了を待ってから確定操作を閉じ、保存失敗時に同じ snapshot を再試行できるようにする per FR-009 (partial)
+- [x] T019 gesture 中断時に preview を破棄し、未確定移動を表示・保存へ残さない per 境界条件 (partial)
+- [x] T020 Room 再オープンテストの名称と実際の検証範囲を一致させる per T014 (partial)

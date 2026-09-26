@@ -30,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -66,6 +67,9 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reitojike.thinkcanvas.R
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 
@@ -86,13 +90,18 @@ private data class Draft(
 )
 
 @Composable
-fun CanvasScreen(board: BoardState, onCommittedChange: () -> Unit) {
+fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     var viewport by remember { mutableStateOf(Viewport()) }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf<Draft?>(null) }
     var preview by remember { mutableStateOf<Pair<String, Pair<Float, Float>>?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    var saving by remember { mutableStateOf(false) }
+    var saveFailed by remember { mutableStateOf(false) }
+    var finishDraftAfterSave by remember { mutableStateOf(false) }
+    var pendingNewElementId by remember { mutableStateOf<String?>(null) }
     val elementSizes = remember { mutableStateMapOf<String, IntSize>() }
+    val uiScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val keyboard = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
@@ -103,6 +112,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Unit) {
     val latestElements = rememberUpdatedState(board.elements)
     val latestSelected = rememberUpdatedState(selectedId)
     val latestDraft = rememberUpdatedState(draft)
+    val latestSaveBlocked = rememberUpdatedState(saving || saveFailed)
     val latestCommit = rememberUpdatedState(onCommittedChange)
     val selectedLabel = stringResource(R.string.selection_state_selected)
     val unselectedLabel = stringResource(R.string.unselected)
@@ -117,6 +127,37 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Unit) {
     val editTextLabel = stringResource(R.string.edit_text)
     val undoLabel = stringResource(R.string.undo)
     val redoLabel = stringResource(R.string.redo)
+
+    fun saveSnapshot(closeDraft: Boolean = false) {
+        if (saving) return
+        finishDraftAfterSave = closeDraft
+        saving = true
+        saveFailed = false
+        val pending = try {
+            latestCommit.value()
+        } catch (_: Exception) {
+            saving = false
+            saveFailed = true
+            return
+        }
+        uiScope.launch {
+            try {
+                pending.await()
+                if (finishDraftAfterSave) {
+                    draft = null
+                    keyboard?.hide()
+                }
+                pendingNewElementId = null
+                finishDraftAfterSave = false
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                saveFailed = true
+            } finally {
+                saving = false
+            }
+        }
+    }
 
     fun hitTest(point: Offset): TextElement? {
         val view = latestViewport.value
@@ -136,7 +177,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Unit) {
     }
 
     fun tap(point: Offset) {
-        if (latestDraft.value != null) return
+        if (latestDraft.value != null || latestSaveBlocked.value) return
         val element = hitTest(point)
         if (element == null) {
             if (latestSelected.value != null) selectedId = null
@@ -150,20 +191,30 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Unit) {
     }
 
     fun nudge(id: String, dx: Float, dy: Float): Boolean {
+        if (saving || saveFailed) return false
         val element = board.elements.firstOrNull { it.id == id } ?: return false
         if (!board.move(id, element.x + dx, element.y + dy)) return false
-        onCommittedChange()
+        saveSnapshot()
         return true
     }
 
     fun commitDraft() {
+        if (saving) return
+        if (saveFailed) {
+            saveSnapshot(finishDraftAfterSave)
+            return
+        }
         val current = draft ?: return
         val changed = if (current.id == null) {
-            board.create(current.text, current.kind, current.color, current.x, current.y) != null
+            val created = board.create(current.text, current.kind, current.color, current.x, current.y)
+            pendingNewElementId = created?.id
+            created != null
         } else board.edit(current.id, current.text, current.kind, current.color)
-        if (changed) onCommittedChange()
-        draft = null
-        keyboard?.hide()
+        if (changed) saveSnapshot(closeDraft = true)
+        else {
+            draft = null
+            keyboard?.hide()
+        }
     }
 
     LaunchedEffect(draft?.id, draft?.x, draft?.y) {
@@ -188,8 +239,9 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Unit) {
         modifier = Modifier.fillMaxSize().onSizeChanged { canvasSize = it }
             .background(paper).clipToBounds().pointerInput(board) {
             awaitEachGesture {
+                try {
                 val down = awaitFirstDown()
-                if (latestDraft.value != null) return@awaitEachGesture
+                if (latestDraft.value != null || latestSaveBlocked.value) return@awaitEachGesture
                 val target = hitTest(down.position)
                 val startTime = SystemClock.uptimeMillis()
                 val start = down.position
@@ -213,7 +265,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Unit) {
                         if (mode == "tap") tap(start)
                         if (mode == "move" && target != null && movedTo != null) {
                             val (x, y) = movedTo
-                            if (board.move(target.id, x, y)) latestCommit.value()
+                            if (board.move(target.id, x, y)) saveSnapshot()
                         }
                         preview = null
                         break
@@ -250,6 +302,9 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Unit) {
                     }
                     event.changes.forEach { it.consume() }
                 }
+                } finally {
+                    preview = null
+                }
             }
         },
     ) {
@@ -261,7 +316,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Unit) {
         }
 
         board.elements.forEach { element ->
-            if (draft?.id != element.id) {
+            if (draft?.id != element.id && pendingNewElementId != element.id) {
                 val display = preview?.takeIf { it.first == element.id }?.second
                 val (screenX, screenY) = viewport.worldToScreen(display?.first ?: element.x, display?.second ?: element.y)
                 val selected = selectedId == element.id
@@ -317,6 +372,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Unit) {
             BasicTextField(
                 value = current.text,
                 onValueChange = { draft = current.copy(text = it) },
+                readOnly = saving || saveFailed,
                 textStyle = TextStyle(
                     color = if (current.color == TextColor.INK) ink else vermilion,
                     fontSize = if (current.kind == TextKind.TITLE) 15.sp else 14.sp,
@@ -360,16 +416,16 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(
-                    onClick = { if (board.undo()) { selectedId = null; onCommittedChange() } },
-                    enabled = board.canUndo,
+                    onClick = { if (board.undo()) { selectedId = null; saveSnapshot() } },
+                    enabled = board.canUndo && !saving && !saveFailed,
                     modifier = Modifier.size(44.dp).semantics { contentDescription = undoLabel },
-                ) { Text("↶", color = if (board.canUndo) ink else muted.copy(alpha = 0.4f), fontSize = 25.sp) }
+                ) { Text("↶", color = if (board.canUndo && !saving && !saveFailed) ink else muted.copy(alpha = 0.4f), fontSize = 25.sp) }
                 Box(Modifier.width(1.dp).height(20.dp).background(outline))
                 IconButton(
-                    onClick = { if (board.redo()) { selectedId = null; onCommittedChange() } },
-                    enabled = board.canRedo,
+                    onClick = { if (board.redo()) { selectedId = null; saveSnapshot() } },
+                    enabled = board.canRedo && !saving && !saveFailed,
                     modifier = Modifier.size(44.dp).semantics { contentDescription = redoLabel },
-                ) { Text("↷", color = if (board.canRedo) ink else muted.copy(alpha = 0.4f), fontSize = 25.sp) }
+                ) { Text("↷", color = if (board.canRedo && !saving && !saveFailed) ink else muted.copy(alpha = 0.4f), fontSize = 25.sp) }
             }
             Box(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 22.dp)
@@ -385,13 +441,36 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Unit) {
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(3.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                EditorOption(stringResource(R.string.title_kind), draft!!.kind == TextKind.TITLE, false) { draft = draft?.copy(kind = TextKind.TITLE) }
-                EditorOption(stringResource(R.string.body_kind), draft!!.kind == TextKind.BODY, false) { draft = draft?.copy(kind = TextKind.BODY) }
-                EditorOption(stringResource(R.string.vermilion_short), draft!!.color == TextColor.VERMILION, true) {
-                    draft = draft?.copy(color = if (draft?.color == TextColor.VERMILION) TextColor.INK else TextColor.VERMILION)
+                EditorOption(stringResource(R.string.title_kind), draft!!.kind == TextKind.TITLE, false) {
+                    if (!saving && !saveFailed) draft = draft?.copy(kind = TextKind.TITLE)
                 }
-                EditorOption(stringResource(R.string.cancel_short), false, false) { draft = null; keyboard?.hide() }
-                EditorOption(stringResource(R.string.done), false, true) { commitDraft() }
+                EditorOption(stringResource(R.string.body_kind), draft!!.kind == TextKind.BODY, false) {
+                    if (!saving && !saveFailed) draft = draft?.copy(kind = TextKind.BODY)
+                }
+                EditorOption(stringResource(R.string.vermilion_short), draft!!.color == TextColor.VERMILION, true) {
+                    if (!saving && !saveFailed) draft = draft?.copy(
+                        color = if (draft?.color == TextColor.VERMILION) TextColor.INK else TextColor.VERMILION,
+                    )
+                }
+                EditorOption(stringResource(R.string.cancel_short), false, false) {
+                    if (!saving && !saveFailed) { draft = null; keyboard?.hide() }
+                }
+                EditorOption(stringResource(if (saveFailed) R.string.retry else R.string.done), false, true) { commitDraft() }
+            }
+        }
+        if (saving || saveFailed) {
+            Box(
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
+                    .height(44.dp)
+                    .then(if (saveFailed && draft == null) Modifier.clickable { saveSnapshot() } else Modifier)
+                    .padding(horizontal = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = stringResource(if (saveFailed) R.string.save_failed else R.string.saving),
+                    color = if (saveFailed) vermilion else muted,
+                    fontSize = 12.sp,
+                )
             }
         }
     }

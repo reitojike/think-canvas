@@ -3,10 +3,10 @@ package com.reitojike.thinkcanvas.data
 import android.content.Context
 import com.reitojike.thinkcanvas.canvas.TextElement
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -21,9 +21,9 @@ class CanvasStore private constructor(context: Context) {
         dao.elements().map { it.toModel() }
     }
 
-    fun save(elements: List<TextElement>) {
+    fun save(elements: List<TextElement>): Deferred<Unit> {
         val snapshot = elements.map(TextElementRow::fromModel)
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+        return scope.async {
             mutex.withLock { dao.replaceAll(snapshot) }
         }
     }

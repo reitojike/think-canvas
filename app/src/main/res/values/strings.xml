@@ -12,6 +12,9 @@
     <string name="body_kind">本文</string>
     <string name="title_kind">見出し</string>
     <string name="done">完了</string>
+    <string name="retry">再試行</string>
+    <string name="saving">保存中…</string>
+    <string name="save_failed">保存できません。再試行</string>
     <string name="undo">戻す</string>
     <string name="redo">進む</string>
     <string name="selection_state_selected">選択中</string>
