@@ -11,7 +11,7 @@
 **Language/Version**: Kotlin、JDK 25 でビルド、bytecode 17
 **Primary Dependencies**: Compose、Jetpack Ink 1.0.0 stable
 **Storage**: Room 3 の既存 `thinkcanvas.db` に追加する ink tables
-**Testing**: JUnit、Room 3 JVM テスト、Android lint、エミュレーター
+**Testing**: JUnit、Room 3 JVM/Android テスト、Android lint、エミュレーター
 **Target Platform**: Android 26–37
 **Project Type**: Android アプリ
 **Performance Goals**: 描画中の線をフレームごとに更新し、確定後の画面切り替わりで線が消えない
