@@ -12,9 +12,8 @@
 - [変更・レビュー手順](docs/runbooks/change-review.md) は PR 前の検証、レビュー、merge 後の
   Issue 完了までの確認範囲を定めます。機械的な合否は実際の
   [Android CI](.github/workflows/android.yml) を確認します。
-- PR のレビューは原則 Codex または Claude に依頼します。実装担当と異なる provider が
-  利用できる場合は優先します。GitHub Copilot と CodeRabbit の指摘は参考にできますが、
-  このレビューの代わりにはしません。現行 PR head の結果と未解決 thread を確認します。
+- PR のレビュー依頼先は原則 Codex または Claude です。選び方と完了条件は
+  [変更・レビュー手順](docs/runbooks/change-review.md) に従います。
 - Android の標準と既存の開発手段を優先します。標準から外れる理由は該当する spec または
   plan に残します。Issue に具体的な必要性が示されるまでは、独自の手順や仕組みを増やしません。
 - プロジェクトが作成する Markdown は原則日本語で書きます。固有名詞、コマンド、識別子、
