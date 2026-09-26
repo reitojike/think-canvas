@@ -164,6 +164,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
 
     fun saveSnapshot(closeDraft: Boolean = false) {
         if (saving) { pendingInkSave = true; return }
+        // 再試行は現在の全 stroke を保存するため、古い待機フラグを持ち越さない。
+        pendingInkSave = false
         finishDraftAfterSave = closeDraft
         saving = true
         saveFailed = false
@@ -1218,10 +1220,15 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             }
         }
         if (saving || saveFailed) {
+            val saveFailedLabel = stringResource(R.string.save_failed)
             Box(
-                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
+                modifier = Modifier.align(Alignment.TopEnd)
+                    .padding(top = if (inkTool != null) 70.dp else 8.dp, end = 8.dp)
                     .height(44.dp)
                     .then(if (saveFailed && draft == null) Modifier.clickable { saveSnapshot() } else Modifier)
+                    .semantics {
+                        if (saveFailed && draft == null) contentDescription = saveFailedLabel
+                    }
                     .padding(horizontal = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {
