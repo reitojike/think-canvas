@@ -31,6 +31,19 @@ class SemanticNavigationTest {
         assertEquals(listOf(inside, outside), snapshot.texts)
     }
 
+    @Test fun highDensityTextUsesRenderedCenterForRegionContainment() {
+        val title = TextElement(id = "long-title", text = "A".repeat(30),
+            kind = TextKind.TITLE, x = 0f, y = 0f)
+        val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+            x = 200f, y = 0f, width = 400f, height = 300f, name = "Group")
+        val snapshot = BoardSnapshot(texts = listOf(title), shapes = listOf(region))
+        assertFalse(snapshot.semanticProjection(.5f, 14f, pixelsPerDp = 3f)
+            .visible("long-title"))
+        assertTrue(snapshot.semanticProjection(.5f, 14f, pixelsPerDp = 3f,
+            measuredTextExtents = mapOf("long-title" to TextExtent(300f, 60f)))
+            .visible("long-title"))
+    }
+
     @Test fun farViewHidesBodyAndSmallInkButKeepsSearchHit() {
         val body = TextElement(id = "body", text = "探す", x = 10f, y = 10f)
         val title = TextElement(id = "title", text = "見出し", kind = TextKind.TITLE, x = 200f, y = 10f)

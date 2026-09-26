@@ -158,6 +158,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val latestViewport = rememberUpdatedState(viewport)
     val latestElements = rememberUpdatedState(board.elements)
     val latestSnapshot = rememberUpdatedState(board.snapshot())
+    val measuredTextExtents = elementSizes.mapValues { (_, size) ->
+        TextExtent(size.width.toFloat(), size.height.toFloat()) }
     val bodyDp = with(density) { 14.sp.toDp().value }
     val titleDp = with(density) { 15.sp.toDp().value }
     val titleTier = semanticTier(bodyDp, viewport.scale)
@@ -169,7 +171,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val matchIds = searchMatches.map { it.id }.toSet()
     val currentMatch = searchMatches.getOrNull(searchPosition)
     val projection = board.snapshot().semanticProjection(viewport.scale, bodyDp,
-        selectedIds + matchIds, density.density, titleDp, titleLineHeightWorld)
+        selectedIds + matchIds, density.density, titleDp, titleLineHeightWorld, measuredTextExtents)
     val latestProjection = rememberUpdatedState(projection)
     val latestLastBlankTap = rememberUpdatedState(lastBlankTap)
     val latestSearchOpen = rememberUpdatedState(searchOpen)
@@ -882,7 +884,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         }
         val movingIds = movingPreview?.first ?: emptySet()
         val displayProjection = displaySnapshot.semanticProjection(viewport.scale, bodyDp,
-            selectedIds + matchIds + movingIds, density.density, titleDp, titleLineHeightWorld)
+            selectedIds + matchIds + movingIds, density.density, titleDp, titleLineHeightWorld,
+            measuredTextExtents)
         InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.MARKER,
             viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
             onSelect = { id -> selectedIds = setOf(id); selectedId = null },

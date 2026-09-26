@@ -21,6 +21,8 @@ data class SemanticProjection(
     fun farLikeRegion(id: String) = tier == SemanticTier.FAR || id in collapsedRegions
 }
 
+data class TextExtent(val width: Float, val height: Float)
+
 fun BoardSnapshot.semanticProjection(
     scale: Float,
     bodyDp: Float,
@@ -28,9 +30,29 @@ fun BoardSnapshot.semanticProjection(
     pixelsPerDp: Float = 1f,
     titleDp: Float = 15f,
     titleLineHeightWorld: Float = 22.5f,
+    measuredTextExtents: Map<String, TextExtent> = emptyMap(),
 ): SemanticProjection {
     val tier = semanticTier(bodyDp, scale)
     fun apparentDp(worldLength: Float) = worldLength * scale / pixelsPerDp
+    fun textCenter(element: TextElement): WorldPoint {
+        val extent = measuredTextExtents[element.id] ?: run {
+            val title = element.kind == TextKind.TITLE
+            val minimumDp = when (tier) {
+                SemanticTier.NEAR -> if (title) 11f else 10f
+                SemanticTier.MID -> if (title) 11f else 9.5f
+                SemanticTier.FAR -> if (title) 9f else 10f
+            }
+            val fontDp = max(if (title) titleDp else bodyDp, minimumDp / scale)
+            val lineWidths = element.text.lines().map { it.length * fontDp }
+            val widthDp = min(lineWidths.maxOrNull() ?: fontDp, 166f)
+            val lineCount = if (tier == SemanticTier.NEAR)
+                lineWidths.sumOf { max(1, kotlin.math.ceil(it / 166f).toInt()) } else 1
+            TextExtent(widthDp * pixelsPerDp, lineCount * fontDp * 1.5f * pixelsPerDp)
+        }
+        return WorldPoint(element.x + extent.width / 2f, element.y + extent.height / 2f)
+    }
+    fun center(id: String): WorldPoint? = texts.firstOrNull { it.id == id }
+        ?.let(::textCenter) ?: centerOf(id)
     val collapsed = shapes.filter { shape ->
         shape.kind == ShapeKind.REGION && shape.name.isNotBlank() &&
             (tier == SemanticTier.FAR || apparentDp(shape.width) < 120f || apparentDp(shape.height) < 90f)
@@ -42,7 +64,7 @@ fun BoardSnapshot.semanticProjection(
                 (shapes.firstOrNull { it.id == id }?.bounds()?.area ?: 0f) < region.bounds().area
         }
     }
-    fun covered(id: String): Boolean = centerOf(id)?.let { coveredPoint(id, it) } ?: false
+    fun covered(id: String): Boolean = center(id)?.let { coveredPoint(id, it) } ?: false
 
     shapes.filter { it.kind == ShapeKind.REGION && it.id !in keep && covered(it.id) }
         .forEach { hidden += it.id }
@@ -55,7 +77,7 @@ fun BoardSnapshot.semanticProjection(
             apparentDp(width) < titleGlyphDp * 2f } == true }
         .forEach { hidden += it.id }
     shapes.filter { it.kind != ShapeKind.REGION && it.id !in keep }.forEach { shape ->
-        val contained = texts.filter { shape.bounds().contains(centerOf(it.id)!!) }
+        val contained = texts.filter { shape.bounds().contains(textCenter(it)) }
         if (covered(shape.id) || tier == SemanticTier.FAR &&
             (apparentDp(min(shape.width, shape.height)) < 24f ||
                 contained.isNotEmpty() && contained.all { it.id in hidden })) hidden += shape.id
