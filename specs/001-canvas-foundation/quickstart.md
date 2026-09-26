@@ -2,7 +2,7 @@
 
 ## 準備
 
-JDK 25 と Android SDK Platform 36 / Build Tools 36.0.0 を用意する。エミュレーターまたは実機に API 26 以上の Android を用意する。`compileSdk` と `targetSdk` は 36 のまま。Android 17 SDK の Preview 評価と 37 への更新判断は Issue #10 を参照する。
+JDK 25 と Android SDK Platform 37.0 / Build Tools 36.0.0 を用意する。エミュレーターまたは実機に API 26 以上の Android を用意する。`compileSdk` は 37、`targetSdk` は 36 とする。Android 17 の新しい実行時の挙動は、`targetSdk` を更新する前に端末で確認する。
 
 ```powershell
 .\gradlew.bat :app:lintDebug

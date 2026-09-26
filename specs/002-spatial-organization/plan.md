@@ -8,7 +8,7 @@
 
 ## 技術コンテキスト
 
-- **言語と環境**: Android/Kotlin、Jetpack Compose、JVM 17、現在の `compileSdk 36`。プラグインとライブラリの版数は root/app の Gradle 設定を基準にする。
+- **言語と環境**: Android/Kotlin、Jetpack Compose、CI の JDK 25、`compileSdk 37`、`targetSdk 36`。プラグインとライブラリの版数は root/app の Gradle 設定を基準にする。
 - **主な依存**: 既存の Compose と Room 3 を継続する。schema migration は既存の `sqlite-bundled-jvm` で旧 DB を再現し、JVM の Room 再オープンで検証する。新しい描画ライブラリは導入しない。
 - **保存**: Room 3 の `boards`・`text_elements` を維持し、v2 で `spatial_elements`・`arrow_elements` を追加する。確定済み snapshot を単一 transaction で保存する。
 - **検証**: JUnit で包含、移動、矢印接続、余白、Undo/Redo、v1→v2 migration と再オープンを検証する。GitHub CI では lint、単体テスト、デバッグビルド、公開情報境界を実行する。

@@ -7,7 +7,7 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 
 ## 開発環境
 
-- Android Studio と Android SDK Platform 36 / Build Tools 36.0.0
+- Android Studio と Android SDK Platform 37 / Build Tools 36.0.0
 - JDK 25
 - インターネット接続（初回の Gradle と Android 依存関係の取得に必要）
 - Spec Kit の操作には Python 環境と `uv` が必要です
@@ -16,8 +16,8 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 [app の Gradle 設定](app/build.gradle.kts)、Gradle の版数は
 [Gradle Wrapper の設定](gradle/wrapper/gradle-wrapper.properties) を参照してください。
 
-リポジトリを clone して Android Studio で開き、SDK Platform 36 をインストールしてください。
-コマンドラインでは `sdkmanager "platforms;android-36" "build-tools;36.0.0"` を使います。
+リポジトリを clone して Android Studio で開き、SDK Platform 37 をインストールしてください。
+コマンドラインでは `sdkmanager "platforms;android-37.0" "build-tools;36.0.0"` を使います。
 Android Studio が作成する `local.properties` は追跡しません。コマンドラインでは JDK 25 と
 `ANDROID_HOME` または `ANDROID_SDK_ROOT` を設定し、Windows なら次を実行します。
 
