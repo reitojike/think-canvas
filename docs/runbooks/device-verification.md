@@ -30,7 +30,8 @@ Base64 文字列は PR、Issue、ログ、リポジトリに載せません。
 
 1. `main` の CI と対象機能のレビューを確認します。
 2. GitHub Actions の **Internal APK release** を `main` で手動実行し、未使用の
-   `vX.Y.Z-alpha.N` または `vX.Y.Z-dev.N` を入力します。
+   `vX.Y.Z-alpha.N` または `vX.Y.Z-dev.N` と、配布する main commit の 40 桁 SHA を入力します。
+   workflow はその commit が main の履歴に含まれることを確認します。
 3. workflow が lint・単体テストを通し、APK の署名、applicationId、versionCode を検証してから
    pre-release に `think-canvas.apk` を添付します。`versionCode` にはこの workflow の
    `run_number` を使うため、新規実行ごとに増えます。失敗した実行の再実行では同じ値です。
