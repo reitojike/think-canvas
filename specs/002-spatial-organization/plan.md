@@ -10,7 +10,7 @@
 
 ## 技術コンテキスト
 
-- **言語と環境**: Android/Kotlin、Jetpack Compose、CI の JDK 25、`compileSdk 37`、`targetSdk 36`。プラグインとライブラリの版数は root/app の Gradle 設定を基準にする。
+- **言語と環境**: Android/Kotlin、Jetpack Compose、CI の JDK 25、`compileSdk 37`、`targetSdk 37`。プラグインとライブラリの版数は root/app の Gradle 設定を基準にする。
 - **主な依存**: Compose と Room 3 を使う。JVM の Room 再オープン検証には `sqlite-bundled-jvm` を使う。新しい描画ライブラリは導入しない。
 - **保存**: Room 3 の `boards`・`text_elements`・`spatial_elements`・`arrow_elements` を schema v1 として export する。確定済み snapshot を単一 transaction で保存する。
 - **検証**: JUnit で包含、移動、矢印接続、余白、Undo/Redo、現行四表の保存と再オープンを検証する。GitHub CI では lint、単体テスト、デバッグビルド、公開情報境界を実行する。
