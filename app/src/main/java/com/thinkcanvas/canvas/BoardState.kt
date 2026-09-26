@@ -22,12 +22,15 @@ class BoardState(
     initial: List<TextElement> = emptyList(),
     initialShapes: List<ShapeElement> = emptyList(),
     initialArrows: List<ArrowElement> = emptyList(),
+    initialInk: List<InkElement> = emptyList(),
 ) {
     var elements by mutableStateOf(initial)
         private set
     var shapes by mutableStateOf(initialShapes)
         private set
     var arrows by mutableStateOf(initialArrows)
+        private set
+    var ink by mutableStateOf(initialInk)
         private set
 
     private data class Change(val before: BoardSnapshot, val after: BoardSnapshot)
@@ -37,7 +40,13 @@ class BoardState(
     val canUndo: Boolean get() = undoStack.isNotEmpty()
     val canRedo: Boolean get() = redoStack.isNotEmpty()
 
-    fun snapshot(): BoardSnapshot = BoardSnapshot(elements, shapes, arrows)
+    fun snapshot(): BoardSnapshot = BoardSnapshot(elements, shapes, arrows, ink)
+
+    fun addInkStroke(kind: InkKind, stroke: InkStroke): Boolean {
+        val (next, grouped) = ink.withStroke(kind, stroke)
+        record(snapshot().copy(ink = next))
+        return grouped
+    }
 
     fun create(text: String, kind: TextKind, color: TextColor, x: Float, y: Float): TextElement? {
         if (text.isBlank()) return null
@@ -111,6 +120,7 @@ class BoardState(
                     it is ArrowEnd.Attached && it.targetId in removedTargets
                 }
             },
+            ink = ink.filterNot { it.id in ids },
         ))
     }
 
@@ -152,5 +162,6 @@ class BoardState(
         elements = value.texts
         shapes = value.shapes
         arrows = value.arrows
+        ink = value.ink
     }
 }

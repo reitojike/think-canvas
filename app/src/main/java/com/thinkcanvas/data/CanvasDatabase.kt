@@ -11,7 +11,9 @@ import androidx.room3.Query
 import androidx.room3.Room
 import androidx.room3.RoomDatabase
 import androidx.room3.Transaction
+import androidx.room3.migration.Migration
 import androidx.sqlite.driver.AndroidSQLiteDriver
+import androidx.sqlite.execSQL
 import com.thinkcanvas.canvas.TextColor
 import com.thinkcanvas.canvas.TextElement
 import com.thinkcanvas.canvas.TextKind
@@ -136,6 +138,9 @@ interface CanvasDao {
     @Query("SELECT * FROM arrow_elements WHERE boardId = 1 ORDER BY rowid")
     suspend fun arrows(): List<ArrowElementRow>
 
+    @Query("SELECT * FROM ink_strokes WHERE boardId = 1 ORDER BY rowid")
+    suspend fun inkStrokes(): List<InkStrokeRow>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putBoard(board: BoardRow)
 
@@ -148,6 +153,9 @@ interface CanvasDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putArrows(arrows: List<ArrowElementRow>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putInkStrokes(strokes: List<InkStrokeRow>)
+
     @Query("DELETE FROM text_elements WHERE boardId = 1")
     suspend fun clearElements()
 
@@ -157,12 +165,15 @@ interface CanvasDao {
     @Query("DELETE FROM arrow_elements WHERE boardId = 1")
     suspend fun clearArrows()
 
+    @Query("DELETE FROM ink_strokes WHERE boardId = 1")
+    suspend fun clearInkStrokes()
+
     @Query("UPDATE boards SET updatedAt = :updatedAt WHERE id = 1")
     suspend fun touchBoard(updatedAt: Long)
 
     @Transaction
     suspend fun replaceAll(elements: List<TextElementRow>) {
-        replaceAll(elements, emptyList(), emptyList())
+        replaceAll(elements, emptyList(), emptyList(), emptyList())
     }
 
     @Transaction
@@ -170,31 +181,43 @@ interface CanvasDao {
         elements: List<TextElementRow>,
         spatialElements: List<SpatialElementRow>,
         arrows: List<ArrowElementRow>,
+        inkStrokes: List<InkStrokeRow> = emptyList(),
     ) {
         if (firstBoard() == null) putBoard(BoardRow())
         clearElements()
         clearSpatialElements()
         clearArrows()
+        clearInkStrokes()
         putElements(elements)
         putSpatialElements(spatialElements)
         putArrows(arrows)
+        putInkStrokes(inkStrokes)
         touchBoard(System.currentTimeMillis())
     }
 }
 
 @Database(
-    entities = [BoardRow::class, TextElementRow::class, SpatialElementRow::class, ArrowElementRow::class],
-    version = 1,
+    entities = [BoardRow::class, TextElementRow::class, SpatialElementRow::class,
+        ArrowElementRow::class, InkStrokeRow::class],
+    version = 2,
     exportSchema = true,
 )
 abstract class CanvasDatabase : RoomDatabase() {
     abstract fun canvasDao(): CanvasDao
 
     companion object {
+        val MIGRATION_1_2 = Migration(1, 2) { connection ->
+            connection.execSQL("""CREATE TABLE IF NOT EXISTS `ink_strokes` (
+                `id` TEXT NOT NULL, `boardId` INTEGER NOT NULL, `groupId` TEXT NOT NULL,
+                `sequence` INTEGER NOT NULL, `kind` TEXT NOT NULL, `startedAt` INTEGER NOT NULL,
+                `endedAt` INTEGER NOT NULL, `inputType` TEXT NOT NULL, `inputs` BLOB NOT NULL,
+                PRIMARY KEY(`id`))""".trimIndent())
+        }
+
         fun open(context: Context): CanvasDatabase = Room.databaseBuilder(
             context.applicationContext,
             CanvasDatabase::class.java,
             "thinkcanvas.db",
-        ).setDriver(AndroidSQLiteDriver()).build()
+        ).setDriver(AndroidSQLiteDriver()).addMigrations(MIGRATION_1_2).build()
     }
 }

@@ -6,8 +6,35 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.nio.file.Files
+import androidx.sqlite.execSQL
 
 class CanvasDatabaseTest {
+    @Test
+    fun versionOneMigrationPreservesExistingBoardAndElements() { runBlocking {
+        val file = Files.createTempFile("think-canvas-migration-", ".db").toFile()
+        file.delete()
+        val legacy = BundledSQLiteDriver().open(file.absolutePath)
+        legacy.execSQL("CREATE TABLE boards (id INTEGER NOT NULL, name TEXT NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(id))")
+        legacy.execSQL("CREATE TABLE text_elements (id TEXT NOT NULL, boardId INTEGER NOT NULL, text TEXT NOT NULL, kind TEXT NOT NULL, color TEXT NOT NULL, x REAL NOT NULL, y REAL NOT NULL, PRIMARY KEY(id))")
+        legacy.execSQL("CREATE TABLE spatial_elements (id TEXT NOT NULL, boardId INTEGER NOT NULL, kind TEXT NOT NULL, x REAL NOT NULL, y REAL NOT NULL, width REAL NOT NULL, height REAL NOT NULL, color TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY(id))")
+        legacy.execSQL("CREATE TABLE arrow_elements (id TEXT NOT NULL, boardId INTEGER NOT NULL, fromTargetId TEXT, fromU REAL, fromV REAL, fromX REAL, fromY REAL, toTargetId TEXT, toU REAL, toV REAL, toX REAL, toY REAL, bend REAL NOT NULL, PRIMARY KEY(id))")
+        legacy.execSQL("INSERT INTO boards VALUES (1, '既存ボード', 123)")
+        legacy.execSQL("INSERT INTO text_elements VALUES ('text', 1, '既存の考え', 'BODY', 'INK', 12.5, -8.0)")
+        legacy.execSQL("PRAGMA user_version = 1")
+        legacy.close()
+
+        val database = Room.databaseBuilder<CanvasDatabase>(file.absolutePath)
+            .setDriver(BundledSQLiteDriver())
+            .addMigrations(CanvasDatabase.MIGRATION_1_2)
+            .build()
+        assertEquals("既存ボード", database.canvasDao().firstBoard()?.name)
+        assertEquals("既存の考え", database.canvasDao().elements().single().text)
+        assertEquals(12.5f, database.canvasDao().elements().single().x)
+        assertEquals(emptyList<InkStrokeRow>(), database.canvasDao().inkStrokes())
+        database.close()
+        file.delete()
+    } }
+
     @Test
     fun committedElementsSurviveDatabaseReopenAndReplacement() {
         runBlocking {
