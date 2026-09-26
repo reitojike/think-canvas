@@ -205,8 +205,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         val world = WorldPoint(wx, wy)
         val snapshot = latestSnapshot.value
         snapshot.arrows.asReversed().firstOrNull { arrow ->
-            val points = snapshot.arrowPoints(arrow) ?: return@firstOrNull false
-            distanceToSegment(world, points.first, points.second) <= 12f / view.scale
+            snapshot.distanceToArrow(world, arrow) <= 12f / view.scale
         }?.let { return it.id }
         return snapshot.shapes.asReversed().firstOrNull { it.hitStroke(world, 12f / view.scale) }?.id
     }
@@ -280,6 +279,13 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             focusRequester.requestFocus()
             keyboard?.show()
         }
+    }
+
+    LaunchedEffect(menuTarget) { if (menuTarget == null) chromeBounds.remove("menu") }
+    LaunchedEffect(regionNameId) { if (regionNameId == null) chromeBounds.remove("regionName") }
+    LaunchedEffect(guidance, tool, selectedIds) {
+        if (guidance == null && tool == SpatialTool.NONE && selectedIds.size <= 1)
+            chromeBounds.remove("guidance")
     }
 
     LaunchedEffect(draft?.id, draft?.x, draft?.y, imeBottom, canvasSize) {
@@ -540,10 +546,24 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             )
         }
 
-        val displaySnapshot = movePreview?.let { (ids, delta) ->
-            board.snapshot().translatedSelection(ids, delta.x, delta.y)
-        } ?: board.snapshot()
-        SpatialElements(displaySnapshot, viewport, selectedIds, spatialPreview, lassoPoints, gapPreview,
+        val sourceSnapshot = board.snapshot()
+        val displaySnapshot = when {
+            movePreview != null -> movePreview!!.let { (ids, delta) ->
+                sourceSnapshot.translatedSelection(ids, delta.x, delta.y)
+            }
+            gapPreview != null -> gapPreview!!.let { (start, end) ->
+                val dx = end.x - start.x
+                val dy = end.y - start.y
+                val horizontal = kotlin.math.abs(dx) >= kotlin.math.abs(dy)
+                sourceSnapshot.withGap(start, horizontal, if (horizontal) dx else dy)
+            }
+            else -> sourceSnapshot
+        }
+        val ghostIds = if (gapPreview == null) emptySet() else {
+            (displaySnapshot.texts.filterIndexed { index, it -> it != sourceSnapshot.texts[index] }.map { it.id } +
+                displaySnapshot.shapes.filterIndexed { index, it -> it != sourceSnapshot.shapes[index] }.map { it.id }).toSet()
+        }
+        SpatialElements(displaySnapshot, viewport, selectedIds, spatialPreview, lassoPoints, gapPreview, ghostIds,
             onHandle = { id, kind ->
             if (!saving && !saveFailed) {
                 val changed = when (kind) {
@@ -590,7 +610,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 val elementActionsEnabled = !saving && !saveFailed
                 Text(
                     text = element.text,
-                    color = if (element.color == TextColor.INK) ink else vermilion,
+                    color = if (element.id in ghostIds) vermilion.copy(alpha = .65f)
+                        else if (element.color == TextColor.INK) ink else vermilion,
                     fontSize = if (element.kind == TextKind.TITLE) 15.sp else 14.sp,
                     lineHeight = if (element.kind == TextKind.TITLE) 22.sp else 21.sp,
                     fontWeight = if (element.kind == TextKind.TITLE) FontWeight.Bold else FontWeight.Normal,

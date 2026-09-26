@@ -48,6 +48,7 @@ fun SpatialElements(
     preview: SpatialPreview?,
     lasso: List<WorldPoint>,
     gap: Pair<WorldPoint, WorldPoint>?,
+    ghostIds: Set<String>,
     onHandle: (String, HandleKind) -> Unit,
     onSelect: (String) -> Unit,
     onMove: (String, Float, Float) -> Boolean,
@@ -64,7 +65,8 @@ fun SpatialElements(
             val topLeft = screen(WorldPoint(b.left, b.top))
             val width = shape.width * viewport.scale
             val height = shape.height * viewport.scale
-            val color = if (shape.color == TextColor.VERMILION) redColor else inkColor
+            val color = if (shape.id in ghostIds) redColor.copy(alpha = .65f)
+                else if (shape.color == TextColor.VERMILION) redColor else inkColor
             val style = Stroke(width = if (shape.kind == ShapeKind.REGION) 1.5.dp.toPx() else 2.dp.toPx(),
                 pathEffect = if (shape.kind == ShapeKind.REGION)
                     PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 5.dp.toPx())) else null)

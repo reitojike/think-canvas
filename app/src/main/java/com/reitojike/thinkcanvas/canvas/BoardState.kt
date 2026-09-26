@@ -120,59 +120,7 @@ class BoardState(
 
     fun insertGap(origin: WorldPoint, horizontal: Boolean, amount: Float): Boolean {
         if (amount == 0f || !amount.isFinite()) return false
-        val source = snapshot()
-        val scope = source.smallestRegionAt(origin)
-        val boundary = if (horizontal) origin.x else origin.y
-        val movePositive = amount > 0f
-        fun inScope(id: String): Boolean {
-            if (scope == null) return true
-            val shape = source.shapes.firstOrNull { it.id == id }
-            if (shape != null && shape.kind == ShapeKind.REGION &&
-                shape.bounds().area >= scope.bounds().area) return false
-            return source.centerOf(id)?.let { scope.bounds().contains(it) } == true
-        }
-        fun shift(value: Float) = if ((value >= boundary) == movePositive) amount else 0f
-        val updatedTexts = elements.map {
-            if (inScope(it.id)) {
-                val center = source.centerOf(it.id)!!
-                val delta = shift(if (horizontal) center.x else center.y)
-                if (horizontal) it.copy(x = it.x + delta) else it.copy(y = it.y + delta)
-            } else it
-        }
-        val updatedShapes = shapes.map { shape ->
-            if (shape.id == scope?.id) {
-                if (horizontal) {
-                    if (amount > 0f) shape.copy(width = (shape.width + amount).coerceAtLeast(40f))
-                    else shape.copy(x = shape.x + amount, width = (shape.width - amount).coerceAtLeast(40f))
-                } else {
-                    if (amount > 0f) shape.copy(height = (shape.height + amount).coerceAtLeast(30f))
-                    else shape.copy(y = shape.y + amount, height = (shape.height - amount).coerceAtLeast(30f))
-                }
-            } else if (!inScope(shape.id)) shape else {
-                val low = if (horizontal) shape.x else shape.y
-                val high = low + if (horizontal) shape.width else shape.height
-                when {
-                    low < boundary && high > boundary -> if (horizontal)
-                        shape.copy(x = shape.x + minOf(amount, 0f),
-                            width = (shape.width + kotlin.math.abs(amount)).coerceAtLeast(40f))
-                    else shape.copy(y = shape.y + minOf(amount, 0f),
-                        height = (shape.height + kotlin.math.abs(amount)).coerceAtLeast(30f))
-                    else -> {
-                        val delta = shift(if (horizontal) shape.bounds().center.x else shape.bounds().center.y)
-                        if (horizontal) shape.copy(x = shape.x + delta) else shape.copy(y = shape.y + delta)
-                    }
-                }
-            }
-        }
-        val updatedArrows = arrows.map { arrow ->
-            fun move(end: ArrowEnd): ArrowEnd = if (end is ArrowEnd.Free &&
-                (scope == null || scope.bounds().contains(WorldPoint(end.x, end.y)))) {
-                val delta = shift(if (horizontal) end.x else end.y)
-                if (horizontal) end.copy(x = end.x + delta) else end.copy(y = end.y + delta)
-            } else end
-            arrow.copy(from = move(arrow.from), to = move(arrow.to))
-        }
-        return record(BoardSnapshot(updatedTexts, updatedShapes, updatedArrows))
+        return record(snapshot().withGap(origin, horizontal, amount))
     }
 
     fun undo(): Boolean {

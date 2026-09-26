@@ -5,13 +5,13 @@
 
 ## Phase 1: セットアップ
 
-- [x] T001 `app/build.gradle.kts` に現行 Room 3 と整合する `room3-testing` をテスト依存として追加する
+- [x] T001 JVM の単体テストで Room 3 の migration を再現できる `sqlite-bundled-jvm` を維持する。`room3-testing` は instrumentation を必須とするため追加しない
 
 ## Phase 2: 共通基盤
 
 - [x] T002 `app/src/main/java/com/reitojike/thinkcanvas/canvas/SpatialElement.kt` に図形・囲みと矢印端点の型を定義し、幅・高さを正の有限値、接続アンカーを 0〜1 の有限値に制約する
 - [ ] T003 [P] `app/src/main/java/com/reitojike/thinkcanvas/data/CanvasDatabase.kt` に schema v2 の `spatial_elements`・`arrow_elements`、v1→v2 自動 migration と単一 transaction の DAO 操作を追加し、既存二表を保持する
-- [ ] T004 [P] `app/src/test/java/com/reitojike/thinkcanvas/data/CanvasMigrationTest.kt` に v1 のボード名・文字・位置を入れて v2 への移行と新表の空状態を検証するテストを追加する
+- [ ] T004 [P] `app/src/test/java/com/reitojike/thinkcanvas/data/CanvasMigrationTest.kt` に v1 のボード名・文字・位置を入れて v2 への移行と新表の空状態を JVM で検証するテストを追加する
 - [ ] T005 `app/src/main/java/com/reitojike/thinkcanvas/canvas/BoardState.kt` に全要素の確定 snapshot と一操作一履歴の 80 件 Undo/Redo を導入し、既存文字操作の結果を保持する
 - [ ] T006 `app/src/main/java/com/reitojike/thinkcanvas/data/CanvasStore.kt` と `app/src/main/java/com/reitojike/thinkcanvas/MainActivity.kt` に全要素の読込・transaction 保存を接続し、ボード名を上書きしない
 - [ ] T007 `app/src/main/java/com/reitojike/thinkcanvas/canvas/SpatialGeometry.kt` に世界座標上の論理境界、中心、線近傍、楕円外周、接続端表示の純粋計算を実装する

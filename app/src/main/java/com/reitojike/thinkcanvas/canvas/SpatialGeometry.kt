@@ -20,7 +20,16 @@ fun ShapeElement.bounds() = WorldBounds(x, y, x + width, y + height)
 
 fun BoardSnapshot.boundsOf(id: String): WorldBounds? =
     shapes.firstOrNull { it.id == id }?.bounds()
-        ?: texts.firstOrNull { it.id == id }?.let { WorldBounds(it.x, it.y, it.x + 160f, it.y + 48f) }
+        ?: texts.firstOrNull { it.id == id }?.let { element ->
+            val fontSize = if (element.kind == TextKind.TITLE) 15f else 14f
+            val width = (element.text.lines().maxOfOrNull { it.length } ?: 1).toFloat()
+                .times(fontSize).coerceIn(24f, 166f)
+            val lines = element.text.lines().sumOf { line ->
+                maxOf(1, kotlin.math.ceil(line.length * fontSize / 166f).toInt())
+            }
+            WorldBounds(element.x, element.y, element.x + width,
+                element.y + maxOf(1, lines) * 21f + 12f)
+        }
 
 fun BoardSnapshot.centerOf(id: String): WorldPoint? = boundsOf(id)?.center
 
@@ -119,6 +128,24 @@ fun BoardSnapshot.arrowControl(arrow: ArrowElement): WorldPoint? {
         (from.y + to.y) / 2f + dx / length * arrow.bend)
 }
 
+fun BoardSnapshot.distanceToArrow(point: WorldPoint, arrow: ArrowElement): Float {
+    val (from, to) = arrowPoints(arrow) ?: return Float.POSITIVE_INFINITY
+    val control = arrowControl(arrow) ?: return Float.POSITIVE_INFINITY
+    var minimum = Float.POSITIVE_INFINITY
+    var previous = from
+    for (index in 1..24) {
+        val t = index / 24f
+        val inverse = 1f - t
+        val current = WorldPoint(
+            inverse * inverse * from.x + 2f * inverse * t * control.x + t * t * to.x,
+            inverse * inverse * from.y + 2f * inverse * t * control.y + t * t * to.y,
+        )
+        minimum = min(minimum, distanceToSegment(point, previous, current))
+        previous = current
+    }
+    return minimum
+}
+
 fun BoardSnapshot.lassoSelection(vertices: List<WorldPoint>): Set<String> {
     val selected = (texts.map { it.id } + shapes.map { it.id })
         .filter { id -> centerOf(id)?.let { pointInPolygon(it, vertices) } == true }.toMutableSet()
@@ -150,4 +177,61 @@ fun BoardSnapshot.translatedSelection(ids: Set<String>, dx: Float, dy: Float): B
         arrows = arrows.map { arrow -> if (arrow.id in moved)
             arrow.copy(from = arrow.from.shift(), to = arrow.to.shift()) else arrow },
     )
+}
+
+fun BoardSnapshot.withGap(origin: WorldPoint, horizontal: Boolean, amount: Float): BoardSnapshot {
+    if (amount == 0f || !amount.isFinite()) return this
+    val source = this
+    val scope = smallestRegionAt(origin)
+    val boundary = if (horizontal) origin.x else origin.y
+    val movePositive = amount > 0f
+    fun inScope(id: String): Boolean {
+        if (scope == null) return true
+        val shape = shapes.firstOrNull { it.id == id }
+        if (shape != null && shape.kind == ShapeKind.REGION &&
+            shape.bounds().area >= scope.bounds().area) return false
+        return centerOf(id)?.let { scope.bounds().contains(it) } == true
+    }
+    fun shift(value: Float) = if ((value >= boundary) == movePositive) amount else 0f
+    val updatedTexts = texts.map {
+        if (inScope(it.id)) {
+            val center = source.centerOf(it.id)!!
+            val delta = shift(if (horizontal) center.x else center.y)
+            if (horizontal) it.copy(x = it.x + delta) else it.copy(y = it.y + delta)
+        } else it
+    }
+    val updatedShapes = shapes.map { shape ->
+        if (shape.id == scope?.id) {
+            if (horizontal) {
+                if (amount > 0f) shape.copy(width = (shape.width + amount).coerceAtLeast(40f))
+                else shape.copy(x = shape.x + amount, width = (shape.width - amount).coerceAtLeast(40f))
+            } else {
+                if (amount > 0f) shape.copy(height = (shape.height + amount).coerceAtLeast(30f))
+                else shape.copy(y = shape.y + amount, height = (shape.height - amount).coerceAtLeast(30f))
+            }
+        } else if (!inScope(shape.id)) shape else {
+            val low = if (horizontal) shape.x else shape.y
+            val high = low + if (horizontal) shape.width else shape.height
+            when {
+                low < boundary && high > boundary -> if (horizontal)
+                    shape.copy(x = shape.x + minOf(amount, 0f),
+                        width = (shape.width + abs(amount)).coerceAtLeast(40f))
+                else shape.copy(y = shape.y + minOf(amount, 0f),
+                    height = (shape.height + abs(amount)).coerceAtLeast(30f))
+                else -> {
+                    val delta = shift(if (horizontal) shape.bounds().center.x else shape.bounds().center.y)
+                    if (horizontal) shape.copy(x = shape.x + delta) else shape.copy(y = shape.y + delta)
+                }
+            }
+        }
+    }
+    val updatedArrows = arrows.map { arrow ->
+        fun move(end: ArrowEnd): ArrowEnd = if (end is ArrowEnd.Free &&
+            (scope == null || scope.bounds().contains(WorldPoint(end.x, end.y)))) {
+            val delta = shift(if (horizontal) end.x else end.y)
+            if (horizontal) end.copy(x = end.x + delta) else end.copy(y = end.y + delta)
+        } else end
+        arrow.copy(from = move(arrow.from), to = move(arrow.to))
+    }
+    return BoardSnapshot(updatedTexts, updatedShapes, updatedArrows)
 }

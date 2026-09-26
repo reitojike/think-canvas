@@ -1,61 +1,53 @@
 package com.reitojike.thinkcanvas.data
 
-import androidx.room3.testing.MigrationTestHelper
+import androidx.room3.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Rule
 import org.junit.Test
-import java.io.File
 import java.nio.file.Files
 
 class CanvasMigrationTest {
-    private val databasePath = Files.createTempFile("think-canvas-v1-", ".db").also { Files.deleteIfExists(it) }
-
-    @get:Rule
-    val helper = MigrationTestHelper(
-        schemaDirectoryPath = File("schemas").toPath(),
-        databasePath = databasePath,
-        driver = BundledSQLiteDriver(),
-        databaseClass = CanvasDatabase::class,
-    )
-
     @Test
     fun v1BoardAndTextRemainAfterV2Migration() = runBlocking {
-        helper.createDatabase(1).use { connection ->
-            connection.prepare("INSERT INTO boards (id, name, updatedAt) VALUES (1, '既存ボード', 1234)").use { it.step() }
-            connection.prepare(
+        val file = Files.createTempFile("think-canvas-v1-", ".db")
+        val driver = BundledSQLiteDriver()
+        // app/schemas/.../1.json の createSql と identityHash を使って旧版を再現する。
+        driver.open(file.toString()).use { connection ->
+            listOf(
+                "CREATE TABLE IF NOT EXISTS boards (id INTEGER NOT NULL, name TEXT NOT NULL, " +
+                    "updatedAt INTEGER NOT NULL, PRIMARY KEY(id))",
+                "CREATE TABLE IF NOT EXISTS text_elements (id TEXT NOT NULL, boardId INTEGER NOT NULL, " +
+                    "text TEXT NOT NULL, kind TEXT NOT NULL, color TEXT NOT NULL, " +
+                    "x REAL NOT NULL, y REAL NOT NULL, PRIMARY KEY(id))",
+                "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY, identity_hash TEXT)",
+                "INSERT INTO room_master_table (id, identity_hash) " +
+                    "VALUES (42, '216891bcfd8f2ddd514b2f95477e6eb3')",
+                "INSERT INTO boards (id, name, updatedAt) VALUES (1, '既存ボード', 1234)",
                 "INSERT INTO text_elements (id, boardId, text, kind, color, x, y) " +
                     "VALUES ('old-text', 1, '以前の考え', 'TITLE', 'VERMILION', 42.5, -17.25)",
-            ).use { it.step() }
+                "PRAGMA user_version = 1",
+            ).forEach { sql -> connection.prepare(sql).use { it.step() } }
         }
 
-        helper.runMigrationsAndValidate(2).use { connection ->
-            connection.prepare("SELECT name, updatedAt FROM boards WHERE id = 1").use {
-                assertTrue(it.step())
-                assertEquals("既存ボード", it.getText(0))
-                assertEquals(1234L, it.getLong(1))
-                assertFalse(it.step())
-            }
-            connection.prepare("SELECT text, kind, color, x, y FROM text_elements WHERE id = 'old-text'").use {
-                assertTrue(it.step())
-                assertEquals("以前の考え", it.getText(0))
-                assertEquals("TITLE", it.getText(1))
-                assertEquals("VERMILION", it.getText(2))
-                assertEquals(42.5, it.getDouble(3), 0.001)
-                assertEquals(-17.25, it.getDouble(4), 0.001)
-                assertFalse(it.step())
-            }
-            connection.prepare("SELECT COUNT(*) FROM spatial_elements").use {
-                assertTrue(it.step())
-                assertEquals(0L, it.getLong(0))
-            }
-            connection.prepare("SELECT COUNT(*) FROM arrow_elements").use {
-                assertTrue(it.step())
-                assertEquals(0L, it.getLong(0))
-            }
+        val database = Room.databaseBuilder<CanvasDatabase>(file.toString())
+            .setDriver(driver).build()
+        try {
+            val dao = database.canvasDao()
+            assertEquals("既存ボード", dao.firstBoard()?.name)
+            assertEquals(1234L, dao.firstBoard()?.updatedAt)
+            val text = dao.elements().single()
+            assertEquals("以前の考え", text.text)
+            assertEquals("TITLE", text.kind)
+            assertEquals("VERMILION", text.color)
+            assertEquals(42.5f, text.x)
+            assertEquals(-17.25f, text.y)
+            assertTrue(dao.spatialElements().isEmpty())
+            assertTrue(dao.arrows().isEmpty())
+        } finally {
+            database.close()
+            Files.deleteIfExists(file)
         }
     }
 }

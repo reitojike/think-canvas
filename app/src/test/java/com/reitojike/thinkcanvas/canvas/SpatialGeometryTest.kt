@@ -68,19 +68,19 @@ class SpatialGeometryTest {
     @Test
     fun gapStretchesCrossingShapeInsideSmallestScope() {
         val board = BoardState(listOf(
-            TextElement(id = "inside", text = "中", x = 100f, y = 70f),
+            TextElement(id = "inside", text = "中", x = 130f, y = 70f),
             TextElement(id = "outside", text = "外", x = 400f, y = 70f),
         ))
         val outer = board.addShape(ShapeKind.REGION, 0f, 0f, 500f, 300f)
         val inner = board.addShape(ShapeKind.REGION, 20f, 20f, 250f, 200f)
         val crossing = board.addShape(ShapeKind.RECTANGLE, 60f, 80f, 100f, 50f)
         assertTrue(board.insertGap(WorldPoint(120f, 60f), true, 30f))
-        assertEquals(130f, board.elements.first { it.id == "inside" }.x)
+        assertEquals(160f, board.elements.first { it.id == "inside" }.x)
         assertEquals(400f, board.elements.first { it.id == "outside" }.x)
         assertEquals(130f, board.shapes.first { it.id == crossing.id }.width)
         assertEquals(280f, board.shapes.first { it.id == inner.id }.width)
         assertEquals(500f, board.shapes.first { it.id == outer.id }.width)
         assertTrue(board.undo())
-        assertEquals(100f, board.elements.first { it.id == "inside" }.x)
+        assertEquals(130f, board.elements.first { it.id == "inside" }.x)
     }
 }
