@@ -62,3 +62,8 @@ US1 を最初の MVP とし、世界座標を崩さず US2/US3 を積み上げ�
 - [x] T021 保存待ち・保存失敗時に編集ツールの無効状態を表示と accessibility semantics に反映し、再試行操作は有効に保つ per accessibility contract (partial)
 - [x] T022 保存ブロック中の要素と移動グリップの accessibility action を無効化する per accessibility contract (partial)
 - [x] T023 ボード名・履歴・倍率表示の範囲を canvas tap 判定から除き、表示部から Draft を作らない per US1 (partial)
+
+## Phase 9: Issue #23 安全領域の実機調整
+
+- [x] T024 `CanvasScreen.kt` に `safeDrawing` inset を適用し、IME 表示中の Draft 可視位置で inset を二重に差し引かない
+- [ ] T025 更新した internal APK を実機で開き、system bars、画面の切り欠き、IME 表示中の Draft、下部ツールの位置を確認する
