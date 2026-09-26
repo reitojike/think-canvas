@@ -9,12 +9,13 @@
   `specs/**/spec.md` でレビューできる形にします。
 - [Constitution](.specify/memory/constitution.md) は製品と開発の原則を定めます。
   Spec Kit の成果物は、対象の機能ごとに管理します。
-- [変更・レビュー手順](docs/runbooks/change-review.md) は PR 前後の確認範囲を定めます。
-  CI が追加されたら、実際の workflow を確認します。
+- [変更・レビュー手順](docs/runbooks/change-review.md) は PR 前の検証、レビュー、merge 後の
+  Issue 完了までの確認範囲を定めます。機械的な合否は実際の
+  [Android CI](.github/workflows/android.yml) を確認します。
+- PR のレビューは原則 Codex または Claude に依頼します。実装担当と異なる provider が
+  利用できる場合は優先します。GitHub Copilot と CodeRabbit の指摘は参考にできますが、
+  このレビューの代わりにはしません。現行 PR head の結果と未解決 thread を確認します。
 - Android の標準と既存の開発手段を優先します。標準から外れる理由は該当する spec または
   plan に残します。Issue に具体的な必要性が示されるまでは、独自の手順や仕組みを増やしません。
 - プロジェクトが作成する Markdown は原則日本語で書きます。固有名詞、コマンド、識別子、
   訳すと意味がぶれる専門用語は原語のまま使います。
-
-#1 ではビルドできる Android の土台までに留めます。キャンバスの振る舞い、座標、gesture、
-Ink の統合、Room 3 の schema は後続の仕様で決めます。
