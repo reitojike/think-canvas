@@ -1,6 +1,7 @@
 package com.thinkcanvas.canvas
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
@@ -126,6 +127,18 @@ class InkGestureTest {
             Thread.sleep(100)
         }
         assertEquals(10, runBlocking { database.canvasDao().inkStrokes().size })
+        instrumentation.waitForIdleSync()
+        val screenshot = requireNotNull(automation.takeScreenshot())
+        val centerX = (width * .35f).toInt()
+        val centerY = (bottom + 40f).toInt()
+        val visibleInk = (centerX - 16..centerX + 16).any { x ->
+            (centerY - 16..centerY + 16).any { y ->
+                val color = screenshot.getPixel(x, y)
+                Color.red(color) < 100 && Color.green(color) < 100 && Color.blue(color) < 100
+            }
+        }
+        assertTrue("拡大後の線が入力位置に描かれる", visibleInk)
+        screenshot.recycle()
         click("やめる")
         currentToolType = MotionEvent.TOOL_TYPE_STYLUS
         repeat(10) {
