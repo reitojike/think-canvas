@@ -28,6 +28,8 @@ class SpatialGeometryTest {
         assertFalse(rectangle.hitStroke(WorldPoint(60f, 40f), 12f))
         assertTrue(ellipse.hitStroke(WorldPoint(60f, 2f), 12f))
         assertFalse(ellipse.hitStroke(WorldPoint(60f, 40f), 12f))
+        assertTrue(ellipse.containsInterior(WorldPoint(60f, 40f)))
+        assertFalse(ellipse.containsInterior(WorldPoint(0f, 0f)))
     }
 
     @Test
@@ -85,5 +87,22 @@ class SpatialGeometryTest {
         assertEquals(ArrowEnd.Free(220f, 100f), board.arrows.first { it.id == arrow.id }.to)
         assertTrue(board.undo())
         assertEquals(130f, board.elements.first { it.id == "inside" }.x)
+    }
+
+    @Test
+    fun verticalNegativeGapMovesOnlyUpperSideAndStretchesCrossingShape() {
+        val board = BoardState(listOf(
+            TextElement(id = "upper", text = "上", x = 200f, y = 20f),
+            TextElement(id = "lower", text = "下", x = 200f, y = 200f),
+        ))
+        val crossing = board.addShape(ShapeKind.ELLIPSE, 30f, 40f, 100f, 100f)
+        assertTrue(board.insertGap(WorldPoint(150f, 100f), false, -25f))
+        assertEquals(-5f, board.elements.first { it.id == "upper" }.y)
+        assertEquals(200f, board.elements.first { it.id == "lower" }.y)
+        val after = board.shapes.first { it.id == crossing.id }
+        assertEquals(15f, after.y)
+        assertEquals(125f, after.height)
+        assertTrue(board.undo())
+        assertEquals(40f, board.shapes.single().y)
     }
 }

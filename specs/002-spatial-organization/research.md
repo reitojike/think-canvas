@@ -8,6 +8,8 @@
 
 **比較**: 全要素を新しい統合表へ移し替える案は、既存文字の移行が大きくなる。破壊的 migration は採用しない。
 
+**検証方法の修正**: `room3-testing` の Android 向け `MigrationTestHelper` は instrumentation を必須とする。CI の JVM 単体テストでは、export した v1 schema と identity hash から Bundled SQLite の旧 DB を作り、Room の通常のオープンで自動 migration と schema 検証を実行する。
+
 **資料**: [Room migration](https://developer.android.com/training/data-storage/room/migrating-db-versions)、[Room 3 MigrationTestHelper](https://developer.android.com/reference/kotlin/androidx/room3/testing/MigrationTestHelper)
 
 ## 要素の位置と接続

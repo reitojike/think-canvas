@@ -2,7 +2,6 @@ package com.reitojike.thinkcanvas.canvas
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -45,12 +44,14 @@ fun SpatialElements(
     snapshot: BoardSnapshot,
     viewport: Viewport,
     selected: Set<String>,
+    moving: Set<String>,
     preview: SpatialPreview?,
     lasso: List<WorldPoint>,
     gap: Pair<WorldPoint, WorldPoint>?,
     ghostIds: Set<String>,
-    onHandle: (String, HandleKind) -> Unit,
+    onHandle: (String, HandleKind) -> Boolean,
     onSelect: (String) -> Unit,
+    onAdd: (String) -> Boolean,
     onMove: (String, Float, Float) -> Boolean,
     onDelete: (String) -> Boolean,
     onReverse: (String) -> Boolean,
@@ -81,12 +82,14 @@ fun SpatialElements(
             if (shape.id in selected) {
                 drawRect(redColor.copy(alpha = .06f), topLeft, androidx.compose.ui.geometry.Size(width, height))
                 drawRect(redColor, topLeft, androidx.compose.ui.geometry.Size(width, height),
-                    style = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))))
+                    style = Stroke(if (shape.id in moving) 2.dp.toPx() else 1.dp.toPx(),
+                        pathEffect = if (shape.id in moving) null else
+                            PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))))
             }
         }
         snapshot.arrows.forEach { arrow ->
-            val (worldStart, worldEnd) = snapshot.arrowPoints(arrow) ?: return@forEach
-            val worldControl = snapshot.arrowControl(arrow) ?: return@forEach
+            val (worldStart, worldEnd) = snapshot.arrowPoints(arrow, 6f / viewport.scale) ?: return@forEach
+            val worldControl = snapshot.arrowControl(arrow, 6f / viewport.scale) ?: return@forEach
             val start = screen(worldStart)
             val end = screen(worldEnd)
             val control = screen(worldControl)
@@ -199,14 +202,18 @@ fun SpatialElements(
             stateDescription = if (shape.id in selected) "選択中" else "未選択"
             onClick(label = "選択") { onSelect(shape.id); true }
             customActions = listOf(
+                CustomAccessibilityAction("選択に追加") { onAdd(shape.id) },
+                CustomAccessibilityAction("左へ移動") { onMove(shape.id, -16f, 0f) },
                 CustomAccessibilityAction("右へ移動") { onMove(shape.id, 16f, 0f) },
+                CustomAccessibilityAction("上へ移動") { onMove(shape.id, 0f, -16f) },
                 CustomAccessibilityAction("下へ移動") { onMove(shape.id, 0f, 16f) },
+                CustomAccessibilityAction("大きくする") { onHandle(shape.id, HandleKind.RESIZE) },
                 CustomAccessibilityAction("削除") { onDelete(shape.id) },
             )
         })
     }
     snapshot.arrows.forEach { arrow ->
-        val point = snapshot.arrowControl(arrow) ?: return@forEach
+        val point = snapshot.arrowControl(arrow, 6f / viewport.scale) ?: return@forEach
         val (x, y) = viewport.worldToScreen(point.x, point.y)
         Box(Modifier.offset { IntOffset(x.roundToInt() - 24.dp.roundToPx(),
             y.roundToInt() - 24.dp.roundToPx()) }.size(48.dp).semantics {
@@ -214,7 +221,11 @@ fun SpatialElements(
             stateDescription = if (arrow.id in selected) "選択中" else "未選択"
             onClick(label = "選択") { onSelect(arrow.id); true }
             customActions = listOf(
+                CustomAccessibilityAction("選択に追加") { onAdd(arrow.id) },
                 CustomAccessibilityAction("右へ移動") { onMove(arrow.id, 16f, 0f) },
+                CustomAccessibilityAction("始点を自由端にする") { onHandle(arrow.id, HandleKind.FROM) },
+                CustomAccessibilityAction("終点を自由端にする") { onHandle(arrow.id, HandleKind.TO) },
+                CustomAccessibilityAction("曲げる") { onHandle(arrow.id, HandleKind.BEND) },
                 CustomAccessibilityAction("反転") { onReverse(arrow.id) },
                 CustomAccessibilityAction("削除") { onDelete(arrow.id) },
             )
@@ -228,13 +239,13 @@ fun SpatialElements(
         Handle(moveX, moveY, "移動") { onHandle(shape.id, HandleKind.MOVE) }
     }
     snapshot.arrows.filter { it.id in selected }.forEach { arrow ->
-        snapshot.arrowPoints(arrow)?.let { (a, b) ->
+        snapshot.arrowPoints(arrow, 6f / viewport.scale)?.let { (a, b) ->
             val (ax, ay) = viewport.worldToScreen(a.x, a.y)
             val (bx, by) = viewport.worldToScreen(b.x, b.y)
             Handle(ax, ay, "始点を変更") { onHandle(arrow.id, HandleKind.FROM) }
             Handle(bx, by, "終点を変更") { onHandle(arrow.id, HandleKind.TO) }
         }
-        snapshot.arrowControl(arrow)?.let { c ->
+        snapshot.arrowControl(arrow, 6f / viewport.scale)?.let { c ->
             val (x, y) = viewport.worldToScreen(c.x, c.y)
             Handle(x, y, "曲がりを変更") { onHandle(arrow.id, HandleKind.BEND) }
         }
@@ -246,7 +257,10 @@ enum class HandleKind { MOVE, RESIZE, FROM, TO, BEND }
 @Composable
 private fun Handle(x: Float, y: Float, label: String, onClick: () -> Unit) {
     Box(Modifier.offset { IntOffset(x.roundToInt() - 24.dp.roundToPx(), y.roundToInt() - 24.dp.roundToPx()) }
-        .size(48.dp).clickable(onClick = onClick).semantics { contentDescription = label },
+        .size(48.dp).semantics {
+            contentDescription = label
+            onClick(label = label) { onClick(); true }
+        },
         contentAlignment = Alignment.Center) {
         Box(Modifier.size(12.dp).background(redColor, CircleShape))
     }

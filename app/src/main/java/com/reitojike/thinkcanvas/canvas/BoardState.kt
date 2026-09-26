@@ -92,8 +92,9 @@ class BoardState(
     fun updateArrow(id: String, from: ArrowEnd? = null, to: ArrowEnd? = null,
                     bend: Float? = null, reverse: Boolean = false): Boolean {
         val current = arrows.firstOrNull { it.id == id } ?: return false
+        val snappedBend = bend?.let { if (kotlin.math.abs(it) < 8f) 0f else it }
         val updated = current.copy(from = from ?: current.from, to = to ?: current.to,
-            bend = bend ?: current.bend).let { if (reverse) it.reversed() else it }
+            bend = snappedBend ?: current.bend).let { if (reverse) it.reversed() else it }
         val ids = (elements.map { it.id } + shapes.map { it.id }).toSet()
         if (listOf(updated.from, updated.to).any { it is ArrowEnd.Attached && it.targetId !in ids }) return false
         return record(snapshot().copy(arrows = arrows.map { if (it.id == id) updated else it }))

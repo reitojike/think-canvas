@@ -9,7 +9,7 @@
 ## 技術コンテキスト
 
 - **言語と環境**: Android/Kotlin、Jetpack Compose、JVM 17、現在の `compileSdk 36`。プラグインとライブラリの版数は root/app の Gradle 設定を基準にする。
-- **主な依存**: 既存の Compose と Room 3 を継続する。schema migration の検証に `room3-testing` を追加する。新しい描画ライブラリは導入しない。
+- **主な依存**: 既存の Compose と Room 3 を継続する。schema migration は既存の `sqlite-bundled-jvm` で旧 DB を再現し、JVM の Room 再オープンで検証する。新しい描画ライブラリは導入しない。
 - **保存**: Room 3 の `boards`・`text_elements` を維持し、v2 で `spatial_elements`・`arrow_elements` を追加する。確定済み snapshot を単一 transaction で保存する。
 - **検証**: JUnit で包含、移動、矢印接続、余白、Undo/Redo、v1→v2 migration と再オープンを検証する。GitHub CI では lint、単体テスト、デバッグビルド、公開情報境界を実行する。
 - **対象**: Android API 26 以上の単一ボード。文字要素と既存のパン・ズーム・編集を保持する。
@@ -42,7 +42,7 @@
 - v1 schema を保持し、Room 3 の自動 migration で v2 の二表を追加する。v1 の既存行を削除・再作成しない。
 - `CanvasStore` の読込と保存を三種類の要素に拡張する。テキスト、図形、矢印の置換とボードの更新時刻を一つの transaction で扱い、ボード名を既定値で上書きしない。
 - 接続先は文字表と図形表の両方を参照する。DB の単一外部キーで表せないため、削除と保存前に参照を検証する。対象削除時は接続矢印を同じ履歴・transaction で削除する。
-- `room3-testing` で v1 の既存ボード名と文字を入れた DB を v2 へ移し、行と座標の保持、新表の空状態、schema 検証を行う。v2 の全種を保存・再オープンするテストも行う。
+- JVM の単体テストで v1 の既存ボード名と文字を入れた DB を作り、Room の再オープンで v2 へ移す。行と座標の保持、新表の空状態、schema 検証を行う。v2 の全種を保存・再オープンするテストも行う。
 
 ### 画面と gesture
 

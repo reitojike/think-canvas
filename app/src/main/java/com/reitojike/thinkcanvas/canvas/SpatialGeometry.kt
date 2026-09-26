@@ -32,6 +32,11 @@ fun BoardSnapshot.boundsOf(id: String): WorldBounds? =
         }
 
 fun BoardSnapshot.centerOf(id: String): WorldPoint? = boundsOf(id)?.center
+    ?: arrows.firstOrNull { it.id == id }?.let { arrow ->
+        arrowPoints(arrow)?.let { (from, to) ->
+            WorldPoint((from.x + to.x) / 2f, (from.y + to.y) / 2f)
+        }
+    }
 
 fun BoardSnapshot.smallestRegionAt(point: WorldPoint): ShapeElement? = shapes
     .asSequence().filter { it.kind == ShapeKind.REGION && it.bounds().contains(point) }
@@ -64,7 +69,7 @@ fun distanceToSegment(point: WorldPoint, a: WorldPoint, b: WorldPoint): Float {
 
 fun ShapeElement.hitStroke(point: WorldPoint, tolerance: Float): Boolean {
     val b = bounds()
-    val small = width <= 48f && height <= 48f
+    val small = width <= tolerance * 4f && height <= tolerance * 4f
     if (kind == ShapeKind.RECTANGLE || kind == ShapeKind.REGION) {
         if (small && b.contains(point)) return true
         val nearX = point.x in (b.left - tolerance)..(b.right + tolerance)
@@ -80,7 +85,16 @@ fun ShapeElement.hitStroke(point: WorldPoint, tolerance: Float): Boolean {
     return (small && normalized <= 1f) || abs(normalized - 1f) * min(rx, ry) <= tolerance
 }
 
-fun BoardSnapshot.resolve(end: ArrowEnd, toward: WorldPoint? = null): WorldPoint? {
+fun ShapeElement.containsInterior(point: WorldPoint): Boolean {
+    val b = bounds()
+    if (!b.contains(point)) return false
+    if (kind != ShapeKind.ELLIPSE) return true
+    val dx = (point.x - b.center.x) / (width / 2f)
+    val dy = (point.y - b.center.y) / (height / 2f)
+    return dx * dx + dy * dy <= 1f
+}
+
+fun BoardSnapshot.resolve(end: ArrowEnd, toward: WorldPoint? = null, offset: Float = 6f): WorldPoint? {
     return when (end) {
     is ArrowEnd.Free -> WorldPoint(end.x, end.y)
     is ArrowEnd.Attached -> {
@@ -94,19 +108,19 @@ fun BoardSnapshot.resolve(end: ArrowEnd, toward: WorldPoint? = null): WorldPoint
         val shape = shapes.firstOrNull { it.id == end.targetId }
         val rx = (bounds.right - bounds.left) / 2f
         val ry = (bounds.bottom - bounds.top) / 2f
-        if (dx == 0f && dy == 0f) return WorldPoint(bounds.right + 6f, center.y)
+        if (dx == 0f && dy == 0f) return WorldPoint(bounds.right + offset, center.y)
         val factor = if (shape?.kind == ShapeKind.ELLIPSE) {
             1f / sqrt(dx * dx / (rx * rx) + dy * dy / (ry * ry))
         } else min(if (dx == 0f) Float.POSITIVE_INFINITY else rx / abs(dx),
             if (dy == 0f) Float.POSITIVE_INFINITY else ry / abs(dy))
         val length = sqrt(dx * dx + dy * dy)
-        WorldPoint(center.x + dx * factor + 6f * dx / length,
-            center.y + dy * factor + 6f * dy / length)
+        WorldPoint(center.x + dx * factor + offset * dx / length,
+            center.y + dy * factor + offset * dy / length)
     }
     }
 }
 
-fun BoardSnapshot.arrowPoints(arrow: ArrowElement): Pair<WorldPoint, WorldPoint>? {
+fun BoardSnapshot.arrowPoints(arrow: ArrowElement, offset: Float = 6f): Pair<WorldPoint, WorldPoint>? {
     val fromCenter = when (val end = arrow.from) {
         is ArrowEnd.Free -> WorldPoint(end.x, end.y)
         is ArrowEnd.Attached -> centerOf(end.targetId) ?: return null
@@ -115,12 +129,12 @@ fun BoardSnapshot.arrowPoints(arrow: ArrowElement): Pair<WorldPoint, WorldPoint>
         is ArrowEnd.Free -> WorldPoint(end.x, end.y)
         is ArrowEnd.Attached -> centerOf(end.targetId) ?: return null
     }
-    return (resolve(arrow.from, toCenter) ?: return null) to
-        (resolve(arrow.to, fromCenter) ?: return null)
+    return (resolve(arrow.from, toCenter, offset) ?: return null) to
+        (resolve(arrow.to, fromCenter, offset) ?: return null)
 }
 
-fun BoardSnapshot.arrowControl(arrow: ArrowElement): WorldPoint? {
-    val (from, to) = arrowPoints(arrow) ?: return null
+fun BoardSnapshot.arrowControl(arrow: ArrowElement, offset: Float = 6f): WorldPoint? {
+    val (from, to) = arrowPoints(arrow, offset) ?: return null
     val dx = to.x - from.x
     val dy = to.y - from.y
     val length = max(1f, sqrt(dx * dx + dy * dy))
@@ -128,9 +142,9 @@ fun BoardSnapshot.arrowControl(arrow: ArrowElement): WorldPoint? {
         (from.y + to.y) / 2f + dx / length * arrow.bend)
 }
 
-fun BoardSnapshot.distanceToArrow(point: WorldPoint, arrow: ArrowElement): Float {
-    val (from, to) = arrowPoints(arrow) ?: return Float.POSITIVE_INFINITY
-    val control = arrowControl(arrow) ?: return Float.POSITIVE_INFINITY
+fun BoardSnapshot.distanceToArrow(point: WorldPoint, arrow: ArrowElement, offset: Float = 6f): Float {
+    val (from, to) = arrowPoints(arrow, offset) ?: return Float.POSITIVE_INFINITY
+    val control = arrowControl(arrow, offset) ?: return Float.POSITIVE_INFINITY
     var minimum = Float.POSITIVE_INFINITY
     var previous = from
     for (index in 1..24) {

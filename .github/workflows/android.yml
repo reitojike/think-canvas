@@ -28,11 +28,10 @@ jobs:
           cache-provider: basic
       - name: Android lint
         run: ./gradlew :app:lintDebug --no-daemon
-      - name: Room schema を保存
-        uses: actions/upload-artifact@v4
-        with:
-          name: room-schema
-          path: app/schemas/com.reitojike.thinkcanvas.data.CanvasDatabase/*.json
+      - name: Room schema の差分確認
+        run: |
+          git diff --exit-code -- app/schemas
+          test -z "$(git ls-files --others --exclude-standard app/schemas)"
       - name: 単体テスト
         run: ./gradlew :app:testDebugUnitTest --no-daemon
       - name: デバッグビルド

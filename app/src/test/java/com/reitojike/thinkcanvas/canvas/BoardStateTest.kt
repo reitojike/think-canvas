@@ -89,6 +89,15 @@ class BoardStateTest {
     }
 
     @Test
+    fun arrowBendSnapsToStraightNearCenter() {
+        val board = BoardState()
+        val arrow = board.addArrow(ArrowEnd.Free(0f, 0f), ArrowEnd.Free(100f, 0f))!!
+        assertTrue(board.updateArrow(arrow.id, bend = 20f))
+        assertTrue(board.updateArrow(arrow.id, bend = 4f))
+        assertEquals(0f, board.arrows.single().bend)
+    }
+
+    @Test
     fun historyKeepsMostRecentEightyChanges() {
         val board = BoardState()
         repeat(81) { board.addShape(ShapeKind.RECTANGLE, it.toFloat(), 0f, 40f, 30f) }

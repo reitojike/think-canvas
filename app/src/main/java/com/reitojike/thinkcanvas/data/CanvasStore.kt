@@ -2,6 +2,7 @@ package com.reitojike.thinkcanvas.data
 
 import android.content.Context
 import com.reitojike.thinkcanvas.canvas.BoardSnapshot
+import com.reitojike.thinkcanvas.canvas.ArrowEnd
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Deferred
@@ -26,6 +27,10 @@ class CanvasStore private constructor(context: Context) {
     }
 
     fun save(snapshot: BoardSnapshot): Deferred<Unit> {
+        val targets = (snapshot.texts.map { it.id } + snapshot.shapes.map { it.id }).toSet()
+        require(snapshot.arrows.all { arrow ->
+            listOf(arrow.from, arrow.to).all { it !is ArrowEnd.Attached || it.targetId in targets }
+        }) { "矢印の接続先が見つかりません" }
         val texts = snapshot.texts.map(TextElementRow::fromModel)
         val shapes = snapshot.shapes.map(SpatialElementRow::fromModel)
         val arrows = snapshot.arrows.map(ArrowElementRow::fromModel)

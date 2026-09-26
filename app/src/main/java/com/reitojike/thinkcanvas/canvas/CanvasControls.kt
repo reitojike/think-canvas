@@ -19,14 +19,17 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
+import com.reitojike.thinkcanvas.R
 
-enum class SpatialTool(val label: String, val icon: String) {
-    NONE("閉じる", "＋"),
-    LASSO("まとめて選ぶ", "⌁"),
-    REGION("囲み", "▢"),
-    ARROW("矢印", "↗"),
-    ELLIPSE("丸", "◯"),
-    RECTANGLE("四角", "□"),
+enum class SpatialTool(val label: String, val icon: String, @StringRes val labelRes: Int) {
+    NONE("閉じる", "＋", R.string.tool_close),
+    LASSO("まとめて選ぶ", "⌁", R.string.tool_lasso),
+    REGION("囲み", "▢", R.string.tool_region),
+    ARROW("矢印", "↗", R.string.tool_arrow),
+    ELLIPSE("丸", "◯", R.string.tool_ellipse),
+    RECTANGLE("四角", "□", R.string.tool_rectangle),
 }
 
 @Composable
@@ -36,17 +39,19 @@ fun SpatialTools(tool: SpatialTool, expanded: Boolean, enabled: Boolean,
         if (expanded) {
             listOf(SpatialTool.LASSO, SpatialTool.REGION, SpatialTool.ARROW,
                 SpatialTool.ELLIPSE, SpatialTool.RECTANGLE).forEach { item ->
+                val label = stringResource(item.labelRes)
                 Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(item.label, color = Color.White, fontSize = 12.sp,
+                    Text(label, color = Color.White, fontSize = 12.sp,
                         modifier = Modifier.background(Color(0xFF23211E), RoundedCornerShape(5.dp))
                             .padding(horizontal = 8.dp, vertical = 5.dp))
-                    ToolButton(item.icon, item.label, enabled) { onSelect(item) }
+                    ToolButton(item.icon, label, enabled) { onSelect(item) }
                 }
             }
         }
         ToolButton(if (tool == SpatialTool.NONE) "+" else tool.icon,
-            if (tool == SpatialTool.NONE) "図形ツールを開く" else "${tool.label}ツールを閉じる", enabled,
+            if (tool == SpatialTool.NONE) stringResource(R.string.tool_open)
+            else "${stringResource(tool.labelRes)}${stringResource(R.string.tool_close)}", enabled,
             dark = true, onClick = onExpand)
     }
 }
