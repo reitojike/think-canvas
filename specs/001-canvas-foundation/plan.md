@@ -35,14 +35,14 @@ Phase 1 の設計後も上記を満たす。例外はキャンバス上の複合
 ## 構成
 
 ```text
-app/src/main/java/com/reitojike/thinkcanvas/
+app/src/main/java/com/thinkcanvas/internal/
 ├── MainActivity.kt
 ├── canvas/BoardState.kt
 ├── canvas/Viewport.kt
 ├── canvas/CanvasScreen.kt
 ├── data/CanvasDatabase.kt
 └── data/CanvasStore.kt
-app/src/test/java/com/reitojike/thinkcanvas/canvas/
+app/src/test/java/com/thinkcanvas/internal/canvas/
 └── BoardStateTest.kt
 app/schemas/
 ```

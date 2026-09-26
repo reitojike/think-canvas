@@ -1,4 +1,4 @@
-package com.reitojike.thinkcanvas
+package com.thinkcanvas.internal
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -14,9 +14,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.lifecycleScope
-import com.reitojike.thinkcanvas.canvas.BoardState
-import com.reitojike.thinkcanvas.canvas.CanvasScreen
-import com.reitojike.thinkcanvas.data.CanvasStore
+import com.thinkcanvas.internal.canvas.BoardState
+import com.thinkcanvas.internal.canvas.CanvasScreen
+import com.thinkcanvas.internal.data.CanvasStore
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {

@@ -37,6 +37,14 @@ jobs:
         run: ./gradlew :app:testDebugUnitTest --no-daemon
       - name: デバッグビルド
         run: ./gradlew :app:assembleDebug --no-daemon
+      - name: PR のデバッグ APK を保存
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: think-canvas-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
       - name: 公開情報境界
         shell: pwsh
         run: ./scripts/check-public-boundary.ps1

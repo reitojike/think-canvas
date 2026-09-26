@@ -1,4 +1,4 @@
-package com.reitojike.thinkcanvas.canvas
+package com.thinkcanvas.internal.canvas
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
