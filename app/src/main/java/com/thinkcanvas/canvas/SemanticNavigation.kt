@@ -36,13 +36,13 @@ fun BoardSnapshot.semanticProjection(
             (tier == SemanticTier.FAR || apparentDp(shape.width) < 120f || apparentDp(shape.height) < 90f)
     }
     val hidden = mutableSetOf<String>()
-    fun covered(id: String): Boolean {
-        val center = centerOf(id) ?: return false
+    fun coveredPoint(id: String, center: WorldPoint): Boolean {
         return collapsed.any { region ->
             region.id != id && region.bounds().contains(center) &&
                 (shapes.firstOrNull { it.id == id }?.bounds()?.area ?: 0f) < region.bounds().area
         }
     }
+    fun covered(id: String): Boolean = centerOf(id)?.let { coveredPoint(id, it) } ?: false
 
     shapes.filter { it.kind == ShapeKind.REGION && it.id !in keep && covered(it.id) }
         .forEach { hidden += it.id }
@@ -71,14 +71,18 @@ fun BoardSnapshot.semanticProjection(
             it is ArrowEnd.Attached && it.targetId in hidden
         }
         val renderOffset = 6f / scale
+        var renderedCenter: WorldPoint? = null
         val length = arrowPoints(arrow, renderOffset)?.let { (a, b) ->
             val control = arrowControl(arrow, renderOffset) ?: return@let 0f
+            renderedCenter = WorldPoint((a.x + 2f * control.x + b.x) / 4f,
+                (a.y + 2f * control.y + b.y) / 4f)
             val midpoint = WorldPoint((a.x + b.x) / 2f, (a.y + b.y) / 2f)
             val bendExtent = kotlin.math.hypot(control.x - midpoint.x,
                 control.y - midpoint.y) / 2f
             apparentDp(max(kotlin.math.hypot(b.x - a.x, b.y - a.y), bendExtent))
         } ?: 0f
-        attachedHidden || covered(arrow.id) || tier == SemanticTier.FAR && length < 20f
+        attachedHidden || renderedCenter?.let { coveredPoint(arrow.id, it) } == true ||
+            tier == SemanticTier.FAR && length < 20f
     }.forEach { hidden += it.id }
     hidden.removeAll(keep)
     return SemanticProjection(tier, collapsed.map { it.id }.toSet(), hidden,

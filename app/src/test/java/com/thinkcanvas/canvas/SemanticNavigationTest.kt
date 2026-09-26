@@ -113,6 +113,17 @@ class SemanticNavigationTest {
         assertFalse(snapshot.semanticProjection(.25f, 14f).visible("attached"))
     }
 
+    @Test fun collapsedRegionChecksRenderedArrowCenter() {
+        val source = ShapeElement(id = "source", kind = ShapeKind.RECTANGLE,
+            x = 0f, y = 0f, width = 100f, height = 100f)
+        val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+            x = 183f, y = 0f, width = 167f, height = 200f, name = "まとまり")
+        val arrow = ArrowElement(id = "arrow", from = ArrowEnd.Attached("source", 1f, .5f),
+            to = ArrowEnd.Free(250f, 50f))
+        val snapshot = BoardSnapshot(shapes = listOf(source, region), arrows = listOf(arrow))
+        assertFalse(snapshot.semanticProjection(.25f, 14f).visible("arrow"))
+    }
+
     @Test fun lassoCannotSelectElementsHiddenByFarView() {
         val body = TextElement(id = "hidden", text = "本文", x = 10f, y = 10f)
         val title = TextElement(id = "visible", text = "見出し", kind = TextKind.TITLE,
