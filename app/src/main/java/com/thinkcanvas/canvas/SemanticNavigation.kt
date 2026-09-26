@@ -102,6 +102,11 @@ fun BoardSnapshot.titleAvailableWidth(element: TextElement): Float? {
 fun searchIndex(current: Int, change: Int, count: Int): Int =
     if (count == 0) 0 else ((current + change) % count + count) % count
 
+fun BoardSnapshot.visibleLassoSelection(
+    vertices: List<WorldPoint>,
+    projection: SemanticProjection,
+): Set<String> = lassoSelection(vertices).filterTo(mutableSetOf()) { projection.visible(it) }
+
 fun Viewport.centerOn(point: WorldPoint, width: Float, height: Float, targetScale: Float,
                       verticalFraction: Float = .5f): Viewport {
     val s = targetScale.coerceIn(.15f, 3f)
@@ -124,9 +129,12 @@ fun Viewport.doubleTapZoom(x: Float, y: Float, bodyDp: Float, width: Float, heig
     return centerOn(WorldPoint(worldX, worldY), width, height, target)
 }
 
-fun Viewport.fitRegion(region: ShapeElement, width: Float, height: Float): Viewport {
-    val s = min((width - 40f) / region.width, (height - 200f) / region.height)
-        .coerceAtMost(1.1f).coerceIn(.15f, 3f)
+fun Viewport.fitRegion(region: ShapeElement, width: Float, height: Float,
+                       pixelsPerDp: Float = 1f): Viewport {
+    val fittingScale = min((width - 40f) / region.width, (height - 200f) / region.height)
+    val expandedScale = max(1.1f, max(120f * pixelsPerDp / region.width,
+        90f * pixelsPerDp / region.height))
+    val s = min(fittingScale, expandedScale).coerceIn(.15f, 3f)
     return centerOn(region.bounds().center, width, height, s)
 }
 

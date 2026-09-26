@@ -310,7 +310,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         val (x, y) = latestViewport.value.screenToWorld(point.x, point.y)
         val world = WorldPoint(x, y)
         val target = hitTest(point)?.id ?: latestSnapshot.value.shapes.asReversed()
-            .firstOrNull { it.containsInterior(world) || it.hitStroke(world, 12f / latestViewport.value.scale) }?.id
+            .firstOrNull { latestProjection.value.visible(it.id) &&
+                (it.containsInterior(world) || it.hitStroke(world, 12f / latestViewport.value.scale)) }?.id
         val bounds = target?.let { latestSnapshot.value.boundsOf(it) }
         return if (target != null && bounds != null) ArrowEnd.Attached(
             target, ((x - bounds.left) / (bounds.right - bounds.left)).coerceIn(0f, 1f),
@@ -364,7 +365,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             val region = board.shapes.firstOrNull { it.id == spatial && it.kind == ShapeKind.REGION }
             if (region != null && latestProjection.value.farLikeRegion(spatial) && canvasSize != IntSize.Zero) {
                 animateViewport(latestViewport.value.fitRegion(region,
-                    canvasSize.width.toFloat(), canvasSize.height.toFloat()))
+                    canvasSize.width.toFloat(), canvasSize.height.toFloat(), density.density))
                 return
             }
             if (latestSelectedIds.value.size > 1 && spatial in latestSelectedIds.value) {
@@ -659,7 +660,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                             }
                             "lasso" -> {
                                 val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
-                                selectedIds = latestSnapshot.value.lassoSelection(lassoPoints + WorldPoint(x, y))
+                                selectedIds = latestSnapshot.value.visibleLassoSelection(
+                                    lassoPoints + WorldPoint(x, y), latestProjection.value)
                                 selectedId = selectedIds.singleOrNull()?.takeIf { id -> board.elements.any { it.id == id } }
                                 guidance = "${selectedIds.size}個を選択"
                                 tool = SpatialTool.NONE
@@ -920,7 +922,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 val region = board.shapes.firstOrNull { it.id == id && it.kind == ShapeKind.REGION }
                 if (region != null && projection.farLikeRegion(id) && canvasSize != IntSize.Zero)
                     animateViewport(viewport.fitRegion(region,
-                        canvasSize.width.toFloat(), canvasSize.height.toFloat()))
+                        canvasSize.width.toFloat(), canvasSize.height.toFloat(), density.density))
                 else { selectedIds = setOf(id); selectedId = null }
             },
             onAdd = { id ->
@@ -1294,10 +1296,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                                     val (left, top) = viewport.screenToWorld(0f, 0f)
                                     val (right, bottom) = viewport.screenToWorld(
                                         canvasSize.width.toFloat(), canvasSize.height.toFloat())
-                                    selectedIds = board.snapshot().lassoSelection(listOf(
+                                    selectedIds = board.snapshot().visibleLassoSelection(listOf(
                                         WorldPoint(left, top), WorldPoint(right, top),
                                         WorldPoint(right, bottom), WorldPoint(left, bottom),
-                                    ))
+                                    ), projection)
                                     selectedId = null
                                     guidance = "${selectedIds.size}個を選択"
                                     true

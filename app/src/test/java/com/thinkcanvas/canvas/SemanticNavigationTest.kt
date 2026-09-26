@@ -75,6 +75,18 @@ class SemanticNavigationTest {
         assertTrue(snapshot.semanticProjection(.5f, 14f, setOf("title")).visible("title"))
     }
 
+    @Test fun lassoCannotSelectElementsHiddenByFarView() {
+        val body = TextElement(id = "hidden", text = "本文", x = 10f, y = 10f)
+        val title = TextElement(id = "visible", text = "見出し", kind = TextKind.TITLE,
+            x = 100f, y = 10f)
+        val snapshot = BoardSnapshot(texts = listOf(body, title))
+        val bounds = listOf(WorldPoint(0f, 0f), WorldPoint(200f, 0f),
+            WorldPoint(200f, 100f), WorldPoint(0f, 100f))
+        assertEquals(setOf("hidden", "visible"), snapshot.lassoSelection(bounds))
+        assertEquals(setOf("visible"), snapshot.visibleLassoSelection(bounds,
+            snapshot.semanticProjection(.25f, 14f)))
+    }
+
     @Test fun searchSortsBySavedPositionAndWrapsWithoutMutation() {
         val snapshot = BoardSnapshot(
             texts = listOf(
@@ -117,6 +129,12 @@ class SemanticNavigationTest {
         val fittedCenter = fitted.screenToWorld(200f, 400f)
         assertEquals(region.bounds().center.x, fittedCenter.first, .0001f)
         assertEquals(region.bounds().center.y, fittedCenter.second, .0001f)
+        val small = ShapeElement(id = "small", kind = ShapeKind.REGION,
+            x = 0f, y = 0f, width = 200f, height = 150f, name = "小")
+        val expanded = viewport.fitRegion(small, 400f, 800f, pixelsPerDp = 3f)
+        assertEquals(1.8f, expanded.scale, .0001f)
+        assertFalse("small" in BoardSnapshot(shapes = listOf(small))
+            .semanticProjection(expanded.scale, 14f, pixelsPerDp = 3f).collapsedRegions)
     }
 
     @Test fun projectionSearchAndViewportDoNotEnterUndoHistory() {
