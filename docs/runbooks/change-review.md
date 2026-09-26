@@ -1,7 +1,8 @@
 # 変更とレビューの手順
 
 この runbook は、stage-tracker の PR 前後の確認手順から、現在の ThinkCanvas に適用できる
-規則を取り込んだものです。まだ存在しない CI の job やレビューの自動化を前提にしません。
+規則を取り込んだものです。CI の実行内容は [Android checks](../../.github/workflows/android.yml)
+を基準にします。
 
 ## PR を作成する前
 
@@ -14,13 +15,12 @@
 3. リポジトリの root で、現在の必須チェックを実行します。
 
    ```powershell
-   .\gradlew.bat :app:assembleDebug
+   .\gradlew.bat :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
    pwsh -File scripts/check-public-boundary.ps1
    git diff --check
    ```
 
-   macOS / Linux では `bash ./gradlew :app:assembleDebug` を使います。対象の機能に
-   テストがある場合は、そのテストも実行します。保存や空間配置の不変条件は、実装の形を
+   macOS / Linux では `bash ./gradlew :app:lintDebug :app:testDebugUnitTest :app:assembleDebug` を使います。保存や空間配置の不変条件は、実装の形を
    なぞるだけでなく、振る舞いを確かめるテストで検証します。
 4. 変更ファイルの一覧と差分を読み、秘密情報、ローカルパス、個人情報、非公開サービス、
    会話ログ、PRD の本文、HTML モックの内容が含まれていないか確認します。チェック
@@ -34,8 +34,8 @@ JDK、SDK、network、権限などの環境要因でローカルビルドを実�
 ## PR を作成した後
 
 - CI の結果とレビューの指摘は、**現在の PR head** に対して確認します。新しい commit を
-  追加した場合、以前のビルドとレビューの結果は現行の証拠にはなりません。CI を追加したら、
-  この runbook から必須 job を推測せず、実際の workflow を確認します。
+  追加した場合、以前のビルドとレビューの結果は現行の証拠にはなりません。必須の lint・
+  テスト・ビルド・公開情報境界チェックは、実際の workflow と照合します。
 - 対応が必要な指摘と review thread は解消します。指摘が該当しない場合は理由を記録します。
   データ消失、privacy、公開情報の境界に関わる変更では、可能なら独立した観点のレビューも
   受けます。

@@ -1,8 +1,9 @@
 # ThinkCanvas
 
-ThinkCanvas は Android 向けのローカルファーストな思考キャンバスです。このリポジトリは現在、
-GitHub Issue [#1](https://github.com/reitojike/think-canvas/issues/1) の初期構築段階です。
-アプリは ThinkCanvas の名前だけを表示する最小の Compose アプリで、キャンバス機能はまだありません。
+ThinkCanvas は Android 向けのローカルファーストな思考キャンバスです。
+[#2 Canvas Foundation](https://github.com/reitojike/think-canvas/issues/2) では、最初のボードに
+テキストを配置・編集し、パン・ズーム、選択・移動、Undo/Redo を行える基礎を実装します。
+確定済み要素は Room 3 で端末内に保存します。
 
 ## 開発環境
 
@@ -23,10 +24,10 @@ Android Studio が作成する `local.properties` は追跡しません。コマ
 `ANDROID_HOME` または `ANDROID_SDK_ROOT` を設定し、Windows なら次を実行します。
 
 ```powershell
-.\gradlew.bat :app:assembleDebug
+.\gradlew.bat :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
 ```
 
-macOS / Linux では `bash ./gradlew :app:assembleDebug` を使います。ビルド成果物は
+macOS / Linux では `bash ./gradlew :app:lintDebug :app:testDebugUnitTest :app:assembleDebug` を使います。ビルド成果物は
 `app/build/outputs/apk/debug/` に作成されます。
 
 ## Spec Kit
@@ -46,15 +47,15 @@ uvx --from specify-cli==1.0.12 specify init --here --force --integration codex -
 Constitution は [`.specify/memory/constitution.md`](.specify/memory/constitution.md) にあります。
 開発と PR レビューの手順は [`docs/runbooks/change-review.md`](docs/runbooks/change-review.md)
 にまとめています。`AGENTS.md` はこれらの判断基準を案内します。
-Codex では `$speckit-constitution` などの skill 名を使います。次の機能は
-[#2 Canvas Foundation](https://github.com/reitojike/think-canvas/issues/2) です。
+Codex では `$speckit-constitution` などの skill 名を使います。#2 の成果物は
+[`specs/001-canvas-foundation/`](specs/001-canvas-foundation/) にあります。
 `$speckit-specify` → `$speckit-clarify` → `$speckit-plan` → `$speckit-checklist` →
 `$speckit-tasks` → `$speckit-analyze` → `$speckit-implement` → `$speckit-converge`
 の順に進め、設計判断をその機能の成果物に残します。
 
 ## 要件の基準と公開境界
 
-PRD が製品要件の authority です。HTML モックは操作の reference implementation
+PRD が製品要件の authority です。HTML モックは操作とコンポーネントの見た目の reference implementation
 として扱います。内容が食い違う場合は PRD を優先し、差分と理由を spec に記録します。
 PRD が決めていないことは spec で明示してから実装します。両ファイル自体は公開しません。
 
@@ -71,8 +72,7 @@ git status --short
 チェックは典型的なパターンの検出補助です。新しい名前の秘密情報や、文章に混ざった
 非公開情報まで自動的に判定するものではありません。
 
-## #1 の範囲
+## #1 の初期構築
 
-Kotlin、Compose、Gradle wrapper と起動できる最小アプリを用意します。Jetpack Ink と Room 3 は
-後続の機能で使用する方針ですが、現時点では依存関係や schema を追加しません。
-`BoardEngine`、ワールド座標、gesture、保存モデル、画面デザインは #2 以降で決めます。
+Kotlin、Compose、Gradle wrapper と起動できる最小アプリを用意しました。#1 では
+キャンバスや保存モデルを先取りせず、#2 の仕様に基づいて追加しています。Ink は後続の仕様で扱います。

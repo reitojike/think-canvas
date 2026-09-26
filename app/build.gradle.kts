@@ -2,6 +2,12 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.devtools.ksp")
+    id("androidx.room3")
+}
+
+room3 {
+    schemaDirectory("$projectDir/schemas")
 }
 
 android {
@@ -44,4 +50,9 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.room3:room3-runtime:3.0.3")
+    implementation("androidx.sqlite:sqlite-framework:2.7.1")
+    ksp("androidx.room3:room3-compiler:3.0.3")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("androidx.sqlite:sqlite-bundled-jvm:2.7.1")
 }
