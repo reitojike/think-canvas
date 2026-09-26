@@ -53,4 +53,15 @@ class InkElementTest {
             WorldPoint(-30f, 20f),
         )))
     }
+
+    @Test
+    fun markerVisibleEdgeRemainsSelectableAtMaximumZoom() {
+        val element = InkElement(kind = InkKind.MARKER, strokes = listOf(InkStroke(
+            startedAt = 1_000, endedAt = 1_100, inputType = InkInputType.TOUCH,
+            points = listOf(InkPoint(0f, 0f, 0), InkPoint(30f, 0f, 100)),
+        )))
+        val tolerance = InkKind.MARKER.hitTolerance(3f)
+        assertTrue(element.hitStroke(WorldPoint(15f, 7f), tolerance))
+        assertFalse(element.hitStroke(WorldPoint(15f, 20f), tolerance))
+    }
 }

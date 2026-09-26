@@ -32,8 +32,8 @@ import kotlin.math.roundToInt
 data class InkPreview(val kind: InkKind, val inputType: InkInputType, val points: List<InkPoint>)
 
 private fun inkBrush(kind: InkKind): Brush = if (kind == InkKind.PEN)
-    Brush.createWithColorIntArgb(StockBrushes.marker(), 0xFF23211E.toInt(), 2.5f, 0.1f)
-else Brush.createWithColorIntArgb(StockBrushes.marker(), 0x76C54B32, 15f, 0.1f)
+    Brush.createWithColorIntArgb(StockBrushes.marker(), 0xFF23211E.toInt(), PEN_WIDTH_WORLD, 0.1f)
+else Brush.createWithColorIntArgb(StockBrushes.marker(), 0x76C54B32, MARKER_WIDTH_WORLD, 0.1f)
 
 private fun makeStroke(kind: InkKind, inputType: InkInputType, points: List<InkPoint>): Stroke {
     val batch = MutableStrokeInputBatch()

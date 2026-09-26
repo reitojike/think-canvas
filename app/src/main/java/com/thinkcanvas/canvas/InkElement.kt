@@ -5,6 +5,15 @@ import java.util.UUID
 enum class InkKind { PEN, MARKER }
 enum class InkInputType { TOUCH, STYLUS }
 
+internal const val PEN_WIDTH_WORLD = 2.5f
+internal const val MARKER_WIDTH_WORLD = 15f
+
+fun InkKind.hitTolerance(scale: Float): Float {
+    val radius = if (this == InkKind.MARKER) MARKER_WIDTH_WORLD / 2f else PEN_WIDTH_WORLD / 2f
+    val screenSlop = if (this == InkKind.MARKER) 12f else 7f
+    return radius + screenSlop / scale
+}
+
 data class InkPoint(val x: Float, val y: Float, val elapsedMillis: Long) {
     init {
         require(x.isFinite() && y.isFinite() && elapsedMillis >= 0)

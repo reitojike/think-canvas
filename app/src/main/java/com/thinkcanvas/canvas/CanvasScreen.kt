@@ -220,7 +220,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         val world = WorldPoint(wx, wy)
         val snapshot = latestSnapshot.value
         snapshot.ink.asReversed().firstOrNull { element ->
-            element.hitStroke(world, (if (element.kind == InkKind.MARKER) 12f else 7f) / view.scale)
+            element.hitStroke(world, element.kind.hitTolerance(view.scale))
         }?.let { return it.id }
         snapshot.arrows.asReversed().firstOrNull { arrow ->
             snapshot.distanceToArrow(world, arrow, 6f / view.scale) <= 12f / view.scale
