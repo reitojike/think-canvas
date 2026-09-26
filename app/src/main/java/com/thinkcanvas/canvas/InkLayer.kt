@@ -56,6 +56,7 @@ fun InkLayer(
     selected: Set<String>,
     moving: Set<String>,
     preview: InkPreview?,
+    dimmed: Boolean = false,
     onSelect: (String) -> Unit,
     onMove: (String, Float, Float) -> Boolean,
     onDelete: (String) -> Boolean,
@@ -76,11 +77,13 @@ fun InkLayer(
                 0f, viewport.scale, viewport.panY, 0f, 0f, 1f))
         }
         val native = drawContext.canvas.nativeCanvas
+        if (dimmed) native.saveLayer(null, android.graphics.Paint().apply { alpha = 64 })
         native.save()
         native.concat(transform)
         prepared.forEach { (_, stroke) -> renderer.draw(native, stroke, transform) }
         wetStroke?.let { renderer.draw(native, it, transform) }
         native.restore()
+        if (dimmed) native.restore()
         elements.filter { it.kind == kind && (it.id in selected || it.id in moving) }.forEach { element ->
             val bounds = element.bounds()
             val (x, y) = viewport.worldToScreen(bounds.left, bounds.top)

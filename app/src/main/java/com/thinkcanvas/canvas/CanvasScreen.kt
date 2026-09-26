@@ -1,6 +1,8 @@
 package com.thinkcanvas.canvas
 
 import android.os.SystemClock
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -24,6 +26,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -70,6 +74,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -79,6 +85,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.thinkcanvas.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -126,6 +133,11 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     var finishDraftAfterSave by remember { mutableStateOf(false) }
     var pendingInkSave by remember { mutableStateOf(false) }
     var pendingNewElementId by remember { mutableStateOf<String?>(null) }
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var searchPosition by remember { mutableStateOf(0) }
+    var lastBlankTap by remember { mutableStateOf<Pair<Long, Offset>?>(null) }
+    var viewportAnimation by remember { mutableStateOf<Job?>(null) }
     val elementSizes = remember { mutableStateMapOf<String, IntSize>() }
     val chromeBounds = remember { mutableStateMapOf<String, Rect>() }
     val uiScope = rememberCoroutineScope()
@@ -134,12 +146,23 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
     val regionNameFocusRequester = remember { FocusRequester() }
+    val searchFocusRequester = remember { FocusRequester() }
     val touchSlop = LocalViewConfiguration.current.touchSlop
     val longPressMillis = LocalViewConfiguration.current.longPressTimeoutMillis
     val imeBottom = WindowInsets.ime.getBottom(density)
     val latestViewport = rememberUpdatedState(viewport)
     val latestElements = rememberUpdatedState(board.elements)
     val latestSnapshot = rememberUpdatedState(board.snapshot())
+    val bodyDp = with(density) { 14.sp.toDp().value }
+    val searchMatches = if (searchOpen) board.snapshot().searchCanvas(searchQuery) else emptyList()
+    val matchIds = searchMatches.map { it.id }.toSet()
+    val currentMatch = searchMatches.getOrNull(searchPosition)
+    val projection = board.snapshot().semanticProjection(viewport.scale, bodyDp, selectedIds + matchIds)
+    val latestProjection = rememberUpdatedState(projection)
+    val latestLastBlankTap = rememberUpdatedState(lastBlankTap)
+    val latestSearchOpen = rememberUpdatedState(searchOpen)
+    val latestAnimation = rememberUpdatedState(viewportAnimation)
+    val latestBodyDp = rememberUpdatedState(bodyDp)
     val latestSelected = rememberUpdatedState(selectedId)
     val latestSelectedIds = rememberUpdatedState(selectedIds)
     val latestTool = rememberUpdatedState(tool)
@@ -147,6 +170,27 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val latestDraft = rememberUpdatedState(draft)
     val latestSaveBlocked = rememberUpdatedState(saving || saveFailed)
     val latestCommit = rememberUpdatedState(onCommittedChange)
+
+    fun animateViewport(target: Viewport) {
+        latestAnimation.value?.cancel()
+        val origin = latestViewport.value
+        viewportAnimation = uiScope.launch {
+            animate(0f, 1f, animationSpec = tween(340)) { fraction, _ ->
+                viewport = Viewport(
+                    origin.scale + (target.scale - origin.scale) * fraction,
+                    origin.panX + (target.panX - origin.panX) * fraction,
+                    origin.panY + (target.panY - origin.panY) * fraction,
+                )
+            }
+        }
+    }
+
+    fun focusMatch(index: Int) {
+        if (searchMatches.isEmpty() || canvasSize == IntSize.Zero) return
+        searchPosition = searchIndex(index, 0, searchMatches.size)
+        animateViewport(viewport.focusMatch(searchMatches[searchPosition],
+            canvasSize.width.toFloat(), canvasSize.height.toFloat()))
+    }
     val selectedLabel = stringResource(R.string.selection_state_selected)
     val unselectedLabel = stringResource(R.string.unselected)
     val selectLabel = stringResource(R.string.select)
@@ -202,6 +246,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     fun hitTest(point: Offset): TextElement? {
         val view = latestViewport.value
         return latestElements.value.asReversed().firstOrNull { element ->
+            if (!latestProjection.value.visible(element.id)) return@firstOrNull false
             val (x, y) = view.worldToScreen(element.x, element.y)
             val size = elementSizes[element.id] ?: IntSize(160, 48)
             val width = maxOf(size.width * view.scale, with(density) { 44.dp.toPx() })
@@ -221,7 +266,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         val (wx, wy) = view.screenToWorld(point.x, point.y)
         val world = WorldPoint(wx, wy)
         return latestSnapshot.value.ink.asReversed().firstOrNull { element ->
-            element.kind == kind && element.hitStroke(world, kind.hitTolerance(view.scale))
+            latestProjection.value.visible(element.id) && element.kind == kind &&
+                element.hitStroke(world, kind.hitTolerance(view.scale))
         }?.id
     }
 
@@ -231,15 +277,19 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         val world = WorldPoint(wx, wy)
         val snapshot = latestSnapshot.value
         snapshot.arrows.asReversed().firstOrNull { arrow ->
-            snapshot.distanceToArrow(world, arrow, 6f / view.scale) <= 12f / view.scale
+            latestProjection.value.visible(arrow.id) &&
+                snapshot.distanceToArrow(world, arrow, 6f / view.scale) <= 12f / view.scale
         }?.let { return it.id }
         return snapshot.shapes.asReversed().firstOrNull { shape ->
+            if (!latestProjection.value.visible(shape.id)) return@firstOrNull false
             val (nameX, nameY) = view.worldToScreen(shape.x + 8f, shape.y - 22f)
             val nameWidth = with(density) { maxOf(48.dp.toPx(), shape.name.length * 14.dp.toPx()) }
             val nameHit = shape.kind == ShapeKind.REGION && shape.name.isNotBlank() &&
                 point.x in nameX..(nameX + nameWidth) &&
                 point.y in (nameY - with(density) { 8.dp.toPx() })..(nameY + with(density) { 28.dp.toPx() })
-            shape.hitStroke(world, 12f / view.scale) || nameHit
+            val collapsedBody = shape.kind == ShapeKind.REGION &&
+                latestProjection.value.farLikeRegion(shape.id) && shape.bounds().contains(world)
+            shape.hitStroke(world, 12f / view.scale) || nameHit || collapsedBody
         }?.id
     }
 
@@ -297,12 +347,20 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         val (element, spatial) = hitCanvas(point)
         if (latestInkTool.value != null) return
         if (element == null && spatial == null) {
+            lastBlankTap = SystemClock.uptimeMillis() to point
             if (latestSelectedIds.value.isNotEmpty()) { selectedId = null; selectedIds = emptySet() }
-            else {
+            else if (!latestSearchOpen.value) {
                 val (x, y) = latestViewport.value.screenToWorld(point.x, point.y)
                 draft = Draft(null, x, y)
             }
         } else if (element == null && spatial != null) {
+            lastBlankTap = null
+            val region = board.shapes.firstOrNull { it.id == spatial && it.kind == ShapeKind.REGION }
+            if (region != null && latestProjection.value.farLikeRegion(spatial) && canvasSize != IntSize.Zero) {
+                animateViewport(latestViewport.value.fitRegion(region,
+                    canvasSize.width.toFloat(), canvasSize.height.toFloat()))
+                return
+            }
             if (latestSelectedIds.value.size > 1 && spatial in latestSelectedIds.value) {
                 selectedIds = latestSelectedIds.value - spatial
             } else if (spatial in latestSelectedIds.value && board.shapes.any { it.id == spatial && it.kind == ShapeKind.REGION }) {
@@ -310,10 +368,12 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 regionName = board.shapes.first { it.id == spatial }.name
             } else { selectedId = null; selectedIds = setOf(spatial) }
         } else if (element != null && latestSelectedIds.value.size > 1 && element.id in latestSelectedIds.value) {
+            lastBlankTap = null
             selectedIds = latestSelectedIds.value - element.id
         } else if (element != null && latestSelected.value == element.id) {
+            lastBlankTap = null
             draft = Draft(element.id, element.x, element.y, element.text, element.kind, element.color)
-        } else if (element != null) { selectedId = element.id; selectedIds = setOf(element.id) }
+        } else if (element != null) { lastBlankTap = null; selectedId = element.id; selectedIds = setOf(element.id) }
     }
 
     fun nudge(id: String, dx: Float, dy: Float): Boolean {
@@ -357,6 +417,15 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             focusRequester.requestFocus()
             keyboard?.show()
         }
+    }
+    LaunchedEffect(searchOpen) {
+        if (searchOpen) {
+            searchFocusRequester.requestFocus()
+            keyboard?.show()
+        } else chromeBounds.remove("search")
+    }
+    LaunchedEffect(searchOpen, searchQuery, searchMatches) {
+        if (searchOpen && searchQuery.isNotBlank() && searchMatches.isNotEmpty()) focusMatch(0)
     }
 
     LaunchedEffect(menuTarget) { if (menuTarget == null) chromeBounds.remove("menu") }
@@ -413,9 +482,25 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 try {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val requestedInk = down.type == PointerType.Stylus || latestInkTool.value != null
+                if (chromeBounds.values.any { it.contains(down.position) }) return@awaitEachGesture
+                latestAnimation.value?.cancel()
+                val previousBlankTap = latestLastBlankTap.value
+                if (previousBlankTap != null && latestTool.value == SpatialTool.NONE &&
+                    latestInkTool.value == null &&
+                    SystemClock.uptimeMillis() - previousBlankTap.first <= 320L &&
+                    (down.position - previousBlankTap.second).getDistance() <= 30f &&
+                    hitCanvas(down.position).let { it.first == null && it.second == null } &&
+                    canvasSize != IntSize.Zero) {
+                    draft = null
+                    keyboard?.hide()
+                    lastBlankTap = null
+                    animateViewport(latestViewport.value.doubleTapZoom(down.position.x, down.position.y,
+                        latestBodyDp.value, canvasSize.width.toFloat(), canvasSize.height.toFloat()))
+                    down.consume()
+                    return@awaitEachGesture
+                }
                 if (latestDraft.value != null || saveFailed || (saving && !requestedInk))
                     return@awaitEachGesture
-                if (chromeBounds.values.any { it.contains(down.position) }) return@awaitEachGesture
                 val (target, topId) = hitCanvas(down.position)
                 var targetId = target?.id ?: topId
                 val startTime = SystemClock.uptimeMillis()
@@ -779,7 +864,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 displaySnapshot.shapes.filterIndexed { index, it -> it != sourceSnapshot.shapes[index] }.map { it.id }).toSet()
         }
         val movingIds = movingPreview?.first ?: emptySet()
-        InkLayer(displaySnapshot.ink, InkKind.MARKER, viewport, selectedIds, movingIds, inkPreview,
+        val displayProjection = displaySnapshot.semanticProjection(viewport.scale, bodyDp,
+            selectedIds + matchIds + movingIds)
+        InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.MARKER,
+            viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
             onSelect = { id -> selectedIds = setOf(id); selectedId = null },
             onMove = { id, dx, dy ->
                 if (saving || saveFailed) false else board.moveSelection(
@@ -791,7 +879,9 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     if (it) { selectedIds = emptySet(); selectedId = null; saveSnapshot() }
                 }
             })
-        SpatialElements(displaySnapshot, viewport, selectedIds, movingIds, spatialPreview, lassoPoints, gapPreview, ghostIds,
+        SpatialElements(displaySnapshot, viewport, selectedIds, movingIds, spatialPreview, lassoPoints,
+            gapPreview, ghostIds, displayProjection, matchIds, currentMatch?.id,
+            searchOpen && searchQuery.isNotBlank(),
             onHandle = { id, kind ->
             if (saving || saveFailed) false else {
                 val changed = when (kind) {
@@ -820,7 +910,13 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     true
                 }
             },
-            onSelect = { id -> selectedIds = setOf(id); selectedId = null },
+            onSelect = { id ->
+                val region = board.shapes.firstOrNull { it.id == id && it.kind == ShapeKind.REGION }
+                if (region != null && projection.farLikeRegion(id) && canvasSize != IntSize.Zero)
+                    animateViewport(viewport.fitRegion(region,
+                        canvasSize.width.toFloat(), canvasSize.height.toFloat()))
+                else { selectedIds = setOf(id); selectedId = null }
+            },
             onAdd = { id ->
                 if (id in selectedIds) false else {
                     selectedIds = selectedIds + id
@@ -881,17 +977,42 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         }
 
         displaySnapshot.texts.forEach { element ->
-            if (draft?.id != element.id && pendingNewElementId != element.id) {
+            if (displayProjection.visible(element.id) && draft?.id != element.id &&
+                pendingNewElementId != element.id) {
+                val title = element.kind == TextKind.TITLE
+                val tier = displayProjection.tier
+                val availableWorld = if (title && tier != SemanticTier.NEAR)
+                    displaySnapshot.titleAvailableWidth(element) else null
+                val availableDp = availableWorld?.takeUnless { element.id in selectedIds || element.id in matchIds }
+                    ?.let { with(density) { (it * viewport.scale).toDp() } }
                 val (screenX, screenY) = viewport.worldToScreen(element.x, element.y)
                 val selected = element.id in selectedIds || element.id in movingIds
                 val elementActionsEnabled = !saving && !saveFailed
+                val baseSize = if (title) 15.sp else 14.sp
+                val minimumDp = when (tier) {
+                    SemanticTier.NEAR -> if (title) 11f else 10f
+                    SemanticTier.MID -> if (title) 11f else 9.5f
+                    SemanticTier.FAR -> if (title) 9f else 10f
+                }
+                val visibleSize = with(density) {
+                    maxOf(baseSize.toDp().value, minimumDp / viewport.scale).dp.toSp()
+                }
+                val faded = searchOpen && searchQuery.isNotBlank() &&
+                    element.id !in matchIds && !selected
+                val tierAlpha = if (!title && tier == SemanticTier.MID)
+                    1f - .55f * displayProjection.midProgress
+                else if (title && tier == SemanticTier.FAR) .55f else 1f
+                val elementColor = (if (element.color == TextColor.INK) ink else vermilion)
+                    .copy(alpha = if (faded) .25f else tierAlpha)
                 Text(
                     text = element.text,
                     color = if (element.id in ghostIds) vermilion.copy(alpha = .65f)
-                        else if (element.color == TextColor.INK) ink else vermilion,
-                    fontSize = if (element.kind == TextKind.TITLE) 15.sp else 14.sp,
-                    lineHeight = if (element.kind == TextKind.TITLE) 22.sp else 21.sp,
-                    fontWeight = if (element.kind == TextKind.TITLE) FontWeight.Bold else FontWeight.Normal,
+                        else elementColor,
+                    fontSize = visibleSize,
+                    lineHeight = visibleSize * 1.5f,
+                    maxLines = if (tier == SemanticTier.NEAR) Int.MAX_VALUE else 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = if (title) FontWeight.Bold else FontWeight.Normal,
                     modifier = Modifier.offsetPx(screenX, screenY)
                         .graphicsLayer {
                             scaleX = viewport.scale
@@ -899,7 +1020,13 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                             transformOrigin = TransformOrigin(0f, 0f)
                             shadowElevation = if (element.id in movingIds) 8.dp.toPx() else 0f
                         }
-                        .widthIn(max = 166.dp)
+                        .widthIn(max = if (tier == SemanticTier.NEAR) 166.dp else availableDp ?: 166.dp)
+                        .then(if (element.id in matchIds) Modifier
+                            .background(vermilion.copy(alpha = if (element.id == currentMatch?.id) .32f else .14f))
+                            .drawBehind {
+                                if (element.id == currentMatch?.id) drawRect(vermilion,
+                                    style = Stroke(2.dp.toPx()))
+                            } else Modifier)
                         .then(if (selected) Modifier.selectionFrame(element.id in movingIds) else Modifier)
                         .onSizeChanged { elementSizes[element.id] = it }
                         .semantics {
@@ -983,7 +1110,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             )
         }
 
-        InkLayer(displaySnapshot.ink, InkKind.PEN, viewport, selectedIds, movingIds, inkPreview,
+        InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.PEN,
+            viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
             onSelect = { id -> selectedIds = setOf(id); selectedId = null },
             onMove = { id, dx, dy ->
                 if (saving || saveFailed) false else board.moveSelection(
@@ -997,6 +1125,54 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             })
 
         if (draft == null) {
+            if (searchOpen) {
+                Row(Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                    .padding(start = 14.dp, end = 14.dp, top = 8.dp)
+                    .height(44.dp).background(Color.White, RoundedCornerShape(24.dp))
+                    .pillBorder(24f).padding(horizontal = 4.dp)
+                    .onGloballyPositioned { chromeBounds["search"] = it.boundsInParent() },
+                    verticalAlignment = Alignment.CenterVertically) {
+                    BasicTextField(searchQuery, onValueChange = {
+                        searchQuery = it
+                        searchPosition = 0
+                    }, singleLine = true,
+                        textStyle = TextStyle(color = ink, fontSize = 15.sp),
+                        cursorBrush = SolidColor(vermilion),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = {
+                            focusMatch(searchIndex(searchPosition, 1, searchMatches.size))
+                        }),
+                        modifier = Modifier.weight(1f).padding(start = 12.dp)
+                            .focusRequester(searchFocusRequester)
+                            .semantics { contentDescription = "ボード内を探す" },
+                        decorationBox = { inner ->
+                            Box {
+                                if (searchQuery.isEmpty()) Text("ボード内を探す", color = muted, fontSize = 15.sp)
+                                inner()
+                            }
+                        })
+                    if (searchQuery.isNotBlank()) Text(
+                        if (searchMatches.isEmpty()) "0件" else "${searchPosition + 1} / ${searchMatches.size}",
+                        color = muted, fontSize = 12.sp,
+                        modifier = Modifier.semantics { contentDescription =
+                            if (searchMatches.isEmpty()) "0件" else "${searchPosition + 1}件目、全${searchMatches.size}件" })
+                    IconButton(onClick = { focusMatch(searchIndex(searchPosition, -1, searchMatches.size)) },
+                        enabled = searchMatches.isNotEmpty(), modifier = Modifier.size(44.dp)
+                            .semantics { contentDescription = "前の検索結果" }) {
+                        Text("‹", color = ink, fontSize = 24.sp)
+                    }
+                    IconButton(onClick = { focusMatch(searchIndex(searchPosition, 1, searchMatches.size)) },
+                        enabled = searchMatches.isNotEmpty(), modifier = Modifier.size(44.dp)
+                            .semantics { contentDescription = "次の検索結果" }) {
+                        Text("›", color = ink, fontSize = 24.sp)
+                    }
+                    IconButton(onClick = {
+                        searchOpen = false; searchQuery = ""; searchPosition = 0; keyboard?.hide()
+                    }, modifier = Modifier.size(44.dp).semantics { contentDescription = "検索を閉じる" }) {
+                        Text("×", color = ink, fontSize = 22.sp)
+                    }
+                }
+            } else {
             Box(
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = 8.dp)
                     .height(44.dp).background(Color.White, RoundedCornerShape(24.dp))
@@ -1004,6 +1180,18 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     .onGloballyPositioned { chromeBounds["board"] = it.boundsInParent() },
                 contentAlignment = Alignment.Center,
             ) { Text(stringResource(R.string.board_name), color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+
+            if (inkTool == null) IconButton(onClick = {
+                searchOpen = true; searchQuery = ""; searchPosition = 0
+                selectedId = null; selectedIds = emptySet(); tool = SpatialTool.NONE
+                toolsExpanded = false
+            }, modifier = Modifier.align(Alignment.TopEnd).padding(end = 14.dp, top = 8.dp)
+                .size(44.dp).background(Color.White, CircleShape).pillBorder(22f)
+                .onGloballyPositioned { chromeBounds["searchButton"] = it.boundsInParent() }
+                .semantics { contentDescription = "ボード内を検索" }) {
+                Text("⌕", color = ink, fontSize = 25.sp)
+            }
+            }
 
             if (inkTool != null) {
                 Row(Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 14.dp)
@@ -1039,12 +1227,23 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     modifier = Modifier.size(48.dp).semantics { contentDescription = redoLabel },
                 ) { Text("↷", color = if (board.canRedo && !saving && !saveFailed) ink else muted.copy(alpha = 0.4f), fontSize = 25.sp) }
             }
+            val zoomText = "${(viewport.scale * 100).roundToInt()}%  ${when (projection.tier) {
+                SemanticTier.NEAR -> "近"
+                SemanticTier.MID -> "中"
+                SemanticTier.FAR -> "遠"
+            }}"
             Box(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 22.dp)
                     .background(Color.White, RoundedCornerShape(16.dp)).pillBorder(16f)
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                    .heightIn(min = 44.dp).padding(horizontal = 10.dp, vertical = 5.dp)
+                    .clickable {
+                        if (canvasSize != IntSize.Zero) animateViewport(viewport.cycleZoom(bodyDp,
+                            canvasSize.width.toFloat(), canvasSize.height.toFloat()))
+                    }
+                    .semantics { contentDescription = "倍率を切り替える、$zoomText" }
                     .onGloballyPositioned { chromeBounds["zoom"] = it.boundsInParent() },
-            ) { Text("${(viewport.scale * 100).roundToInt()}%  近", color = muted, fontSize = 11.sp) }
+                contentAlignment = Alignment.Center,
+            ) { Text(zoomText, color = muted, fontSize = 11.sp) }
 
             if (inkTool == null) Column(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 70.dp)

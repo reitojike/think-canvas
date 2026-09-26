@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +27,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -49,6 +53,10 @@ fun SpatialElements(
     lasso: List<WorldPoint>,
     gap: Pair<WorldPoint, WorldPoint>?,
     ghostIds: Set<String>,
+    projection: SemanticProjection,
+    searchMatches: Set<String>,
+    currentMatchId: String?,
+    searching: Boolean,
     onHandle: (String, HandleKind) -> Boolean,
     onConnect: (String, HandleKind) -> Boolean,
     onSelect: (String) -> Unit,
@@ -65,20 +73,28 @@ fun SpatialElements(
             val (x, y) = viewport.worldToScreen(p.x, p.y)
             return Offset(x, y)
         }
-        snapshot.shapes.forEach { shape ->
+        snapshot.shapes.filter { projection.visible(it.id) }.forEach { shape ->
             val b = shape.bounds()
             val topLeft = screen(WorldPoint(b.left, b.top))
             val width = shape.width * viewport.scale
             val height = shape.height * viewport.scale
-            val color = if (shape.id in ghostIds) redColor.copy(alpha = .65f)
+            val color = if (shape.id == currentMatchId) redColor
+                else if (shape.id in searchMatches) redColor.copy(alpha = .7f)
+                else if (shape.id in ghostIds) redColor.copy(alpha = .65f)
                 else if (shape.color == TextColor.VERMILION) redColor else inkColor
+            val displayColor = if (searching && shape.id !in searchMatches && shape.id !in selected)
+                color.copy(alpha = .25f) else color
+            val farLike = shape.kind == ShapeKind.REGION && projection.farLikeRegion(shape.id)
             val style = Stroke(width = if (shape.kind == ShapeKind.REGION) 1.5.dp.toPx() else 2.dp.toPx(),
-                pathEffect = if (shape.kind == ShapeKind.REGION)
+                pathEffect = if (shape.kind == ShapeKind.REGION && !farLike)
                     PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 5.dp.toPx())) else null)
+            if (farLike) drawRoundRect(displayColor.copy(alpha = .055f), topLeft,
+                androidx.compose.ui.geometry.Size(width, height),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()))
             if (shape.kind == ShapeKind.ELLIPSE) {
-                drawOval(color, topLeft = topLeft, size = androidx.compose.ui.geometry.Size(width, height), style = style)
+                drawOval(displayColor, topLeft = topLeft, size = androidx.compose.ui.geometry.Size(width, height), style = style)
             } else {
-                drawRoundRect(color, topLeft = topLeft,
+                drawRoundRect(displayColor, topLeft = topLeft,
                     size = androidx.compose.ui.geometry.Size(width, height),
                     cornerRadius = androidx.compose.ui.geometry.CornerRadius(if (shape.kind == ShapeKind.REGION) 12.dp.toPx() else 3.dp.toPx()),
                     style = style)
@@ -91,7 +107,7 @@ fun SpatialElements(
                             PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))))
             }
         }
-        snapshot.arrows.forEach { arrow ->
+        snapshot.arrows.filter { projection.visible(it.id) }.forEach { arrow ->
             val (worldStart, worldEnd) = snapshot.arrowPoints(arrow, 6f / viewport.scale) ?: return@forEach
             val worldControl = snapshot.arrowControl(arrow, 6f / viewport.scale) ?: return@forEach
             val start = screen(worldStart)
@@ -101,7 +117,13 @@ fun SpatialElements(
                 moveTo(start.x, start.y)
                 quadraticBezierTo(control.x, control.y, end.x, end.y)
             }
-            drawPath(path, inkColor, style = Stroke(2.dp.toPx()))
+            val arrowColor = inkColor.copy(alpha = when {
+                searching && arrow.id !in selected -> .25f
+                projection.tier == SemanticTier.FAR -> .3f
+                projection.tier == SemanticTier.MID -> 1f - .5f * projection.midProgress
+                else -> 1f
+            })
+            drawPath(path, arrowColor, style = Stroke(2.dp.toPx()))
             val angle = atan2(end.y - control.y, end.x - control.x)
             val size = 11.dp.toPx()
             val head = Path().apply {
@@ -110,7 +132,7 @@ fun SpatialElements(
                 lineTo(end.x - size * cos(angle + .5f), end.y - size * sin(angle + .5f))
                 close()
             }
-            drawPath(head, inkColor)
+            drawPath(head, arrowColor)
             if (arrow.id in selected || arrow.id in moving) {
                 listOf(start to arrow.from, end to arrow.to).forEach { (point, endpoint) ->
                     drawCircle(redColor, 7.dp.toPx(), point)
@@ -189,13 +211,28 @@ fun SpatialElements(
             }
         }
     }
-    snapshot.shapes.filter { it.kind == ShapeKind.REGION && it.name.isNotBlank() }.forEach { shape ->
-        val (x, y) = viewport.worldToScreen(shape.x + 8f, shape.y - 22f)
-        Text(shape.name, color = inkColor, fontSize = 12.sp,
+    val density = LocalDensity.current
+    snapshot.shapes.filter { it.kind == ShapeKind.REGION && it.name.isNotBlank() && projection.visible(it.id) }
+        .forEach { shape ->
+        val farLike = projection.farLikeRegion(shape.id)
+        val (x, y) = viewport.worldToScreen(shape.x + if (farLike) 0f else 8f,
+            shape.y + if (farLike) 0f else -22f)
+        val labelColor = if (shape.id == currentMatchId) redColor else if (searching && shape.id !in searchMatches)
+            inkColor.copy(alpha = .25f) else inkColor
+        if (farLike) {
+            val width = with(density) { (shape.width * viewport.scale).toDp() }
+            val height = with(density) { (shape.height * viewport.scale).toDp() }
+            Box(Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }
+                .width(width).height(height), contentAlignment = Alignment.Center) {
+                Text(shape.name, color = labelColor, fontSize = 18.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { contentDescription = "囲み: ${shape.name}" })
+            }
+        } else Text(shape.name, color = labelColor, fontSize = 12.sp,
             modifier = Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }
                 .background(Color(0xFFFCFCFB)).semantics { contentDescription = "囲み: ${shape.name}" })
     }
-    snapshot.shapes.forEach { shape ->
+    snapshot.shapes.filter { projection.visible(it.id) }.forEach { shape ->
         val (x, y) = viewport.worldToScreen(shape.x + shape.width / 2f, shape.y + shape.height / 2f)
         val kind = when (shape.kind) {
             ShapeKind.RECTANGLE -> "四角"
@@ -222,7 +259,7 @@ fun SpatialElements(
             )
         })
     }
-    snapshot.arrows.forEach { arrow ->
+    snapshot.arrows.filter { projection.visible(it.id) }.forEach { arrow ->
         val point = snapshot.arrowControl(arrow, 6f / viewport.scale) ?: return@forEach
         val (x, y) = viewport.worldToScreen(point.x, point.y)
         Box(Modifier.offset { IntOffset(x.roundToInt() - 24.dp.roundToPx(),
