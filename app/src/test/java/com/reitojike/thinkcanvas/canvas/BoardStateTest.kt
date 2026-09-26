@@ -53,6 +53,20 @@ class BoardStateTest {
     }
 
     @Test
+    fun viewportChangesNeverMoveShapesOrArrowEnds() {
+        val board = BoardState()
+        val shape = board.addShape(ShapeKind.RECTANGLE, 12f, -30f, 120f, 80f)
+        val arrow = board.addArrow(ArrowEnd.Attached(shape.id, 1f, .5f),
+            ArrowEnd.Free(300f, 25f))!!
+        val before = board.snapshot()
+        var viewport = Viewport()
+        repeat(10) { viewport = viewport.pan(22f, -13f).zoomAt(100f, 90f, 1.15f) }
+        assertEquals(before, board.snapshot())
+        assertEquals(shape, board.shapes.single())
+        assertEquals(arrow, board.arrows.single())
+    }
+
+    @Test
     fun zoomKeepsPointUnderFingersAndClamps() {
         val before = Viewport(scale = 1f, panX = 15f, panY = -20f)
         val world = before.screenToWorld(120f, 80f)
@@ -60,5 +74,49 @@ class BoardStateTest {
         assertEquals(120f, after.worldToScreen(world.first, world.second).first, 0.001f)
         assertEquals(80f, after.worldToScreen(world.first, world.second).second, 0.001f)
         assertEquals(0.15f, after.zoomAt(120f, 80f, 0.001f).scale)
+    }
+
+    @Test
+    fun deletingAttachedTargetRemovesArrowInOneUndoStep() {
+        val board = BoardState()
+        val shape = board.addShape(ShapeKind.RECTANGLE, 0f, 0f, 120f, 80f)
+        val arrow = board.addArrow(ArrowEnd.Attached(shape.id, 1f, .5f), ArrowEnd.Free(200f, 40f))!!
+        assertTrue(board.delete(setOf(shape.id)))
+        assertTrue(board.shapes.isEmpty())
+        assertTrue(board.arrows.isEmpty())
+        assertTrue(board.undo())
+        assertEquals(shape, board.shapes.single())
+        assertEquals(arrow, board.arrows.single())
+    }
+
+    @Test
+    fun selectedFreeArrowEndsMoveOnceWithGroupedShapes() {
+        val board = BoardState()
+        val shape = board.addShape(ShapeKind.RECTANGLE, 0f, 0f, 100f, 80f)
+        val arrow = board.addArrow(ArrowEnd.Attached(shape.id, 1f, .5f), ArrowEnd.Free(200f, 40f))!!
+        assertTrue(board.moveSelection(setOf(shape.id, arrow.id), 30f, 10f))
+        assertEquals(30f, board.shapes.single().x)
+        assertEquals(ArrowEnd.Free(230f, 50f), board.arrows.single().to)
+        assertTrue(board.undo())
+        assertEquals(shape, board.shapes.single())
+        assertEquals(arrow, board.arrows.single())
+    }
+
+    @Test
+    fun arrowBendSnapsToStraightNearCenter() {
+        val board = BoardState()
+        val arrow = board.addArrow(ArrowEnd.Free(0f, 0f), ArrowEnd.Free(100f, 0f))!!
+        assertTrue(board.updateArrow(arrow.id, bend = 20f))
+        assertTrue(board.updateArrow(arrow.id, bend = 4f))
+        assertEquals(0f, board.arrows.single().bend)
+    }
+
+    @Test
+    fun historyKeepsMostRecentEightyChanges() {
+        val board = BoardState()
+        repeat(81) { board.addShape(ShapeKind.RECTANGLE, it.toFloat(), 0f, 40f, 30f) }
+        repeat(80) { assertTrue(board.undo()) }
+        assertEquals(1, board.shapes.size)
+        assertFalse(board.undo())
     }
 }

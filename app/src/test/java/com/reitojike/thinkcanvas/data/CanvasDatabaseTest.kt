@@ -36,4 +36,30 @@ class CanvasDatabaseTest {
             file.delete()
         }
     }
+
+    @Test
+    fun shapesAndArrowsSurviveReopenWithoutChangingBoardName() { runBlocking {
+        val file = Files.createTempFile("think-canvas-spatial-", ".db").toFile()
+        file.delete()
+        fun open() = Room.databaseBuilder<CanvasDatabase>(file.absolutePath)
+            .setDriver(BundledSQLiteDriver()).build()
+        val first = open()
+        first.canvasDao().putBoard(BoardRow(name = "計画"))
+        val shape = SpatialElementRow("shape", kind = "RECTANGLE", x = 12f, y = 20f,
+            width = 120f, height = 80f, color = "INK", name = "")
+        val arrow = ArrowElementRow("arrow", fromTargetId = "shape", fromU = 1f,
+            fromV = .5f, fromX = null, fromY = null, toTargetId = null,
+            toU = null, toV = null, toX = 320f, toY = 40f, bend = 15f)
+        first.canvasDao().replaceAll(emptyList(), listOf(shape), listOf(arrow))
+        first.close()
+
+        val second = open()
+        assertEquals("計画", second.canvasDao().firstBoard()?.name)
+        assertEquals(shape, second.canvasDao().spatialElements().single())
+        assertEquals(arrow, second.canvasDao().arrows().single())
+        second.canvasDao().replaceAll(emptyList(), emptyList(), emptyList())
+        assertEquals(emptyList<ArrowElementRow>(), second.canvasDao().arrows())
+        second.close()
+        file.delete()
+    } }
 }

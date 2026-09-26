@@ -40,13 +40,14 @@ class MainActivity : ComponentActivity() {
                         Text(stringResource(R.string.loading_board))
                     }
                 } else {
-                    CanvasScreen(current) { store.save(current.elements) }
+                    CanvasScreen(current) { store.save(current.snapshot()) }
                 }
             }
         }
 
         lifecycleScope.launch {
-            board.value = BoardState(store.load())
+            val snapshot = store.load()
+            board.value = BoardState(snapshot.texts, snapshot.shapes, snapshot.arrows)
         }
     }
 }

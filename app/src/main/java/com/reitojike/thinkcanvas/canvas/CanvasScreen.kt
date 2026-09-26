@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
@@ -50,6 +51,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInParent
@@ -70,10 +72,13 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.reitojike.thinkcanvas.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 
@@ -97,8 +102,20 @@ private data class Draft(
 fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     var viewport by remember { mutableStateOf(Viewport()) }
     var selectedId by remember { mutableStateOf<String?>(null) }
+    var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var tool by remember { mutableStateOf(SpatialTool.NONE) }
+    var toolsExpanded by remember { mutableStateOf(false) }
+    var spatialPreview by remember { mutableStateOf<SpatialPreview?>(null) }
+    var lassoPoints by remember { mutableStateOf<List<WorldPoint>>(emptyList()) }
+    var gapPreview by remember { mutableStateOf<Pair<WorldPoint, WorldPoint>?>(null) }
+    var menuTarget by remember { mutableStateOf<String?>(null) }
+    var attachmentEditor by remember { mutableStateOf<Pair<String, HandleKind>?>(null) }
+    var regionNameId by remember { mutableStateOf<String?>(null) }
+    var regionName by remember { mutableStateOf("") }
+    var guidance by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf<Draft?>(null) }
-    var preview by remember { mutableStateOf<Pair<String, Pair<Float, Float>>?>(null) }
+    var movePreview by remember { mutableStateOf<Pair<Set<String>, WorldPoint>?>(null) }
+    var handlePreview by remember { mutableStateOf<BoardSnapshot?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var saving by remember { mutableStateOf(false) }
     var saveFailed by remember { mutableStateOf(false) }
@@ -109,13 +126,18 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val uiScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
+    val regionNameFocusRequester = remember { FocusRequester() }
     val touchSlop = LocalViewConfiguration.current.touchSlop
     val longPressMillis = LocalViewConfiguration.current.longPressTimeoutMillis
     val imeBottom = WindowInsets.ime.getBottom(density)
     val latestViewport = rememberUpdatedState(viewport)
     val latestElements = rememberUpdatedState(board.elements)
+    val latestSnapshot = rememberUpdatedState(board.snapshot())
     val latestSelected = rememberUpdatedState(selectedId)
+    val latestSelectedIds = rememberUpdatedState(selectedIds)
+    val latestTool = rememberUpdatedState(tool)
     val latestDraft = rememberUpdatedState(draft)
     val latestSaveBlocked = rememberUpdatedState(saving || saveFailed)
     val latestCommit = rememberUpdatedState(onCommittedChange)
@@ -132,6 +154,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val editTextLabel = stringResource(R.string.edit_text)
     val undoLabel = stringResource(R.string.undo)
     val redoLabel = stringResource(R.string.redo)
+    val regionNameLabel = stringResource(R.string.region_name)
 
     fun saveSnapshot(closeDraft: Boolean = false) {
         if (saving) return
@@ -173,11 +196,70 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             val height = maxOf(size.height * view.scale, with(density) { 44.dp.toPx() })
             val inText = point.x in x..(x + width) && point.y in y..(y + height)
             val gripCenter = x + size.width * view.scale / 2f
-            val gripRadius = with(density) { 22.dp.toPx() }
-            val inGrip = latestSelected.value == element.id &&
+            val gripRadius = with(density) { 24.dp.toPx() }
+            val inGrip = element.id in latestSelectedIds.value &&
                 point.x in (gripCenter - gripRadius)..(gripCenter + gripRadius) &&
                 point.y in (y + size.height * view.scale)..(y + size.height * view.scale + gripRadius * 2f)
             inText || inGrip
+        }
+    }
+
+    fun hitSpatial(point: Offset): String? {
+        val view = latestViewport.value
+        val (wx, wy) = view.screenToWorld(point.x, point.y)
+        val world = WorldPoint(wx, wy)
+        val snapshot = latestSnapshot.value
+        snapshot.arrows.asReversed().firstOrNull { arrow ->
+            snapshot.distanceToArrow(world, arrow, 6f / view.scale) <= 12f / view.scale
+        }?.let { return it.id }
+        return snapshot.shapes.asReversed().firstOrNull { shape ->
+            val (nameX, nameY) = view.worldToScreen(shape.x + 8f, shape.y - 22f)
+            val nameWidth = with(density) { maxOf(48.dp.toPx(), shape.name.length * 14.dp.toPx()) }
+            val nameHit = shape.kind == ShapeKind.REGION && shape.name.isNotBlank() &&
+                point.x in nameX..(nameX + nameWidth) &&
+                point.y in (nameY - with(density) { 8.dp.toPx() })..(nameY + with(density) { 28.dp.toPx() })
+            shape.hitStroke(world, 12f / view.scale) || nameHit
+        }?.id
+    }
+
+    fun endAt(point: Offset): ArrowEnd {
+        val (x, y) = latestViewport.value.screenToWorld(point.x, point.y)
+        val world = WorldPoint(x, y)
+        val target = hitTest(point)?.id ?: latestSnapshot.value.shapes.asReversed()
+            .firstOrNull { it.containsInterior(world) || it.hitStroke(world, 12f / latestViewport.value.scale) }?.id
+        val bounds = target?.let { latestSnapshot.value.boundsOf(it) }
+        return if (target != null && bounds != null) ArrowEnd.Attached(
+            target, ((x - bounds.left) / (bounds.right - bounds.left)).coerceIn(0f, 1f),
+            ((y - bounds.top) / (bounds.bottom - bounds.top)).coerceIn(0f, 1f),
+        ) else ArrowEnd.Free(x, y)
+    }
+
+    fun previewHandle(source: BoardSnapshot, id: String, kind: HandleKind, point: Offset): BoardSnapshot {
+        val (x, y) = latestViewport.value.screenToWorld(point.x, point.y)
+        return when (kind) {
+            HandleKind.MOVE -> source
+            HandleKind.RESIZE -> source.copy(shapes = source.shapes.map { shape ->
+                if (shape.id == id) shape.copy(width = (x - shape.x).coerceAtLeast(40f),
+                    height = (y - shape.y).coerceAtLeast(30f)) else shape
+            })
+            HandleKind.FROM, HandleKind.TO -> source.copy(arrows = source.arrows.map { arrow ->
+                if (arrow.id != id) arrow else if (kind == HandleKind.FROM)
+                    arrow.copy(from = endAt(point)) else arrow.copy(to = endAt(point))
+            })
+            HandleKind.BEND -> source.copy(arrows = source.arrows.map { arrow ->
+                if (arrow.id != id) arrow else {
+                    val points = source.arrowPoints(arrow, 6f / latestViewport.value.scale)
+                    if (points == null) arrow else {
+                        val dx = points.second.x - points.first.x
+                        val dy = points.second.y - points.first.y
+                        val length = kotlin.math.sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
+                        val middle = WorldPoint((points.first.x + points.second.x) / 2f,
+                            (points.first.y + points.second.y) / 2f)
+                        val bend = (-(x - middle.x) * dy + (y - middle.y) * dx) / length
+                        arrow.copy(bend = if (kotlin.math.abs(bend) < 8f) 0f else bend)
+                    }
+                }
+            })
         }
     }
 
@@ -185,22 +267,41 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         if (latestDraft.value != null || latestSaveBlocked.value) return
         if (chromeBounds.values.any { it.contains(point) }) return
         val element = hitTest(point)
-        if (element == null) {
-            if (latestSelected.value != null) selectedId = null
+        val spatial = if (element == null) hitSpatial(point) else null
+        if (element == null && spatial == null) {
+            if (latestSelectedIds.value.isNotEmpty()) { selectedId = null; selectedIds = emptySet() }
             else {
                 val (x, y) = latestViewport.value.screenToWorld(point.x, point.y)
                 draft = Draft(null, x, y)
             }
-        } else if (latestSelected.value == element.id) {
+        } else if (element == null && spatial != null) {
+            if (latestSelectedIds.value.size > 1 && spatial in latestSelectedIds.value) {
+                selectedIds = latestSelectedIds.value - spatial
+            } else if (spatial in latestSelectedIds.value && board.shapes.any { it.id == spatial && it.kind == ShapeKind.REGION }) {
+                regionNameId = spatial
+                regionName = board.shapes.first { it.id == spatial }.name
+            } else { selectedId = null; selectedIds = setOf(spatial) }
+        } else if (element != null && latestSelectedIds.value.size > 1 && element.id in latestSelectedIds.value) {
+            selectedIds = latestSelectedIds.value - element.id
+        } else if (element != null && latestSelected.value == element.id) {
             draft = Draft(element.id, element.x, element.y, element.text, element.kind, element.color)
-        } else selectedId = element.id
+        } else if (element != null) { selectedId = element.id; selectedIds = setOf(element.id) }
     }
 
     fun nudge(id: String, dx: Float, dy: Float): Boolean {
         if (saving || saveFailed) return false
-        val element = board.elements.firstOrNull { it.id == id } ?: return false
-        if (!board.move(id, element.x + dx, element.y + dy)) return false
+        if (board.elements.none { it.id == id }) return false
+        val ids = if (id in selectedIds) selectedIds else setOf(id)
+        if (!board.moveSelection(ids, dx, dy)) return false
         saveSnapshot()
+        return true
+    }
+
+    fun removeSelection(id: String): Boolean {
+        if (id !in selectedIds) return false
+        selectedIds = selectedIds - id
+        if (selectedId == id) selectedId = null
+        guidance = "${selectedIds.size}個を選択"
         return true
     }
 
@@ -230,6 +331,25 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         }
     }
 
+    LaunchedEffect(menuTarget) { if (menuTarget == null) chromeBounds.remove("menu") }
+    LaunchedEffect(regionNameId) { if (regionNameId == null) chromeBounds.remove("regionName") }
+    LaunchedEffect(regionNameId) {
+        if (regionNameId != null) {
+            regionNameFocusRequester.requestFocus()
+            keyboard?.show()
+        }
+    }
+    LaunchedEffect(guidance, tool, selectedIds) {
+        if (guidance == null && tool == SpatialTool.NONE && selectedIds.size <= 1)
+            chromeBounds.remove("guidance")
+    }
+    LaunchedEffect(guidance, tool) {
+        if (guidance != null && tool == SpatialTool.NONE) {
+            delay(1800)
+            guidance = null
+        }
+    }
+
     LaunchedEffect(draft?.id, draft?.x, draft?.y, imeBottom, canvasSize) {
         val current = draft ?: return@LaunchedEffect
         if (canvasSize == IntSize.Zero || imeBottom == 0) return@LaunchedEffect
@@ -243,42 +363,242 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
 
     Box(
         modifier = Modifier.fillMaxSize().onSizeChanged { canvasSize = it }
-            .background(paper).clipToBounds().pointerInput(board) {
+            .background(paper).clipToBounds()
+            .semantics {
+                contentDescription = "キャンバス"
+                customActions = listOf(
+                    CustomAccessibilityAction("中央から右に余白を作る") {
+                        if (saving || saveFailed || canvasSize == IntSize.Zero) false else {
+                            val (x, y) = viewport.screenToWorld(canvasSize.width / 2f, canvasSize.height / 2f)
+                            board.insertGap(WorldPoint(x, y), true, 40f).also { if (it) saveSnapshot() }
+                        }
+                    },
+                    CustomAccessibilityAction("中央から下に余白を作る") {
+                        if (saving || saveFailed || canvasSize == IntSize.Zero) false else {
+                            val (x, y) = viewport.screenToWorld(canvasSize.width / 2f, canvasSize.height / 2f)
+                            board.insertGap(WorldPoint(x, y), false, 40f).also { if (it) saveSnapshot() }
+                        }
+                    },
+                )
+            }.pointerInput(board) {
             awaitEachGesture {
                 try {
                 val down = awaitFirstDown()
                 if (latestDraft.value != null || latestSaveBlocked.value) return@awaitEachGesture
+                if (chromeBounds.values.any { it.contains(down.position) }) return@awaitEachGesture
                 val target = hitTest(down.position)
+                var targetId = target?.id ?: hitSpatial(down.position)
                 val startTime = SystemClock.uptimeMillis()
                 val start = down.position
-                val selectedGrip = target != null && latestSelected.value == target.id &&
+                var end = start
+                var gapDirectionConfirmed = false
+                val activeTool = latestTool.value
+                val selectedGrip = target != null && target.id in latestSelectedIds.value &&
                     run {
                         val (_, y) = latestViewport.value.worldToScreen(target.x, target.y)
                         val height = (elementSizes[target.id]?.height ?: 48) * latestViewport.value.scale
                         down.position.y > y + height
                     }
-                var mode = if (selectedGrip) "move" else "tap"
-                var movedTo: Pair<Float, Float>? = null
+                var handle: HandleKind? = null
+                if (latestSelectedIds.value.isNotEmpty()) {
+                    val snapshot = latestSnapshot.value
+                    val radius = with(density) { 24.dp.toPx() }
+                    snapshot.shapes.filter { it.id in latestSelectedIds.value }.firstOrNull { shape ->
+                        val (x, y) = latestViewport.value.worldToScreen(shape.x + shape.width, shape.y + shape.height)
+                        (start - Offset(x, y)).getDistance() <= radius
+                    }?.let { shape -> targetId = shape.id; handle = HandleKind.RESIZE }
+                    snapshot.shapes.filter { it.id in latestSelectedIds.value }.firstOrNull { shape ->
+                        val (x, y) = latestViewport.value.worldToScreen(shape.x + shape.width / 2f,
+                            shape.y + shape.height + 14f)
+                        (start - Offset(x, y)).getDistance() <= radius
+                    }?.let { shape -> if (handle == null) { targetId = shape.id; handle = HandleKind.MOVE } }
+                    snapshot.arrows.filter { it.id in latestSelectedIds.value }.forEach { arrow ->
+                        snapshot.arrowPoints(arrow, 6f / latestViewport.value.scale)?.let { (a, b) ->
+                            val (ax, ay) = latestViewport.value.worldToScreen(a.x, a.y)
+                            val (bx, by) = latestViewport.value.worldToScreen(b.x, b.y)
+                            if ((start - Offset(ax, ay)).getDistance() <= radius) {
+                                targetId = arrow.id; handle = HandleKind.FROM
+                            } else if ((start - Offset(bx, by)).getDistance() <= radius) {
+                                targetId = arrow.id; handle = HandleKind.TO
+                            }
+                        }
+                        snapshot.arrowControl(arrow, 6f / latestViewport.value.scale)?.let { c ->
+                            val (x, y) = latestViewport.value.worldToScreen(c.x, c.y)
+                            if ((start - Offset(x, y)).getDistance() <= radius) {
+                                targetId = arrow.id; handle = HandleKind.BEND
+                            }
+                        }
+                    }
+                }
+                val activeId = targetId
+                val gestureSnapshot = latestSnapshot.value
+                var mode = when {
+                    activeTool == SpatialTool.LASSO -> "lasso"
+                    activeTool != SpatialTool.NONE -> "create"
+                    handle != null -> "handle"
+                    selectedGrip -> "move"
+                    else -> "tap"
+                }
+                val startWorld = latestViewport.value.screenToWorld(start.x, start.y).let { WorldPoint(it.first, it.second) }
+                if (mode == "lasso") lassoPoints = listOf(startWorld)
                 while (true) {
                     val remaining = longPressMillis - (SystemClock.uptimeMillis() - startTime)
-                    val event = if (mode == "tap" && target != null && remaining > 0) {
+                    val event = if (mode == "tap" && remaining > 0) {
                         withTimeoutOrNull(remaining) { awaitPointerEvent() }
-                    } else if (mode == "tap" && target != null && remaining <= 0) null
+                    } else if (mode == "tap" && remaining <= 0) null
                     else awaitPointerEvent()
-                    if (event == null) { mode = "move"; continue }
+                    if (event == null) {
+                        mode = if (activeId == null) "gap" else "move"
+                        if (activeId == null) {
+                            gapPreview = startWorld to startWorld
+                            guidance = "ドラッグして余白を作る"
+                        } else {
+                            val ids = if (activeId in latestSelectedIds.value)
+                                latestSelectedIds.value else setOf(activeId)
+                            movePreview = ids to WorldPoint(0f, 0f)
+                        }
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        continue
+                    }
                     val pressed = event.changes.filter { it.pressed }
                     if (pressed.isEmpty()) {
-                        if (mode == "tap") tap(start)
-                        if (mode == "move" && target != null && movedTo != null) {
-                            val (x, y) = movedTo
-                            if (board.move(target.id, x, y)) saveSnapshot()
+                        if (event.type != PointerEventType.Release) break
+                        end = event.changes.firstOrNull()?.position ?: end
+                        when (mode) {
+                            "tap" -> tap(start)
+                            "create" -> {
+                                guidance = null
+                                val worldEnd = latestViewport.value.screenToWorld(end.x, end.y)
+                                    .let { WorldPoint(it.first, it.second) }
+                                val distance = (end - start).getDistance()
+                                val created = when (activeTool) {
+                                    SpatialTool.RECTANGLE, SpatialTool.ELLIPSE, SpatialTool.REGION -> {
+                                        val kind = when (activeTool) {
+                                            SpatialTool.RECTANGLE -> ShapeKind.RECTANGLE
+                                            SpatialTool.ELLIPSE -> ShapeKind.ELLIPSE
+                                            else -> ShapeKind.REGION
+                                        }
+                                        val width = if (distance < touchSlop) when (kind) {
+                                            ShapeKind.RECTANGLE -> 120f
+                                            ShapeKind.ELLIPSE -> 110f
+                                            ShapeKind.REGION -> 200f
+                                        } else kotlin.math.abs(worldEnd.x - startWorld.x)
+                                        val height = if (distance < touchSlop) when (kind) {
+                                            ShapeKind.RECTANGLE -> 80f
+                                            ShapeKind.ELLIPSE -> 80f
+                                            ShapeKind.REGION -> 150f
+                                        } else kotlin.math.abs(worldEnd.y - startWorld.y)
+                                        val shape = board.addShape(kind,
+                                            if (distance < touchSlop) startWorld.x else minOf(startWorld.x, worldEnd.x),
+                                            if (distance < touchSlop) startWorld.y else minOf(startWorld.y, worldEnd.y),
+                                            width, height)
+                                        selectedIds = setOf(shape.id)
+                                        selectedId = null
+                                        if (kind == ShapeKind.REGION) { regionNameId = shape.id; regionName = "" }
+                                        true
+                                    }
+                                    SpatialTool.ARROW -> if (distance >= touchSlop) {
+                                        val arrow = board.addArrow(endAt(start), endAt(end))
+                                        if (arrow != null) {
+                                            selectedIds = setOf(arrow.id); selectedId = null
+                                            guidance = if (arrow.from is ArrowEnd.Attached || arrow.to is ArrowEnd.Attached)
+                                                "矢印を接続しました" else "矢印を作成しました"
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        }
+                                        arrow != null
+                                    } else false
+                                    else -> false
+                                }
+                                if (created) saveSnapshot()
+                                tool = SpatialTool.NONE
+                            }
+                            "lasso" -> {
+                                val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
+                                selectedIds = latestSnapshot.value.lassoSelection(lassoPoints + WorldPoint(x, y))
+                                selectedId = selectedIds.singleOrNull()?.takeIf { id -> board.elements.any { it.id == id } }
+                                guidance = "${selectedIds.size}個を選択"
+                                tool = SpatialTool.NONE
+                            }
+                            "move" -> if (activeId != null) {
+                                val dx = (end.x - start.x) / latestViewport.value.scale
+                                val dy = (end.y - start.y) / latestViewport.value.scale
+                                if (kotlin.math.abs(dx) + kotlin.math.abs(dy) > 1f) {
+                                    val ids = if (activeId in latestSelectedIds.value) latestSelectedIds.value else setOf(activeId)
+                                    val beforeSnapshot = board.snapshot()
+                                    if (board.moveSelection(ids, dx, dy)) {
+                                        val afterSnapshot = board.snapshot()
+                                        val changedIds = (beforeSnapshot.texts.zip(afterSnapshot.texts)
+                                            .filter { (old, new) -> old != new }.map { it.first.id } +
+                                            beforeSnapshot.shapes.zip(afterSnapshot.shapes)
+                                                .filter { (old, new) -> old != new }.map { it.first.id } +
+                                            beforeSnapshot.arrows.zip(afterSnapshot.arrows)
+                                                .filter { (old, new) -> old != new }.map { it.first.id })
+                                        val transition = changedIds.firstNotNullOfOrNull { id ->
+                                            val beforeRegion = beforeSnapshot.centerOf(id)
+                                                ?.let { beforeSnapshot.smallestRegionAt(it)?.id }
+                                            val afterRegion = afterSnapshot.centerOf(id)
+                                                ?.let { afterSnapshot.smallestRegionAt(it)?.id }
+                                            if (beforeRegion != afterRegion) beforeRegion to afterRegion else null
+                                        }
+                                        if (transition != null) {
+                                            val (beforeRegion, afterRegion) = transition
+                                            val id = afterRegion ?: beforeRegion
+                                            val label = board.shapes.firstOrNull { it.id == id }?.name
+                                                ?.takeIf { it.isNotBlank() } ?: "囲み"
+                                            guidance = if (afterRegion == null) "${label}から出ました" else "${label}に入りました"
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        }
+                                        saveSnapshot()
+                                    }
+                                } else if (activeId !in latestSelectedIds.value && latestSelectedIds.value.isNotEmpty()) {
+                                    selectedIds = latestSelectedIds.value + activeId
+                                    guidance = "${selectedIds.size}個を選択"
+                                } else menuTarget = activeId
+                            }
+                            "handle" -> if (activeId != null && handle != null) {
+                                val changed = when (handle) {
+                                    HandleKind.MOVE -> board.moveSelection(
+                                        if (activeId in latestSelectedIds.value) latestSelectedIds.value else setOf(activeId),
+                                        (end.x - start.x) / latestViewport.value.scale,
+                                        (end.y - start.y) / latestViewport.value.scale,
+                                    )
+                                    else -> board.apply(previewHandle(gestureSnapshot, activeId, handle, end))
+                                }
+                                if (changed) {
+                                    if (handle == HandleKind.FROM || handle == HandleKind.TO) {
+                                        guidance = "端点を変更しました"
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    }
+                                    saveSnapshot()
+                                }
+                            }
+                            "gap" -> {
+                                val dx = (end.x - start.x) / latestViewport.value.scale
+                                val dy = (end.y - start.y) / latestViewport.value.scale
+                                if (kotlin.math.max(kotlin.math.abs(end.x - start.x),
+                                        kotlin.math.abs(end.y - start.y)) >= 14f) {
+                                    val horizontal = kotlin.math.abs(dx) >= kotlin.math.abs(dy)
+                                    if (board.insertGap(startWorld, horizontal, if (horizontal) dx else dy)) {
+                                        guidance = "余白を作りました"
+                                        saveSnapshot()
+                                    }
+                                }
+                            }
                         }
-                        preview = null
+                        movePreview = null
+                        handlePreview = null
+                        spatialPreview = null
+                        gapPreview = null
+                        lassoPoints = emptyList()
                         break
                     }
                     if (pressed.size >= 2) {
                         mode = "zoom"
-                        preview = null
+                        movePreview = null
+                        handlePreview = null
+                        spatialPreview = null
+                        gapPreview = null
+                        lassoPoints = emptyList()
                         val tracked = pressed.filter { it.previousPressed }
                         if (tracked.size >= 2) {
                             val first = tracked[0]
@@ -294,42 +614,187 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                         }
                     } else {
                         val change = pressed.first()
+                        end = change.position
                         val delta = change.position - change.previousPosition
                         if (mode == "tap" && (change.position - start).getDistance() > touchSlop) mode = "pan"
                         when (mode) {
                             "pan" -> viewport = latestViewport.value.pan(delta.x, delta.y)
-                            "move" -> if (target != null) {
-                                val x = target.x + (change.position.x - start.x) / latestViewport.value.scale
-                                val y = target.y + (change.position.y - start.y) / latestViewport.value.scale
-                                movedTo = x to y
-                                preview = target.id to (x to y)
+                            "move" -> if (activeId != null) {
+                                val dx = (change.position.x - start.x) / latestViewport.value.scale
+                                val dy = (change.position.y - start.y) / latestViewport.value.scale
+                                val ids = if (activeId in latestSelectedIds.value) latestSelectedIds.value else setOf(activeId)
+                                movePreview = ids to WorldPoint(dx, dy)
+                            }
+                            "handle" -> if (activeId != null && handle != null) {
+                                if (handle == HandleKind.MOVE) {
+                                    val ids = if (activeId in latestSelectedIds.value)
+                                        latestSelectedIds.value else setOf(activeId)
+                                    movePreview = ids to WorldPoint(
+                                        (end.x - start.x) / latestViewport.value.scale,
+                                        (end.y - start.y) / latestViewport.value.scale,
+                                    )
+                                } else handlePreview = previewHandle(gestureSnapshot, activeId, handle, end)
+                            }
+                            "create" -> {
+                                val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
+                                spatialPreview = SpatialPreview(startWorld, WorldPoint(x, y), activeTool)
+                            }
+                            "lasso" -> {
+                                val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
+                                lassoPoints = lassoPoints + WorldPoint(x, y)
+                            }
+                            "gap" -> {
+                                val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
+                                gapPreview = startWorld to WorldPoint(x, y)
+                                if (!gapDirectionConfirmed &&
+                                    kotlin.math.max(kotlin.math.abs(end.x - start.x),
+                                        kotlin.math.abs(end.y - start.y)) >= 14f) {
+                                    gapDirectionConfirmed = true
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                }
+                                guidance = if (kotlin.math.abs(x - startWorld.x) >= kotlin.math.abs(y - startWorld.y))
+                                    "横に余白を作る" else "縦に余白を作る"
                             }
                         }
                     }
-                    event.changes.forEach { it.consume() }
+                    if (mode != "tap") event.changes.forEach { it.consume() }
                 }
                 } finally {
-                    preview = null
+                    movePreview = null
+                    handlePreview = null
+                    spatialPreview = null
+                    gapPreview = null
+                    lassoPoints = emptyList()
                 }
             }
         },
     ) {
-        if (board.elements.isEmpty() && draft == null) {
+        if (board.elements.isEmpty() && board.shapes.isEmpty() && board.arrows.isEmpty() && draft == null) {
             Text(
                 stringResource(R.string.empty_hint), color = Color(0xFFB1ACA5), fontSize = 13.sp,
                 modifier = Modifier.align(Alignment.Center),
             )
         }
 
-        board.elements.forEach { element ->
+        val sourceSnapshot = board.snapshot()
+        val movingPreview = movePreview
+        val pendingGap = gapPreview
+        val displaySnapshot = when {
+            handlePreview != null -> handlePreview!!
+            movingPreview != null -> movingPreview.let { (ids, delta) ->
+                sourceSnapshot.translatedSelection(ids, delta.x, delta.y)
+            }
+            pendingGap != null -> pendingGap.let { (start, end) ->
+                val dx = end.x - start.x
+                val dy = end.y - start.y
+                val horizontal = kotlin.math.abs(dx) >= kotlin.math.abs(dy)
+                sourceSnapshot.withGap(start, horizontal, if (horizontal) dx else dy)
+            }
+            else -> sourceSnapshot
+        }
+        val ghostIds = if (pendingGap == null) emptySet() else {
+            (displaySnapshot.texts.filterIndexed { index, it -> it != sourceSnapshot.texts[index] }.map { it.id } +
+                displaySnapshot.shapes.filterIndexed { index, it -> it != sourceSnapshot.shapes[index] }.map { it.id }).toSet()
+        }
+        val movingIds = movingPreview?.first ?: emptySet()
+        SpatialElements(displaySnapshot, viewport, selectedIds, movingIds, spatialPreview, lassoPoints, gapPreview, ghostIds,
+            onHandle = { id, kind ->
+            if (saving || saveFailed) false else {
+                val changed = when (kind) {
+                    HandleKind.MOVE -> board.moveSelection(setOf(id), 16f, 0f)
+                    HandleKind.RESIZE -> board.shapes.firstOrNull { it.id == id }?.let {
+                        board.resizeShape(id, it.width + 16f, it.height + 16f)
+                    } ?: false
+                    HandleKind.FROM, HandleKind.TO -> board.arrows.firstOrNull { it.id == id }?.let { arrow ->
+                        val end = board.snapshot().detachedEnd(arrow, kind == HandleKind.FROM,
+                            6f / viewport.scale)
+                        if (end == null) false else if (kind == HandleKind.FROM)
+                            board.updateArrow(id, from = end)
+                        else board.updateArrow(id, to = end)
+                    } ?: false
+                    HandleKind.BEND -> board.arrows.firstOrNull { it.id == id }?.let {
+                        board.updateArrow(id, bend = it.bend + 16f)
+                    } ?: false
+                }
+                if (changed) saveSnapshot()
+                changed
+            }
+            },
+            onConnect = { id, kind ->
+                if (saving || saveFailed || board.arrows.none { it.id == id }) false else {
+                    attachmentEditor = id to kind
+                    true
+                }
+            },
+            onSelect = { id -> selectedIds = setOf(id); selectedId = null },
+            onAdd = { id ->
+                if (id in selectedIds) false else {
+                    selectedIds = selectedIds + id
+                    guidance = "${selectedIds.size}個を選択"
+                    true
+                }
+            },
+            onRemove = { id -> removeSelection(id) },
+            onRename = { id ->
+                val shape = board.shapes.firstOrNull { it.id == id && it.kind == ShapeKind.REGION }
+                if (shape == null || saving || saveFailed) false else {
+                    regionNameId = id
+                    regionName = shape.name
+                    true
+                }
+            },
+            onColor = { id ->
+                val shape = board.shapes.firstOrNull { it.id == id && it.kind != ShapeKind.REGION }
+                if (shape == null || saving || saveFailed) false else
+                    board.updateShape(id, color = if (shape.color == TextColor.INK)
+                        TextColor.VERMILION else TextColor.INK).also { if (it) saveSnapshot() }
+            },
+            onMove = { id, dx, dy ->
+                val ids = if (id in selectedIds) selectedIds else setOf(id)
+                if (saving || saveFailed) false else board.moveSelection(ids, dx, dy).also {
+                    if (it) saveSnapshot()
+                }
+            },
+            onDelete = { id ->
+                if (saving || saveFailed) false else board.delete(setOf(id)).also {
+                    if (it) { selectedIds = emptySet(); selectedId = null; saveSnapshot() }
+                }
+            },
+            onReverse = { id ->
+                if (saving || saveFailed) false else board.updateArrow(id, reverse = true).also {
+                    if (it) saveSnapshot()
+                }
+            },
+        )
+
+        attachmentEditor?.let { (arrowId, endKind) ->
+            board.arrows.firstOrNull { it.id == arrowId }?.let { arrow ->
+                ArrowAttachmentDialog(board.snapshot(), arrow, endKind,
+                    onDismiss = { attachmentEditor = null },
+                    onAttach = { end ->
+                        if (saving || saveFailed) false else {
+                            val current = if (endKind == HandleKind.FROM) arrow.from else arrow.to
+                            if (current == end) return@ArrowAttachmentDialog true
+                            val changed = if (endKind == HandleKind.FROM)
+                                board.updateArrow(arrowId, from = end)
+                            else board.updateArrow(arrowId, to = end)
+                            if (changed) saveSnapshot()
+                            changed
+                        }
+                    },
+                )
+            }
+        }
+
+        displaySnapshot.texts.forEach { element ->
             if (draft?.id != element.id && pendingNewElementId != element.id) {
-                val display = preview?.takeIf { it.first == element.id }?.second
-                val (screenX, screenY) = viewport.worldToScreen(display?.first ?: element.x, display?.second ?: element.y)
-                val selected = selectedId == element.id
+                val (screenX, screenY) = viewport.worldToScreen(element.x, element.y)
+                val selected = element.id in selectedIds || element.id in movingIds
                 val elementActionsEnabled = !saving && !saveFailed
                 Text(
                     text = element.text,
-                    color = if (element.color == TextColor.INK) ink else vermilion,
+                    color = if (element.id in ghostIds) vermilion.copy(alpha = .65f)
+                        else if (element.color == TextColor.INK) ink else vermilion,
                     fontSize = if (element.kind == TextKind.TITLE) 15.sp else 14.sp,
                     lineHeight = if (element.kind == TextKind.TITLE) 22.sp else 21.sp,
                     fontWeight = if (element.kind == TextKind.TITLE) FontWeight.Bold else FontWeight.Normal,
@@ -338,9 +803,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                             scaleX = viewport.scale
                             scaleY = viewport.scale
                             transformOrigin = TransformOrigin(0f, 0f)
+                            shadowElevation = if (element.id in movingIds) 8.dp.toPx() else 0f
                         }
                         .widthIn(max = 166.dp)
-                        .then(if (selected) Modifier.selectionFrame() else Modifier)
+                        .then(if (selected) Modifier.selectionFrame(element.id in movingIds) else Modifier)
                         .onSizeChanged { elementSizes[element.id] = it }
                         .semantics {
                             contentDescription = element.text
@@ -350,7 +816,14 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                                     tap(Offset(screenX + 1, screenY + 1))
                                     true
                                 }
-                                if (selected) customActions = listOf(
+                                customActions = listOf(
+                                    if (element.id in selectedIds)
+                                        CustomAccessibilityAction("選択から外す") { removeSelection(element.id) }
+                                    else CustomAccessibilityAction("選択に追加") {
+                                        selectedIds = selectedIds + element.id
+                                        guidance = "${selectedIds.size}個を選択"
+                                        true
+                                    },
                                     CustomAccessibilityAction(moveUpLabel) { nudge(element.id, 0f, -16f) },
                                     CustomAccessibilityAction(moveDownLabel) { nudge(element.id, 0f, 16f) },
                                     CustomAccessibilityAction(moveLeftLabel) { nudge(element.id, -16f, 0f) },
@@ -363,10 +836,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 )
                 if (selected && draft == null) {
                     val size = elementSizes[element.id] ?: IntSize(160, 48)
-                    val gripX = screenX + size.width * viewport.scale / 2f - with(density) { 22.dp.toPx() }
+                    val gripX = screenX + size.width * viewport.scale / 2f - with(density) { 24.dp.toPx() }
                     val gripY = screenY + size.height * viewport.scale + with(density) { 2.dp.toPx() }
                     Box(
-                        modifier = Modifier.offsetPx(gripX, gripY).size(44.dp)
+                        modifier = Modifier.offsetPx(gripX, gripY).size(48.dp)
                             .semantics {
                                 contentDescription = moveElementLabel
                                 if (!elementActionsEnabled) disabled()
@@ -432,15 +905,15 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(
-                    onClick = { if (board.undo()) { selectedId = null; saveSnapshot() } },
+                    onClick = { if (board.undo()) { selectedId = null; selectedIds = emptySet(); saveSnapshot() } },
                     enabled = board.canUndo && !saving && !saveFailed,
-                    modifier = Modifier.size(44.dp).semantics { contentDescription = undoLabel },
+                    modifier = Modifier.size(48.dp).semantics { contentDescription = undoLabel },
                 ) { Text("↶", color = if (board.canUndo && !saving && !saveFailed) ink else muted.copy(alpha = 0.4f), fontSize = 25.sp) }
                 Box(Modifier.width(1.dp).height(20.dp).background(outline))
                 IconButton(
-                    onClick = { if (board.redo()) { selectedId = null; saveSnapshot() } },
+                    onClick = { if (board.redo()) { selectedId = null; selectedIds = emptySet(); saveSnapshot() } },
                     enabled = board.canRedo && !saving && !saveFailed,
-                    modifier = Modifier.size(44.dp).semantics { contentDescription = redoLabel },
+                    modifier = Modifier.size(48.dp).semantics { contentDescription = redoLabel },
                 ) { Text("↷", color = if (board.canRedo && !saving && !saveFailed) ink else muted.copy(alpha = 0.4f), fontSize = 25.sp) }
             }
             Box(
@@ -449,6 +922,149 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     .padding(horizontal = 10.dp, vertical = 5.dp)
                     .onGloballyPositioned { chromeBounds["zoom"] = it.boundsInParent() },
             ) { Text("${(viewport.scale * 100).roundToInt()}%  近", color = muted, fontSize = 11.sp) }
+
+            Column(
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 70.dp)
+                    .onGloballyPositioned { chromeBounds["tools"] = it.boundsInParent() },
+                horizontalAlignment = Alignment.End,
+            ) {
+                SpatialTools(tool, toolsExpanded, !saving && !saveFailed,
+                    onExpand = {
+                        if (tool == SpatialTool.NONE) toolsExpanded = !toolsExpanded
+                        else { tool = SpatialTool.NONE; toolsExpanded = false }
+                    }, onSelect = { tool = it; toolsExpanded = false; guidance = "${it.label}を配置" },
+                    onAccessibleAction = { item ->
+                        if (saving || saveFailed || canvasSize == IntSize.Zero) false else {
+                            val (x, y) = viewport.screenToWorld(
+                                canvasSize.width / 2f, canvasSize.height / 2f)
+                            val created = when (item) {
+                                SpatialTool.RECTANGLE, SpatialTool.ELLIPSE, SpatialTool.REGION -> {
+                                    val kind = when (item) {
+                                        SpatialTool.RECTANGLE -> ShapeKind.RECTANGLE
+                                        SpatialTool.ELLIPSE -> ShapeKind.ELLIPSE
+                                        else -> ShapeKind.REGION
+                                    }
+                                    val width = if (kind == ShapeKind.REGION) 200f else if (kind == ShapeKind.RECTANGLE) 120f else 110f
+                                    val height = if (kind == ShapeKind.REGION) 150f else 80f
+                                    val shape = board.addShape(kind, x - width / 2f, y - height / 2f, width, height)
+                                    selectedIds = setOf(shape.id)
+                                    selectedId = null
+                                    if (kind == ShapeKind.REGION) { regionNameId = shape.id; regionName = "" }
+                                    saveSnapshot()
+                                    true
+                                }
+                                SpatialTool.ARROW -> {
+                                    val arrow = board.addArrow(ArrowEnd.Free(x - 60f, y), ArrowEnd.Free(x + 60f, y))
+                                    if (arrow != null) {
+                                        selectedIds = setOf(arrow.id)
+                                        selectedId = null
+                                        saveSnapshot()
+                                    }
+                                    arrow != null
+                                }
+                                SpatialTool.LASSO -> {
+                                    val (left, top) = viewport.screenToWorld(0f, 0f)
+                                    val (right, bottom) = viewport.screenToWorld(
+                                        canvasSize.width.toFloat(), canvasSize.height.toFloat())
+                                    selectedIds = board.snapshot().lassoSelection(listOf(
+                                        WorldPoint(left, top), WorldPoint(right, top),
+                                        WorldPoint(right, bottom), WorldPoint(left, bottom),
+                                    ))
+                                    selectedId = null
+                                    guidance = "${selectedIds.size}個を選択"
+                                    true
+                                }
+                                SpatialTool.NONE -> false
+                            }
+                            if (created) { tool = SpatialTool.NONE; toolsExpanded = false }
+                            created
+                        }
+                    })
+            }
+
+            val message = guidance ?: when (tool) {
+                SpatialTool.NONE -> if (selectedIds.size > 1) "${selectedIds.size}個を選択" else null
+                SpatialTool.LASSO -> "指で囲んで選択"
+                SpatialTool.ARROW -> "ドラッグして矢印を作成"
+                else -> "タップまたはドラッグして${tool.label}を作成"
+            }
+            if (message != null) {
+                Box(Modifier.align(Alignment.TopCenter).padding(top = 62.dp)
+                    .onGloballyPositioned { chromeBounds["guidance"] = it.boundsInParent() }) {
+                    Guidance(message)
+                }
+            }
+
+            menuTarget?.let { id ->
+                val center = board.snapshot().centerOf(id) ?: WorldPoint(0f, 0f)
+                val (anchorX, anchorY) = viewport.worldToScreen(center.x, center.y)
+                val menuX = anchorX.coerceIn(8f, maxOf(8f, canvasSize.width - with(density) { 320.dp.toPx() }))
+                val menuY = (anchorY + with(density) { 22.dp.toPx() })
+                    .coerceIn(8f, maxOf(8f, canvasSize.height - with(density) { 70.dp.toPx() }))
+                Row(Modifier.align(Alignment.TopStart).offsetPx(menuX, menuY)
+                    .background(Color.White, RoundedCornerShape(10.dp))
+                    .pillBorder(10f).padding(6.dp)
+                    .onGloballyPositioned { chromeBounds["menu"] = it.boundsInParent() }) {
+                    if (board.arrows.any { it.id == id }) {
+                        EditorOption(stringResource(R.string.menu_reverse), false, false, enabled = !saving && !saveFailed) {
+                            if (board.updateArrow(id, reverse = true)) saveSnapshot()
+                            menuTarget = null
+                        }
+                    } else if (board.shapes.any { it.id == id }) {
+                        if (board.shapes.any { it.id == id && it.kind != ShapeKind.REGION }) {
+                            EditorOption(stringResource(R.string.menu_color), false, true,
+                                enabled = !saving && !saveFailed) {
+                                val shape = board.shapes.first { it.id == id }
+                                if (board.updateShape(id, color = if (shape.color == TextColor.INK)
+                                    TextColor.VERMILION else TextColor.INK)) saveSnapshot()
+                                menuTarget = null
+                            }
+                        }
+                        if (board.shapes.any { it.id == id && it.kind == ShapeKind.REGION }) {
+                            EditorOption(stringResource(R.string.menu_name), false, false, enabled = !saving && !saveFailed) {
+                                regionNameId = id
+                                regionName = board.shapes.first { it.id == id }.name
+                                menuTarget = null
+                            }
+                        }
+                    } else if (board.elements.any { it.id == id }) {
+                        EditorOption(stringResource(R.string.edit), false, false, enabled = !saving && !saveFailed) {
+                            val element = board.elements.first { it.id == id }
+                            draft = Draft(id, element.x, element.y, element.text, element.kind, element.color)
+                            menuTarget = null
+                        }
+                    }
+                    EditorOption(stringResource(R.string.menu_delete), false, true, enabled = !saving && !saveFailed) {
+                        if (board.delete(if (id in selectedIds) selectedIds else setOf(id))) saveSnapshot()
+                        selectedIds = emptySet(); selectedId = null; menuTarget = null
+                    }
+                    EditorOption(stringResource(R.string.menu_close), false, false, enabled = true) { menuTarget = null }
+                }
+            }
+
+            val editingRegionId = regionNameId
+            if (editingRegionId != null) {
+                Row(Modifier.align(Alignment.Center).background(Color.White, RoundedCornerShape(10.dp))
+                    .pillBorder(10f).padding(8.dp).onGloballyPositioned {
+                        chromeBounds["regionName"] = it.boundsInParent()
+                    }, verticalAlignment = Alignment.CenterVertically) {
+                    BasicTextField(regionName, onValueChange = { regionName = it },
+                        singleLine = true, modifier = Modifier.width(140.dp).padding(8.dp)
+                            .focusRequester(regionNameFocusRequester)
+                            .semantics { contentDescription = regionNameLabel },
+                        decorationBox = { inner ->
+                            Box {
+                                if (regionName.isEmpty()) Text(stringResource(R.string.region_name_hint), color = muted)
+                                inner()
+                            }
+                        })
+                    EditorOption(stringResource(R.string.done), false, true, enabled = !saving && !saveFailed) {
+                        if (board.updateShape(editingRegionId, name = regionName)) saveSnapshot()
+                        regionNameId = null
+                        keyboard?.hide()
+                    }
+                }
+            }
         } else {
             Row(
                 modifier = Modifier.align(Alignment.BottomCenter).imePadding().fillMaxWidth().height(54.dp)
@@ -497,7 +1113,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
 @Composable
 private fun EditorOption(label: String, active: Boolean, accent: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        modifier = Modifier.size(width = if (label.length > 2) 64.dp else 48.dp, height = 44.dp)
+        modifier = Modifier.size(width = if (label.length > 2) 64.dp else 48.dp, height = 48.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(if (active) if (accent) vermilion else ink else Color.Transparent)
             .clickable(enabled = enabled, onClick = onClick)
@@ -519,7 +1135,7 @@ private fun Modifier.pillBorder(radius: Float): Modifier = this.then(
     },
 )
 
-private fun Modifier.selectionFrame(): Modifier = this.then(
+private fun Modifier.selectionFrame(solid: Boolean = false): Modifier = this.then(
     Modifier.background(vermilion.copy(alpha = 0.06f), RoundedCornerShape(3.dp))
         .drawBehind {
             drawRoundRect(
@@ -527,7 +1143,7 @@ private fun Modifier.selectionFrame(): Modifier = this.then(
                 cornerRadius = CornerRadius(3.dp.toPx()),
                 style = Stroke(
                     width = 1.dp.toPx(),
-                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx())),
+                    pathEffect = if (solid) null else PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx())),
                 ),
             )
         }.padding(6.dp),

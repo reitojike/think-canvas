@@ -26,4 +26,18 @@
     <string name="move_left">左に移動</string>
     <string name="move_right">右に移動</string>
     <string name="move_element">要素を移動</string>
+    <string name="tool_open">図形ツールを開く</string>
+    <string name="tool_close">ツールを閉じる</string>
+    <string name="tool_lasso">まとめて選ぶ</string>
+    <string name="tool_region">囲み</string>
+    <string name="tool_arrow">矢印</string>
+    <string name="tool_ellipse">丸</string>
+    <string name="tool_rectangle">四角</string>
+    <string name="menu_reverse">反転</string>
+    <string name="menu_color">朱</string>
+    <string name="menu_name">名前</string>
+    <string name="menu_delete">削除</string>
+    <string name="menu_close">閉じる</string>
+    <string name="region_name">囲みの名前</string>
+    <string name="region_name_hint">名前（任意）</string>
 </resources>
