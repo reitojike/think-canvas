@@ -164,6 +164,7 @@ class SemanticNavigationTest {
         waitFor("2件目、全2件")
         click("次の検索結果")
         waitFor("1件目、全2件")
+        waitFor("倍率を切り替える、80%  近")
         click("倍率を切り替える")
         waitFor("倍率を切り替える、50%  中")
         waitFor("1件目、全2件")

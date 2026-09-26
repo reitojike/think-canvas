@@ -74,11 +74,14 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -142,6 +145,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val elementSizes = remember { mutableStateMapOf<String, IntSize>() }
     val chromeBounds = remember { mutableStateMapOf<String, Rect>() }
     val uiScope = rememberCoroutineScope()
+    val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val keyboard = LocalSoftwareKeyboardController.current
     val haptic = LocalHapticFeedback.current
@@ -158,8 +162,6 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val latestViewport = rememberUpdatedState(viewport)
     val latestElements = rememberUpdatedState(board.elements)
     val latestSnapshot = rememberUpdatedState(board.snapshot())
-    val measuredTextExtents = elementSizes.mapValues { (_, size) ->
-        TextExtent(size.width.toFloat(), size.height.toFloat()) }
     val bodyDp = with(density) { 14.sp.toDp().value }
     val titleDp = with(density) { 15.sp.toDp().value }
     val titleTier = semanticTier(bodyDp, viewport.scale)
@@ -167,8 +169,45 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val titleLineHeightWorld = with(density) {
         (maxOf(titleDp, titleMinimumDp / viewport.scale).dp.toSp() * 1.5f).toDp().toPx()
     }
-    val searchMatches = if (searchOpen) board.snapshot().searchCanvas(searchQuery) else emptyList()
-    val matchIds = searchMatches.map { it.id }.toSet()
+    val rawSearchMatches = if (searchOpen) board.snapshot().searchCanvas(searchQuery) else emptyList()
+    val matchIds = rawSearchMatches.map { it.id }.toSet()
+    val measuredTextExtents = remember(board.elements, board.shapes, viewport.scale, density,
+        selectedIds, matchIds) {
+        val snapshot = board.snapshot()
+        board.elements.associate { element ->
+            val title = element.kind == TextKind.TITLE
+            val minimumDp = when (titleTier) {
+                SemanticTier.NEAR -> if (title) 11f else 10f
+                SemanticTier.MID -> if (title) 11f else 9.5f
+                SemanticTier.FAR -> if (title) 9f else 10f
+            }
+            val size = with(density) {
+                (maxOf(if (title) titleDp else bodyDp,
+                    minimumDp / viewport.scale).dp.toSp())
+            }
+            val widthDp = if (title && titleTier != SemanticTier.NEAR &&
+                element.id !in selectedIds && element.id !in matchIds)
+                snapshot.titleAvailableWidth(element, titleLineHeightWorld)
+                    ?.let { (it / density.density).dp } ?: 166.dp
+            else 166.dp
+            val measured = textMeasurer.measure(
+                text = AnnotatedString(element.text),
+                style = TextStyle(fontSize = size, lineHeight = size * 1.5f,
+                    fontWeight = if (title) FontWeight.Bold else FontWeight.Normal),
+                maxLines = if (titleTier == SemanticTier.NEAR) Int.MAX_VALUE else 1,
+                overflow = TextOverflow.Ellipsis,
+                constraints = Constraints(maxWidth = with(density) {
+                    widthDp.roundToPx().coerceAtLeast(0) }),
+            ).size
+            element.id to TextExtent(measured.width.toFloat(), measured.height.toFloat())
+        }
+    }
+    val searchMatches = rawSearchMatches.map { match ->
+        val element = board.elements.firstOrNull { it.id == match.id }
+        val extent = measuredTextExtents[match.id]
+        if (element == null || extent == null) match else match.copy(bounds = WorldBounds(
+            element.x, element.y, element.x + extent.width, element.y + extent.height))
+    }
     val currentMatch = searchMatches.getOrNull(searchPosition)
     val projection = board.snapshot().semanticProjection(viewport.scale, bodyDp,
         selectedIds + matchIds, density.density, titleDp, titleLineHeightWorld, measuredTextExtents)
@@ -442,7 +481,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             keyboard?.show()
         } else chromeBounds.remove("search")
     }
-    LaunchedEffect(searchOpen, searchQuery, searchMatches) {
+    LaunchedEffect(searchOpen, searchQuery, board.elements, board.shapes) {
         if (searchOpen && searchQuery.isNotBlank() && searchMatches.isNotEmpty()) focusMatch(0)
     }
 
