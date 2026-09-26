@@ -196,7 +196,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             val inText = point.x in x..(x + width) && point.y in y..(y + height)
             val gripCenter = x + size.width * view.scale / 2f
             val gripRadius = with(density) { 24.dp.toPx() }
-            val inGrip = latestSelected.value == element.id &&
+            val inGrip = element.id in latestSelectedIds.value &&
                 point.x in (gripCenter - gripRadius)..(gripCenter + gripRadius) &&
                 point.y in (y + size.height * view.scale)..(y + size.height * view.scale + gripRadius * 2f)
             inText || inGrip
@@ -432,6 +432,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     val pressed = event.changes.filter { it.pressed }
                     if (pressed.isEmpty()) {
                         if (event.type != PointerEventType.Release) break
+                        end = event.changes.firstOrNull()?.position ?: end
                         when (mode) {
                             "tap" -> tap(start)
                             "create" -> {

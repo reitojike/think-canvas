@@ -233,7 +233,10 @@ fun SpatialElements(
             customActions = listOf(
                 if (arrow.id in selected) CustomAccessibilityAction("選択から外す") { onRemove(arrow.id) }
                 else CustomAccessibilityAction("選択に追加") { onAdd(arrow.id) },
+                CustomAccessibilityAction("左へ移動") { onMove(arrow.id, -16f, 0f) },
                 CustomAccessibilityAction("右へ移動") { onMove(arrow.id, 16f, 0f) },
+                CustomAccessibilityAction("上へ移動") { onMove(arrow.id, 0f, -16f) },
+                CustomAccessibilityAction("下へ移動") { onMove(arrow.id, 0f, 16f) },
                 CustomAccessibilityAction("始点を自由端にする") { onHandle(arrow.id, HandleKind.FROM) },
                 CustomAccessibilityAction("終点を自由端にする") { onHandle(arrow.id, HandleKind.TO) },
                 CustomAccessibilityAction("始点を接続・付け替え") { onConnect(arrow.id, HandleKind.FROM) },
