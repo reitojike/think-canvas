@@ -356,7 +356,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         if (canvasSize == IntSize.Zero || imeBottom == 0) return@LaunchedEffect
         val (screenX, screenY) = viewport.worldToScreen(current.x, current.y)
         val maxX = canvasSize.width - with(density) { 174.dp.toPx() }
-        val maxY = canvasSize.height - imeBottom - with(density) { 150.dp.toPx() }
+        val maxY = canvasSize.height - with(density) { 150.dp.toPx() }
         val dx = (maxX - screenX).coerceAtMost(0f)
         val dy = (maxY - screenY).coerceAtMost(0f)
         if (dx != 0f || dy != 0f) viewport = viewport.pan(dx, dy)
