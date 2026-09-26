@@ -115,6 +115,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     var guidance by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf<Draft?>(null) }
     var movePreview by remember { mutableStateOf<Pair<Set<String>, WorldPoint>?>(null) }
+    var handlePreview by remember { mutableStateOf<BoardSnapshot?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var saving by remember { mutableStateOf(false) }
     var saveFailed by remember { mutableStateOf(false) }
@@ -231,6 +232,35 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             target, ((x - bounds.left) / (bounds.right - bounds.left)).coerceIn(0f, 1f),
             ((y - bounds.top) / (bounds.bottom - bounds.top)).coerceIn(0f, 1f),
         ) else ArrowEnd.Free(x, y)
+    }
+
+    fun previewHandle(source: BoardSnapshot, id: String, kind: HandleKind, point: Offset): BoardSnapshot {
+        val (x, y) = latestViewport.value.screenToWorld(point.x, point.y)
+        return when (kind) {
+            HandleKind.MOVE -> source
+            HandleKind.RESIZE -> source.copy(shapes = source.shapes.map { shape ->
+                if (shape.id == id) shape.copy(width = (x - shape.x).coerceAtLeast(40f),
+                    height = (y - shape.y).coerceAtLeast(30f)) else shape
+            })
+            HandleKind.FROM, HandleKind.TO -> source.copy(arrows = source.arrows.map { arrow ->
+                if (arrow.id != id) arrow else if (kind == HandleKind.FROM)
+                    arrow.copy(from = endAt(point)) else arrow.copy(to = endAt(point))
+            })
+            HandleKind.BEND -> source.copy(arrows = source.arrows.map { arrow ->
+                if (arrow.id != id) arrow else {
+                    val points = source.arrowPoints(arrow, 6f / latestViewport.value.scale)
+                    if (points == null) arrow else {
+                        val dx = points.second.x - points.first.x
+                        val dy = points.second.y - points.first.y
+                        val length = kotlin.math.sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
+                        val middle = WorldPoint((points.first.x + points.second.x) / 2f,
+                            (points.first.y + points.second.y) / 2f)
+                        val bend = (-(x - middle.x) * dy + (y - middle.y) * dx) / length
+                        arrow.copy(bend = if (kotlin.math.abs(bend) < 8f) 0f else bend)
+                    }
+                }
+            })
+        }
     }
 
     fun tap(point: Offset) {
@@ -401,6 +431,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     }
                 }
                 val activeId = targetId
+                val gestureSnapshot = latestSnapshot.value
                 var mode = when {
                     activeTool == SpatialTool.LASSO -> "lasso"
                     activeTool != SpatialTool.NONE -> "create"
@@ -524,31 +555,13 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                                 } else menuTarget = activeId
                             }
                             "handle" -> if (activeId != null && handle != null) {
-                                val worldEnd = latestViewport.value.screenToWorld(end.x, end.y)
                                 val changed = when (handle) {
                                     HandleKind.MOVE -> board.moveSelection(
                                         if (activeId in latestSelectedIds.value) latestSelectedIds.value else setOf(activeId),
                                         (end.x - start.x) / latestViewport.value.scale,
                                         (end.y - start.y) / latestViewport.value.scale,
                                     )
-                                    HandleKind.RESIZE -> board.shapes.firstOrNull { it.id == activeId }?.let {
-                                        board.resizeShape(activeId, worldEnd.first - it.x, worldEnd.second - it.y)
-                                    } ?: false
-                                    HandleKind.FROM -> board.updateArrow(activeId, from = endAt(end))
-                                    HandleKind.TO -> board.updateArrow(activeId, to = endAt(end))
-                                    HandleKind.BEND -> board.arrows.firstOrNull { it.id == activeId }?.let { arrow ->
-                                        val points = board.snapshot().arrowPoints(arrow, 6f / latestViewport.value.scale)
-                                        if (points == null) false else {
-                                            val dx = points.second.x - points.first.x
-                                            val dy = points.second.y - points.first.y
-                                            val length = kotlin.math.sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
-                                            val middle = WorldPoint((points.first.x + points.second.x) / 2f,
-                                                (points.first.y + points.second.y) / 2f)
-                                            board.updateArrow(activeId, bend = (-(worldEnd.first - middle.x) * dy +
-                                                (worldEnd.second - middle.y) * dx) / length)
-                                        }
-                                    } ?: false
-                                    null -> false
+                                    else -> board.apply(previewHandle(gestureSnapshot, activeId, handle, end))
                                 }
                                 if (changed) {
                                     if (handle == HandleKind.FROM || handle == HandleKind.TO) {
@@ -572,6 +585,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                             }
                         }
                         movePreview = null
+                        handlePreview = null
                         spatialPreview = null
                         gapPreview = null
                         lassoPoints = emptyList()
@@ -580,6 +594,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     if (pressed.size >= 2) {
                         mode = "zoom"
                         movePreview = null
+                        handlePreview = null
                         spatialPreview = null
                         gapPreview = null
                         lassoPoints = emptyList()
@@ -609,6 +624,16 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                                 val ids = if (activeId in latestSelectedIds.value) latestSelectedIds.value else setOf(activeId)
                                 movePreview = ids to WorldPoint(dx, dy)
                             }
+                            "handle" -> if (activeId != null && handle != null) {
+                                if (handle == HandleKind.MOVE) {
+                                    val ids = if (activeId in latestSelectedIds.value)
+                                        latestSelectedIds.value else setOf(activeId)
+                                    movePreview = ids to WorldPoint(
+                                        (end.x - start.x) / latestViewport.value.scale,
+                                        (end.y - start.y) / latestViewport.value.scale,
+                                    )
+                                } else handlePreview = previewHandle(gestureSnapshot, activeId, handle, end)
+                            }
                             "create" -> {
                                 val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
                                 spatialPreview = SpatialPreview(startWorld, WorldPoint(x, y), activeTool)
@@ -635,6 +660,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 }
                 } finally {
                     movePreview = null
+                    handlePreview = null
                     spatialPreview = null
                     gapPreview = null
                     lassoPoints = emptyList()
@@ -653,6 +679,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         val movingPreview = movePreview
         val pendingGap = gapPreview
         val displaySnapshot = when {
+            handlePreview != null -> handlePreview!!
             movingPreview != null -> movingPreview.let { (ids, delta) ->
                 sourceSnapshot.translatedSelection(ids, delta.x, delta.y)
             }

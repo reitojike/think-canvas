@@ -6,13 +6,16 @@ README に記載された JDK と Android SDK を用意し、Android の実機�
 
 ```powershell
 .\gradlew.bat :app:lintDebug
+.\gradlew.bat :app:kspDebugKotlin
+git diff --exit-code -- app/schemas
 .\gradlew.bat :app:testDebugUnitTest
 .\gradlew.bat :app:assembleDebug
 pwsh -File scripts/check-public-boundary.ps1
 git diff --check
 ```
 
-GitHub CI でも、現在の PR head に対して同じ四種類のチェックを確認する。
+GitHub CI でも、現在の PR head に対して lint、Room schema の生成差分、単体テスト、
+デバッグビルド、公開情報境界の結果を確認する。
 
 ## 操作確認
 
