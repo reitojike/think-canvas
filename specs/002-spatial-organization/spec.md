@@ -2,7 +2,7 @@
 
 **対象 Issue**: [#3 Spatial Organization](https://github.com/reitojike/think-canvas/issues/3)
 **作成日**: 2026-09-26
-**状態**: 設計中
+**状態**: 設計確定
 **入力**: 非公開 PRD の §4〜9、§14、§16〜17 を要件の authority とし、Issue #3 と [Canvas Foundation](../001-canvas-foundation/spec.md) に照合する。非公開 HTML モックは見た目と操作の参考実装とする。元ファイルは公開リポジトリへ追加しない。
 
 ## Clarifications
