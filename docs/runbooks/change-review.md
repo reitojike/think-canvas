@@ -1,10 +1,7 @@
 # 変更とレビューの手順
 
-この runbook は、stage-tracker の [PR 前の検証](https://github.com/reitojike/stage-tracker/blob/main/docs/runbooks/pre-pr-verification.md)、
-[PR 後の収束](https://github.com/reitojike/stage-tracker/blob/main/docs/runbooks/post-pr-convergence.md)、
-[merge 後の Issue 完了](https://github.com/reitojike/stage-tracker/blob/main/docs/runbooks/post-merge-issue-closure.md)
-から、ThinkCanvas に必要な判断を取り込んだものです。実行する CI は
-[Android checks](../../.github/workflows/android.yml) を基準にします。
+この runbook は、ThinkCanvas の変更を PR の作成から Issue の完了まで確認する手順です。
+実行する CI は [Android checks](../../.github/workflows/android.yml) を基準にします。
 
 ## PR を作成する前
 
