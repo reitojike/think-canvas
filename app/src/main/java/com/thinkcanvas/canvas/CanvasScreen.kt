@@ -214,14 +214,20 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         }
     }
 
+    fun hitInk(point: Offset, kind: InkKind): String? {
+        val view = latestViewport.value
+        val (wx, wy) = view.screenToWorld(point.x, point.y)
+        val world = WorldPoint(wx, wy)
+        return latestSnapshot.value.ink.asReversed().firstOrNull { element ->
+            element.kind == kind && element.hitStroke(world, kind.hitTolerance(view.scale))
+        }?.id
+    }
+
     fun hitSpatial(point: Offset): String? {
         val view = latestViewport.value
         val (wx, wy) = view.screenToWorld(point.x, point.y)
         val world = WorldPoint(wx, wy)
         val snapshot = latestSnapshot.value
-        snapshot.ink.asReversed().firstOrNull { element ->
-            element.hitStroke(world, element.kind.hitTolerance(view.scale))
-        }?.let { return it.id }
         snapshot.arrows.asReversed().firstOrNull { arrow ->
             snapshot.distanceToArrow(world, arrow, 6f / view.scale) <= 12f / view.scale
         }?.let { return it.id }
@@ -233,6 +239,13 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 point.y in (nameY - with(density) { 8.dp.toPx() })..(nameY + with(density) { 28.dp.toPx() })
             shape.hitStroke(world, 12f / view.scale) || nameHit
         }?.id
+    }
+
+    fun hitCanvas(point: Offset): Pair<TextElement?, String?> {
+        hitInk(point, InkKind.PEN)?.let { return null to it }
+        hitTest(point)?.let { return it to null }
+        hitSpatial(point)?.let { return null to it }
+        return null to hitInk(point, InkKind.MARKER)
     }
 
     fun endAt(point: Offset): ArrowEnd {
@@ -279,8 +292,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     fun tap(point: Offset) {
         if (latestDraft.value != null || latestSaveBlocked.value) return
         if (chromeBounds.values.any { it.contains(point) }) return
-        val element = hitTest(point)
-        val spatial = if (element == null) hitSpatial(point) else null
+        val (element, spatial) = hitCanvas(point)
         if (latestInkTool.value != null) return
         if (element == null && spatial == null) {
             if (latestSelectedIds.value.isNotEmpty()) { selectedId = null; selectedIds = emptySet() }
@@ -402,8 +414,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 if (latestDraft.value != null || saveFailed || (saving && !requestedInk))
                     return@awaitEachGesture
                 if (chromeBounds.values.any { it.contains(down.position) }) return@awaitEachGesture
-                val target = hitTest(down.position)
-                var targetId = target?.id ?: hitSpatial(down.position)
+                val (target, topId) = hitCanvas(down.position)
+                var targetId = target?.id ?: topId
                 val startTime = SystemClock.uptimeMillis()
                 val start = down.position
                 var end = start
