@@ -70,8 +70,9 @@ fun BoardSnapshot.semanticProjection(
         val attachedHidden = listOf(arrow.from, arrow.to).any {
             it is ArrowEnd.Attached && it.targetId in hidden
         }
-        val length = arrowPoints(arrow)?.let { (a, b) ->
-            val control = arrowControl(arrow) ?: return@let 0f
+        val renderOffset = 6f / scale
+        val length = arrowPoints(arrow, renderOffset)?.let { (a, b) ->
+            val control = arrowControl(arrow, renderOffset) ?: return@let 0f
             val midpoint = WorldPoint((a.x + b.x) / 2f, (a.y + b.y) / 2f)
             val bendExtent = kotlin.math.hypot(control.x - midpoint.x,
                 control.y - midpoint.y) / 2f
@@ -100,8 +101,7 @@ fun BoardSnapshot.searchCanvas(query: String): List<CanvasMatch> {
 
 fun BoardSnapshot.titleAvailableWidth(element: TextElement,
                                       lineHeightWorld: Float = 22.5f): Float? {
-    val center = centerOf(element.id) ?: return null
-    val lineCenter = WorldPoint(center.x, element.y + lineHeightWorld / 2f)
+    val lineCenter = WorldPoint(element.x, element.y + lineHeightWorld / 2f)
     val rightEdges = shapes.asSequence().filter { it.kind == ShapeKind.REGION &&
         it.bounds().contains(lineCenter) }.map { it.x + it.width } +
         shapes.asSequence().filter { it.x > element.x &&
