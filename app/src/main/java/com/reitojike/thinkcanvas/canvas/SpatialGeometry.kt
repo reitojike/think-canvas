@@ -133,6 +133,12 @@ fun BoardSnapshot.arrowPoints(arrow: ArrowElement, offset: Float = 6f): Pair<Wor
         (resolve(arrow.to, fromCenter, offset) ?: return null)
 }
 
+fun BoardSnapshot.detachedEnd(arrow: ArrowElement, from: Boolean, offset: Float = 6f): ArrowEnd.Free? {
+    val points = arrowPoints(arrow, offset) ?: return null
+    val point = if (from) points.first else points.second
+    return ArrowEnd.Free(point.x, point.y)
+}
+
 fun BoardSnapshot.arrowControl(arrow: ArrowElement, offset: Float = 6f): WorldPoint? {
     val (from, to) = arrowPoints(arrow, offset) ?: return null
     val dx = to.x - from.x
@@ -181,12 +187,6 @@ fun BoardSnapshot.translatedSelection(ids: Set<String>, dx: Float, dy: Float): B
             shapes.filter { it.id != region.id }.forEach {
                 if (region.bounds().contains(it.bounds().center)) moved += it.id
             }
-            arrows.forEach { arrow ->
-                arrowPoints(arrow)?.let { (a, b) ->
-                    val middle = WorldPoint((a.x + b.x) / 2f, (a.y + b.y) / 2f)
-                    if (region.bounds().contains(middle)) moved += arrow.id
-                }
-            }
         }
         expanded = moved.size != previousSize
     } while (expanded)
@@ -194,7 +194,7 @@ fun BoardSnapshot.translatedSelection(ids: Set<String>, dx: Float, dy: Float): B
     return BoardSnapshot(
         texts = texts.map { if (it.id in moved) it.copy(x = it.x + dx, y = it.y + dy) else it },
         shapes = shapes.map { if (it.id in moved) it.copy(x = it.x + dx, y = it.y + dy) else it },
-        arrows = arrows.map { arrow -> if (arrow.id in moved)
+        arrows = arrows.map { arrow -> if (arrow.id in ids)
             arrow.copy(from = arrow.from.shift(), to = arrow.to.shift()) else arrow },
     )
 }
@@ -245,15 +245,6 @@ fun BoardSnapshot.withGap(origin: WorldPoint, horizontal: Boolean, amount: Float
             }
         }
     }
-    fun shiftFreeEnd(end: ArrowEnd): ArrowEnd {
-        if (end !is ArrowEnd.Free) return end
-        val point = WorldPoint(end.x, end.y)
-        if (scope != null && !scope.bounds().contains(point)) return end
-        val delta = shift(if (horizontal) end.x else end.y)
-        return if (horizontal) end.copy(x = end.x + delta) else end.copy(y = end.y + delta)
-    }
-    val updatedArrows = arrows.map { arrow ->
-        arrow.copy(from = shiftFreeEnd(arrow.from), to = shiftFreeEnd(arrow.to))
-    }
-    return BoardSnapshot(updatedTexts, updatedShapes, updatedArrows)
+    // 余白挿入は矢印の選択ではない。自由端は固定し、接続端は移動した接続先に描画時に追従する。
+    return BoardSnapshot(updatedTexts, updatedShapes, arrows)
 }

@@ -267,6 +267,14 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         return true
     }
 
+    fun removeSelection(id: String): Boolean {
+        if (id !in selectedIds) return false
+        selectedIds = selectedIds - id
+        if (selectedId == id) selectedId = null
+        guidance = "${selectedIds.size}個を選択"
+        return true
+    }
+
     fun commitDraft() {
         if (saving) return
         if (saveFailed) {
@@ -669,11 +677,11 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                         board.resizeShape(id, it.width + 16f, it.height + 16f)
                     } ?: false
                     HandleKind.FROM, HandleKind.TO -> board.arrows.firstOrNull { it.id == id }?.let { arrow ->
-                        val end = if (kind == HandleKind.FROM) arrow.from else arrow.to
-                        val point = board.snapshot().resolve(end)
-                        if (point == null) false else if (kind == HandleKind.FROM)
-                            board.updateArrow(id, from = ArrowEnd.Free(point.x + 16f, point.y))
-                        else board.updateArrow(id, to = ArrowEnd.Free(point.x + 16f, point.y))
+                        val end = board.snapshot().detachedEnd(arrow, kind == HandleKind.FROM,
+                            6f / viewport.scale)
+                        if (end == null) false else if (kind == HandleKind.FROM)
+                            board.updateArrow(id, from = end)
+                        else board.updateArrow(id, to = end)
                     } ?: false
                     HandleKind.BEND -> board.arrows.firstOrNull { it.id == id }?.let {
                         board.updateArrow(id, bend = it.bend + 16f)
@@ -697,6 +705,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     true
                 }
             },
+            onRemove = { id -> removeSelection(id) },
             onMove = { id, dx, dy ->
                 val ids = if (id in selectedIds) selectedIds else setOf(id)
                 if (saving || saveFailed) false else board.moveSelection(ids, dx, dy).also {
@@ -765,12 +774,12 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                                     true
                                 }
                                 customActions = listOf(
-                                    CustomAccessibilityAction("選択に追加") {
-                                        if (element.id in selectedIds) false else {
-                                            selectedIds = selectedIds + element.id
-                                            guidance = "${selectedIds.size}個を選択"
-                                            true
-                                        }
+                                    if (element.id in selectedIds)
+                                        CustomAccessibilityAction("選択から外す") { removeSelection(element.id) }
+                                    else CustomAccessibilityAction("選択に追加") {
+                                        selectedIds = selectedIds + element.id
+                                        guidance = "${selectedIds.size}個を選択"
+                                        true
                                     },
                                     CustomAccessibilityAction(moveUpLabel) { nudge(element.id, 0f, -16f) },
                                     CustomAccessibilityAction(moveDownLabel) { nudge(element.id, 0f, 16f) },

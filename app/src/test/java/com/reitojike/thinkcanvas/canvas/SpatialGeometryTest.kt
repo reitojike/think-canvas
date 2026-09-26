@@ -52,6 +52,37 @@ class SpatialGeometryTest {
     }
 
     @Test
+    fun detachingCenteredAnchorKeepsDisplayedEndpoint() {
+        val board = BoardState()
+        val shape = board.addShape(ShapeKind.RECTANGLE, 0f, 0f, 100f, 80f)
+        val arrow = board.addArrow(ArrowEnd.Attached(shape.id, .5f, .5f),
+            ArrowEnd.Free(-100f, 40f))!!
+        val displayed = board.snapshot().arrowPoints(arrow)!!.first
+        val free = board.snapshot().detachedEnd(arrow, from = true)!!
+        assertEquals(displayed.x, free.x, .001f)
+        assertEquals(displayed.y, free.y, .001f)
+        assertTrue(board.updateArrow(arrow.id, from = free))
+        assertEquals(displayed, board.snapshot().arrowPoints(board.arrows.single())!!.first)
+    }
+
+    @Test
+    fun movingRegionDoesNotMoveContainedArrowsFreeEndpoint() {
+        val board = BoardState()
+        val region = board.addShape(ShapeKind.REGION, 0f, 0f, 300f, 200f)
+        val shape = board.addShape(ShapeKind.RECTANGLE, 20f, 30f, 80f, 60f)
+        val arrow = board.addArrow(ArrowEnd.Attached(shape.id, 1f, .5f),
+            ArrowEnd.Free(200f, 60f))!!
+        val before = board.snapshot().arrowPoints(arrow)!!
+        assertTrue(board.moveSelection(setOf(region.id), 25f, 0f))
+        val after = board.snapshot().arrowPoints(board.arrows.single())!!
+        assertEquals(before.first.x + 25f, after.first.x, .001f)
+        assertEquals(before.second, after.second)
+        assertEquals(arrow, board.arrows.single())
+        assertTrue(board.undo())
+        assertEquals(before, board.snapshot().arrowPoints(board.arrows.single()))
+    }
+
+    @Test
     fun polygonSelectsCentersAndArrowsOnlyWithBothEndsInside() {
         val board = BoardState(listOf(TextElement(id = "inside", text = "中", x = 10f, y = 10f),
             TextElement(id = "outside", text = "外", x = 300f, y = 300f)))
@@ -85,19 +116,21 @@ class SpatialGeometryTest {
         assertEquals(130f, board.shapes.first { it.id == crossing.id }.width)
         assertEquals(280f, board.shapes.first { it.id == inner.id }.width)
         assertEquals(500f, board.shapes.first { it.id == outer.id }.width)
-        assertEquals(ArrowEnd.Free(250f, 100f), board.arrows.first { it.id == arrow.id }.to)
+        assertEquals(ArrowEnd.Free(220f, 100f), board.arrows.first { it.id == arrow.id }.to)
         assertTrue(board.undo())
         assertEquals(130f, board.elements.first { it.id == "inside" }.x)
         assertEquals(ArrowEnd.Free(220f, 100f), board.arrows.first { it.id == arrow.id }.to)
     }
 
     @Test
-    fun gapMovesOnlyFreeArrowEndsOnAffectedSide() {
+    fun gapKeepsFreeArrowEndsFixed() {
         val board = BoardState()
+        board.addShape(ShapeKind.RECTANGLE, 150f, 0f, 40f, 30f)
         val arrow = board.addArrow(ArrowEnd.Free(60f, 20f), ArrowEnd.Free(160f, 20f))!!
         assertTrue(board.insertGap(WorldPoint(100f, 0f), true, 30f))
+        assertEquals(180f, board.shapes.single().x, .001f)
         assertEquals(ArrowEnd.Free(60f, 20f), board.arrows.single().from)
-        assertEquals(ArrowEnd.Free(190f, 20f), board.arrows.single().to)
+        assertEquals(ArrowEnd.Free(160f, 20f), board.arrows.single().to)
         assertTrue(board.undo())
         assertEquals(arrow, board.arrows.single())
     }

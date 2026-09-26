@@ -30,6 +30,7 @@ jobs:
         run: ./gradlew :app:lintDebug --no-daemon
       - name: Room schema の差分確認
         run: |
+          ./gradlew :app:kspDebugKotlin --no-daemon
           git diff --exit-code -- app/schemas
           test -z "$(git ls-files --others --exclude-standard app/schemas)"
       - name: 単体テスト
