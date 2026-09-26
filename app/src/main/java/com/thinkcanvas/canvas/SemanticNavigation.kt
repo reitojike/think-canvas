@@ -130,8 +130,11 @@ fun BoardSnapshot.titleAvailableWidth(element: TextElement,
     val lineCenter = WorldPoint(element.x, element.y + lineHeightWorld / 2f)
     val rightEdges = shapes.asSequence().filter { it.kind == ShapeKind.REGION &&
         it.bounds().contains(lineCenter) }.map { it.x + it.width } +
-        shapes.asSequence().filter { it.x > element.x &&
-            it.y < element.y + lineHeightWorld && it.y + it.height > element.y }.map { it.x }
+        shapes.asSequence().filter { shape ->
+            !(shape.kind == ShapeKind.REGION && shape.bounds().contains(lineCenter)) &&
+                shape.x + shape.width > element.x &&
+                shape.y < element.y + lineHeightWorld && shape.y + shape.height > element.y
+        }.map { max(it.x, element.x) }
     return rightEdges.minOrNull()?.let { (it - element.x).coerceAtLeast(0f) }
 }
 

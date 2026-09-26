@@ -100,6 +100,9 @@ class SemanticNavigationTest {
         val edgeTitle = wrapped.copy(x = 90f)
         assertFalse(BoardSnapshot(texts = listOf(edgeTitle), shapes = listOf(enclosing))
             .semanticProjection(.5f, 14f).visible("title"))
+        val overlapping = neighbor.copy(x = 50f, width = 80f)
+        assertFalse(BoardSnapshot(texts = listOf(edgeTitle), shapes = listOf(overlapping))
+            .semanticProjection(.5f, 14f).visible("title"))
     }
 
     @Test fun bentArrowUsesRenderedCurveExtentInFarView() {
