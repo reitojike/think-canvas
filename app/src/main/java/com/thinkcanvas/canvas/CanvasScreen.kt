@@ -160,11 +160,16 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val latestSnapshot = rememberUpdatedState(board.snapshot())
     val bodyDp = with(density) { 14.sp.toDp().value }
     val titleDp = with(density) { 15.sp.toDp().value }
+    val titleTier = semanticTier(bodyDp, viewport.scale)
+    val titleMinimumDp = if (titleTier == SemanticTier.FAR) 9f else 11f
+    val titleLineHeightWorld = with(density) {
+        (maxOf(titleDp, titleMinimumDp / viewport.scale).dp.toSp() * 1.5f).toDp().toPx()
+    }
     val searchMatches = if (searchOpen) board.snapshot().searchCanvas(searchQuery) else emptyList()
     val matchIds = searchMatches.map { it.id }.toSet()
     val currentMatch = searchMatches.getOrNull(searchPosition)
     val projection = board.snapshot().semanticProjection(viewport.scale, bodyDp,
-        selectedIds + matchIds, density.density, titleDp)
+        selectedIds + matchIds, density.density, titleDp, titleLineHeightWorld)
     val latestProjection = rememberUpdatedState(projection)
     val latestLastBlankTap = rememberUpdatedState(lastBlankTap)
     val latestSearchOpen = rememberUpdatedState(searchOpen)
@@ -877,7 +882,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         }
         val movingIds = movingPreview?.first ?: emptySet()
         val displayProjection = displaySnapshot.semanticProjection(viewport.scale, bodyDp,
-            selectedIds + matchIds + movingIds, density.density, titleDp)
+            selectedIds + matchIds + movingIds, density.density, titleDp, titleLineHeightWorld)
         InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.MARKER,
             viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
             onSelect = { id -> selectedIds = setOf(id); selectedId = null },
@@ -994,8 +999,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 val title = element.kind == TextKind.TITLE
                 val tier = displayProjection.tier
                 val availableWorld = if (title && tier != SemanticTier.NEAR)
-                    displaySnapshot.titleAvailableWidth(element,
-                        titleLineHeightWorld(tier, viewport.scale, titleDp, density.density)) else null
+                    displaySnapshot.titleAvailableWidth(element, titleLineHeightWorld) else null
                 val availableDp = availableWorld?.takeUnless { element.id in selectedIds || element.id in matchIds }
                     ?.let { with(density) { it.toDp() } }
                 val (screenX, screenY) = viewport.worldToScreen(element.x, element.y)

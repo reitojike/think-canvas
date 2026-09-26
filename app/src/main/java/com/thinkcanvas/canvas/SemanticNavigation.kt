@@ -27,6 +27,7 @@ fun BoardSnapshot.semanticProjection(
     keep: Set<String> = emptySet(),
     pixelsPerDp: Float = 1f,
     titleDp: Float = 15f,
+    titleLineHeightWorld: Float = 22.5f,
 ): SemanticProjection {
     val tier = semanticTier(bodyDp, scale)
     fun apparentDp(worldLength: Float) = worldLength * scale / pixelsPerDp
@@ -49,9 +50,8 @@ fun BoardSnapshot.semanticProjection(
         (covered(it.id) || tier == SemanticTier.FAR && it.kind == TextKind.BODY) }
         .forEach { hidden += it.id }
     val titleGlyphDp = max(titleDp * scale, if (tier == SemanticTier.FAR) 9f else 11f)
-    val titleLineWorld = titleLineHeightWorld(tier, scale, titleDp, pixelsPerDp)
     if (tier != SemanticTier.NEAR) texts.filter { it.kind == TextKind.TITLE && it.id !in keep &&
-        titleAvailableWidth(it, titleLineWorld)?.let { width ->
+        titleAvailableWidth(it, titleLineHeightWorld)?.let { width ->
             apparentDp(width) < titleGlyphDp * 2f } == true }
         .forEach { hidden += it.id }
     shapes.filter { it.kind != ShapeKind.REGION && it.id !in keep }.forEach { shape ->
@@ -71,8 +71,11 @@ fun BoardSnapshot.semanticProjection(
             it is ArrowEnd.Attached && it.targetId in hidden
         }
         val length = arrowPoints(arrow)?.let { (a, b) ->
-            apparentDp(max(kotlin.math.hypot(b.x - a.x, b.y - a.y),
-                kotlin.math.abs(arrow.bend) / 2f))
+            val control = arrowControl(arrow) ?: return@let 0f
+            val midpoint = WorldPoint((a.x + b.x) / 2f, (a.y + b.y) / 2f)
+            val bendExtent = kotlin.math.hypot(control.x - midpoint.x,
+                control.y - midpoint.y) / 2f
+            apparentDp(max(kotlin.math.hypot(b.x - a.x, b.y - a.y), bendExtent))
         } ?: 0f
         attachedHidden || covered(arrow.id) || tier == SemanticTier.FAR && length < 20f
     }.forEach { hidden += it.id }
@@ -94,11 +97,6 @@ fun BoardSnapshot.searchCanvas(query: String): List<CanvasMatch> {
         .sortedWith(compareBy<CanvasMatch> { it.bounds.top }.thenBy { it.bounds.left }.thenBy { it.id })
         .toList()
 }
-
-fun titleLineHeightWorld(tier: SemanticTier, scale: Float, titleDp: Float,
-                         pixelsPerDp: Float): Float =
-    max(titleDp * scale, if (tier == SemanticTier.FAR) 9f else 11f) *
-        1.5f * pixelsPerDp / scale
 
 fun BoardSnapshot.titleAvailableWidth(element: TextElement,
                                       lineHeightWorld: Float = 22.5f): Float? {

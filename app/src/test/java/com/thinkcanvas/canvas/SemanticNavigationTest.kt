@@ -88,10 +88,12 @@ class SemanticNavigationTest {
         val curved = ArrowElement(id = "curved", from = ArrowEnd.Free(0f, 0f),
             to = ArrowEnd.Free(10f, 0f), bend = 200f)
         val straight = curved.copy(id = "straight", bend = 0f)
-        val snapshot = BoardSnapshot(arrows = listOf(curved, straight))
+        val coincident = curved.copy(id = "coincident", to = ArrowEnd.Free(0f, 0f))
+        val snapshot = BoardSnapshot(arrows = listOf(curved, straight, coincident))
         val far = snapshot.semanticProjection(.25f, 14f)
         assertTrue(far.visible("curved"))
         assertFalse(far.visible("straight"))
+        assertFalse(far.visible("coincident"))
         assertFalse(snapshot.semanticProjection(.25f, 14f, pixelsPerDp = 3f)
             .visible("curved"))
     }
