@@ -1,5 +1,7 @@
 # 実装タスク: Canvas Foundation
 
+T001〜T024 の完了済みタスクに記載した `com/thinkcanvas/internal` は実装当時の source path です。Issue #26 以降の source path は `com/thinkcanvas` です。
+
 **入力**: [仕様](spec.md)、[計画](plan.md)、[データモデル](data-model.md)、[操作契約](contracts/interaction.md)
 
 ## Phase 1: セットアップ

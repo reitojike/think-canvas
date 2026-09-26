@@ -1,5 +1,7 @@
 # 調査と判断: Spatial Organization
 
+この文書の v1→v2 migration と旧 schema export は #3 実装時の判断記録です。Issue #26 以降は旧内部版のデータを引き継がず、四表を `thinkcanvas.db` の新しい schema v1 として export します。
+
 ## 既存データの保持
 
 **判断**: Room 3 の schema v1 を残し、v2 に図形・囲み共通の表と矢印の表を追加する。既存の `boards` と `text_elements` は作り直さず、単純な表追加を `@AutoMigration(from = 1, to = 2)` で移行する。v1 と v2 の schema を保管し、v1 の実データを入れた migration test を行う。
