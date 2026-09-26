@@ -79,7 +79,7 @@ fun SpatialElements(
                     cornerRadius = androidx.compose.ui.geometry.CornerRadius(if (shape.kind == ShapeKind.REGION) 12.dp.toPx() else 3.dp.toPx()),
                     style = style)
             }
-            if (shape.id in selected) {
+            if (shape.id in selected || shape.id in moving) {
                 drawRect(redColor.copy(alpha = .06f), topLeft, androidx.compose.ui.geometry.Size(width, height))
                 drawRect(redColor, topLeft, androidx.compose.ui.geometry.Size(width, height),
                     style = Stroke(if (shape.id in moving) 2.dp.toPx() else 1.dp.toPx(),
@@ -107,7 +107,7 @@ fun SpatialElements(
                 close()
             }
             drawPath(head, inkColor)
-            if (arrow.id in selected) {
+            if (arrow.id in selected || arrow.id in moving) {
                 listOf(start to arrow.from, end to arrow.to).forEach { (point, endpoint) ->
                     drawCircle(redColor, 7.dp.toPx(), point)
                     if (endpoint is ArrowEnd.Free) drawCircle(Color.White, 4.dp.toPx(), point)
@@ -156,6 +156,8 @@ fun SpatialElements(
         gap?.let { (a, b) ->
             val start = screen(a)
             val end = screen(b)
+            drawCircle(redColor.copy(alpha = .16f), 16.dp.toPx(), start)
+            drawCircle(redColor, 4.dp.toPx(), start)
             val horizontal = kotlin.math.abs(end.x - start.x) >= kotlin.math.abs(end.y - start.y)
             val stripe = 8.dp.toPx()
             if (horizontal) {

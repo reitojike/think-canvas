@@ -113,7 +113,6 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     var regionName by remember { mutableStateOf("") }
     var guidance by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf<Draft?>(null) }
-    var preview by remember { mutableStateOf<Pair<String, Pair<Float, Float>>?>(null) }
     var movePreview by remember { mutableStateOf<Pair<Set<String>, WorldPoint>?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var saving by remember { mutableStateOf(false) }
@@ -211,9 +210,11 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             snapshot.distanceToArrow(world, arrow, 6f / view.scale) <= 12f / view.scale
         }?.let { return it.id }
         return snapshot.shapes.asReversed().firstOrNull { shape ->
+            val (nameX, nameY) = view.worldToScreen(shape.x + 8f, shape.y - 22f)
+            val nameWidth = with(density) { maxOf(48.dp.toPx(), shape.name.length * 14.dp.toPx()) }
             val nameHit = shape.kind == ShapeKind.REGION && shape.name.isNotBlank() &&
-                world.x in (shape.x + 8f)..(shape.x + 8f + shape.name.length * 14f) &&
-                world.y in (shape.y - 26f)..shape.y
+                point.x in nameX..(nameX + nameWidth) &&
+                point.y in (nameY - with(density) { 8.dp.toPx() })..(nameY + with(density) { 28.dp.toPx() })
             shape.hitStroke(world, 12f / view.scale) || nameHit
         }?.id
     }
@@ -401,6 +402,14 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     else awaitPointerEvent()
                     if (event == null) {
                         mode = if (activeId == null) "gap" else "move"
+                        if (activeId == null) {
+                            gapPreview = startWorld to startWorld
+                            guidance = "ドラッグして余白を作る"
+                        } else {
+                            val ids = if (activeId in latestSelectedIds.value)
+                                latestSelectedIds.value else setOf(activeId)
+                            movePreview = ids to WorldPoint(0f, 0f)
+                        }
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         continue
                     }
@@ -545,7 +554,6 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                                 }
                             }
                         }
-                        preview = null
                         movePreview = null
                         spatialPreview = null
                         gapPreview = null
@@ -554,7 +562,6 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     }
                     if (pressed.size >= 2) {
                         mode = "zoom"
-                        preview = null
                         movePreview = null
                         spatialPreview = null
                         gapPreview = null
@@ -610,7 +617,6 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     if (mode != "tap") event.changes.forEach { it.consume() }
                 }
                 } finally {
-                    preview = null
                     movePreview = null
                     spatialPreview = null
                     gapPreview = null
@@ -627,11 +633,13 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         }
 
         val sourceSnapshot = board.snapshot()
+        val movingPreview = movePreview
+        val pendingGap = gapPreview
         val displaySnapshot = when {
-            movePreview != null -> movePreview!!.let { (ids, delta) ->
+            movingPreview != null -> movingPreview.let { (ids, delta) ->
                 sourceSnapshot.translatedSelection(ids, delta.x, delta.y)
             }
-            gapPreview != null -> gapPreview!!.let { (start, end) ->
+            pendingGap != null -> pendingGap.let { (start, end) ->
                 val dx = end.x - start.x
                 val dy = end.y - start.y
                 val horizontal = kotlin.math.abs(dx) >= kotlin.math.abs(dy)
@@ -639,11 +647,11 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             }
             else -> sourceSnapshot
         }
-        val ghostIds = if (gapPreview == null) emptySet() else {
+        val ghostIds = if (pendingGap == null) emptySet() else {
             (displaySnapshot.texts.filterIndexed { index, it -> it != sourceSnapshot.texts[index] }.map { it.id } +
                 displaySnapshot.shapes.filterIndexed { index, it -> it != sourceSnapshot.shapes[index] }.map { it.id }).toSet()
         }
-        val movingIds = movePreview?.first ?: emptySet()
+        val movingIds = movingPreview?.first ?: emptySet()
         SpatialElements(displaySnapshot, viewport, selectedIds, movingIds, spatialPreview, lassoPoints, gapPreview, ghostIds,
             onHandle = { id, kind ->
             if (saving || saveFailed) false else {
@@ -695,9 +703,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
 
         displaySnapshot.texts.forEach { element ->
             if (draft?.id != element.id && pendingNewElementId != element.id) {
-                val display = preview?.takeIf { it.first == element.id }?.second
-                val (screenX, screenY) = viewport.worldToScreen(display?.first ?: element.x, display?.second ?: element.y)
-                val selected = element.id in selectedIds
+                val (screenX, screenY) = viewport.worldToScreen(element.x, element.y)
+                val selected = element.id in selectedIds || element.id in movingIds
                 val elementActionsEnabled = !saving && !saveFailed
                 Text(
                     text = element.text,
@@ -900,7 +907,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 }
             }
 
-            if (regionNameId != null) {
+            val editingRegionId = regionNameId
+            if (editingRegionId != null) {
                 Row(Modifier.align(Alignment.Center).background(Color.White, RoundedCornerShape(10.dp))
                     .pillBorder(10f).padding(8.dp).onGloballyPositioned {
                         chromeBounds["regionName"] = it.boundsInParent()
@@ -915,8 +923,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                             }
                         })
                     EditorOption(stringResource(R.string.done), false, true, enabled = !saving && !saveFailed) {
-                        val id = regionNameId!!
-                        if (board.updateShape(id, name = regionName)) saveSnapshot()
+                        if (board.updateShape(editingRegionId, name = regionName)) saveSnapshot()
                         regionNameId = null
                         keyboard?.hide()
                     }

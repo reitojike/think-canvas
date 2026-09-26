@@ -26,6 +26,7 @@ class SpatialGeometryTest {
         val ellipse = ShapeElement(kind = ShapeKind.ELLIPSE, x = 0f, y = 0f, width = 120f, height = 80f)
         assertTrue(rectangle.hitStroke(WorldPoint(2f, 40f), 12f))
         assertFalse(rectangle.hitStroke(WorldPoint(60f, 40f), 12f))
+        assertTrue(rectangle.hitStroke(WorldPoint(60f, 40f), 80f))
         assertTrue(ellipse.hitStroke(WorldPoint(60f, 2f), 12f))
         assertFalse(ellipse.hitStroke(WorldPoint(60f, 40f), 12f))
         assertTrue(ellipse.containsInterior(WorldPoint(60f, 40f)))

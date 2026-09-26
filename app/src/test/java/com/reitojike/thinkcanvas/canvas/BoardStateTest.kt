@@ -53,6 +53,20 @@ class BoardStateTest {
     }
 
     @Test
+    fun viewportChangesNeverMoveShapesOrArrowEnds() {
+        val board = BoardState()
+        val shape = board.addShape(ShapeKind.RECTANGLE, 12f, -30f, 120f, 80f)
+        val arrow = board.addArrow(ArrowEnd.Attached(shape.id, 1f, .5f),
+            ArrowEnd.Free(300f, 25f))!!
+        val before = board.snapshot()
+        var viewport = Viewport()
+        repeat(10) { viewport = viewport.pan(22f, -13f).zoomAt(100f, 90f, 1.15f) }
+        assertEquals(before, board.snapshot())
+        assertEquals(shape, board.shapes.single())
+        assertEquals(arrow, board.arrows.single())
+    }
+
+    @Test
     fun zoomKeepsPointUnderFingersAndClamps() {
         val before = Viewport(scale = 1f, panX = 15f, panY = -20f)
         val world = before.screenToWorld(120f, 80f)
