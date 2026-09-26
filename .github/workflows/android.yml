@@ -22,7 +22,9 @@ jobs:
         with:
           log-accepted-android-sdk-licenses: false
       - name: Android SDK 37
-        run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
+        run: |
+          sdkmanager --list --channel=3 | grep -Ei 'android-37|Cinnamon|build-tools;37' || true
+          sdkmanager --channel=3 "platforms;android-37" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v6
         with:
           cache-provider: basic
