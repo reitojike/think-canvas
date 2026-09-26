@@ -59,3 +59,4 @@ US1 を最初の MVP とし、世界座標を崩さず US2/US3 を積み上げ�
 - [x] T018 保存完了を待ってから確定操作を閉じ、保存失敗時に同じ snapshot を再試行できるようにする per FR-009 (partial)
 - [x] T019 gesture 中断時に preview を破棄し、未確定移動を表示・保存へ残さない per 境界条件 (partial)
 - [x] T020 Room 再オープンテストの名称と実際の検証範囲を一致させる per T014 (partial)
+- [x] T021 保存待ち・保存失敗時に編集ツールの無効状態を表示と accessibility semantics に反映し、再試行操作は有効に保つ per accessibility contract (partial)

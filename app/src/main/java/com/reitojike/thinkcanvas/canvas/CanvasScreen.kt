@@ -57,6 +57,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -441,21 +442,22 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(3.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                EditorOption(stringResource(R.string.title_kind), draft!!.kind == TextKind.TITLE, false) {
+                val editingEnabled = !saving && !saveFailed
+                EditorOption(stringResource(R.string.title_kind), draft!!.kind == TextKind.TITLE, false, enabled = editingEnabled) {
                     if (!saving && !saveFailed) draft = draft?.copy(kind = TextKind.TITLE)
                 }
-                EditorOption(stringResource(R.string.body_kind), draft!!.kind == TextKind.BODY, false) {
+                EditorOption(stringResource(R.string.body_kind), draft!!.kind == TextKind.BODY, false, enabled = editingEnabled) {
                     if (!saving && !saveFailed) draft = draft?.copy(kind = TextKind.BODY)
                 }
-                EditorOption(stringResource(R.string.vermilion_short), draft!!.color == TextColor.VERMILION, true) {
+                EditorOption(stringResource(R.string.vermilion_short), draft!!.color == TextColor.VERMILION, true, enabled = editingEnabled) {
                     if (!saving && !saveFailed) draft = draft?.copy(
                         color = if (draft?.color == TextColor.VERMILION) TextColor.INK else TextColor.VERMILION,
                     )
                 }
-                EditorOption(stringResource(R.string.cancel_short), false, false) {
+                EditorOption(stringResource(R.string.cancel_short), false, false, enabled = editingEnabled) {
                     if (!saving && !saveFailed) { draft = null; keyboard?.hide() }
                 }
-                EditorOption(stringResource(if (saveFailed) R.string.retry else R.string.done), false, true) { commitDraft() }
+                EditorOption(stringResource(if (saveFailed) R.string.retry else R.string.done), false, true, enabled = !saving) { commitDraft() }
             }
         }
         if (saving || saveFailed) {
@@ -477,15 +479,19 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
 }
 
 @Composable
-private fun EditorOption(label: String, active: Boolean, accent: Boolean, onClick: () -> Unit) {
+private fun EditorOption(label: String, active: Boolean, accent: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier.size(width = if (label.length > 2) 64.dp else 48.dp, height = 44.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(if (active) if (accent) vermilion else ink else Color.Transparent)
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = label; stateDescription = if (active) "選択中" else "未選択" },
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics {
+                contentDescription = label
+                stateDescription = if (active) "選択中" else "未選択"
+                if (!enabled) disabled()
+            },
         contentAlignment = Alignment.Center,
-    ) { Text(label, color = if (active) Color.White else if (accent) vermilion else ink, fontSize = 13.sp) }
+    ) { Text(label, color = if (!enabled) muted.copy(alpha = 0.6f) else if (active) Color.White else if (accent) vermilion else ink, fontSize = 13.sp) }
 }
 
 private fun Modifier.pillBorder(radius: Float): Modifier = this.then(
