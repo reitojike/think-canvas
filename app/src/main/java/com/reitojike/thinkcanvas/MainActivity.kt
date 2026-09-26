@@ -6,22 +6,47 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.lifecycleScope
+import com.reitojike.thinkcanvas.canvas.BoardState
+import com.reitojike.thinkcanvas.canvas.CanvasScreen
+import com.reitojike.thinkcanvas.data.CanvasStore
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val store = CanvasStore.get(this)
+        val board = mutableStateOf<BoardState?>(null)
+
         setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(text = getString(R.string.app_name))
+            MaterialTheme(
+                colorScheme = lightColorScheme(
+                    primary = Color(0xFF23211E),
+                    secondary = Color(0xFFC54B32),
+                    background = Color(0xFFFCFCFB),
+                    surface = Color(0xFFFCFCFB),
+                ),
+            ) {
+                val current = board.value
+                if (current == null) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(stringResource(R.string.loading_board))
                     }
+                } else {
+                    CanvasScreen(current) { store.save(current.elements) }
                 }
             }
+        }
+
+        lifecycleScope.launch {
+            board.value = BoardState(store.load())
         }
     }
 }
