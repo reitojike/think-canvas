@@ -109,6 +109,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     var lassoPoints by remember { mutableStateOf<List<WorldPoint>>(emptyList()) }
     var gapPreview by remember { mutableStateOf<Pair<WorldPoint, WorldPoint>?>(null) }
     var menuTarget by remember { mutableStateOf<String?>(null) }
+    var attachmentEditor by remember { mutableStateOf<Pair<String, HandleKind>?>(null) }
     var regionNameId by remember { mutableStateOf<String?>(null) }
     var regionName by remember { mutableStateOf("") }
     var guidance by remember { mutableStateOf<String?>(null) }
@@ -682,6 +683,12 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 changed
             }
             },
+            onConnect = { id, kind ->
+                if (saving || saveFailed || board.arrows.none { it.id == id }) false else {
+                    attachmentEditor = id to kind
+                    true
+                }
+            },
             onSelect = { id -> selectedIds = setOf(id); selectedId = null },
             onAdd = { id ->
                 if (id in selectedIds) false else {
@@ -707,6 +714,25 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 }
             },
         )
+
+        attachmentEditor?.let { (arrowId, endKind) ->
+            board.arrows.firstOrNull { it.id == arrowId }?.let { arrow ->
+                ArrowAttachmentDialog(board.snapshot(), arrow, endKind,
+                    onDismiss = { attachmentEditor = null },
+                    onAttach = { end ->
+                        if (saving || saveFailed) false else {
+                            val current = if (endKind == HandleKind.FROM) arrow.from else arrow.to
+                            if (current == end) return@ArrowAttachmentDialog true
+                            val changed = if (endKind == HandleKind.FROM)
+                                board.updateArrow(arrowId, from = end)
+                            else board.updateArrow(arrowId, to = end)
+                            if (changed) saveSnapshot()
+                            changed
+                        }
+                    },
+                )
+            }
+        }
 
         displaySnapshot.texts.forEach { element ->
             if (draft?.id != element.id && pendingNewElementId != element.id) {

@@ -50,6 +50,7 @@ fun SpatialElements(
     gap: Pair<WorldPoint, WorldPoint>?,
     ghostIds: Set<String>,
     onHandle: (String, HandleKind) -> Boolean,
+    onConnect: (String, HandleKind) -> Boolean,
     onSelect: (String) -> Unit,
     onAdd: (String) -> Boolean,
     onMove: (String, Float, Float) -> Boolean,
@@ -227,6 +228,8 @@ fun SpatialElements(
                 CustomAccessibilityAction("右へ移動") { onMove(arrow.id, 16f, 0f) },
                 CustomAccessibilityAction("始点を自由端にする") { onHandle(arrow.id, HandleKind.FROM) },
                 CustomAccessibilityAction("終点を自由端にする") { onHandle(arrow.id, HandleKind.TO) },
+                CustomAccessibilityAction("始点を接続・付け替え") { onConnect(arrow.id, HandleKind.FROM) },
+                CustomAccessibilityAction("終点を接続・付け替え") { onConnect(arrow.id, HandleKind.TO) },
                 CustomAccessibilityAction("曲げる") { onHandle(arrow.id, HandleKind.BEND) },
                 CustomAccessibilityAction("反転") { onReverse(arrow.id) },
                 CustomAccessibilityAction("削除") { onDelete(arrow.id) },
@@ -244,8 +247,8 @@ fun SpatialElements(
         snapshot.arrowPoints(arrow, 6f / viewport.scale)?.let { (a, b) ->
             val (ax, ay) = viewport.worldToScreen(a.x, a.y)
             val (bx, by) = viewport.worldToScreen(b.x, b.y)
-            Handle(ax, ay, "始点を変更") { onHandle(arrow.id, HandleKind.FROM) }
-            Handle(bx, by, "終点を変更") { onHandle(arrow.id, HandleKind.TO) }
+            Handle(ax, ay, "始点を接続・付け替え") { onConnect(arrow.id, HandleKind.FROM) }
+            Handle(bx, by, "終点を接続・付け替え") { onConnect(arrow.id, HandleKind.TO) }
         }
         snapshot.arrowControl(arrow, 6f / viewport.scale)?.let { c ->
             val (x, y) = viewport.worldToScreen(c.x, c.y)

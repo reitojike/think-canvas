@@ -85,9 +85,21 @@ class SpatialGeometryTest {
         assertEquals(130f, board.shapes.first { it.id == crossing.id }.width)
         assertEquals(280f, board.shapes.first { it.id == inner.id }.width)
         assertEquals(500f, board.shapes.first { it.id == outer.id }.width)
-        assertEquals(ArrowEnd.Free(220f, 100f), board.arrows.first { it.id == arrow.id }.to)
+        assertEquals(ArrowEnd.Free(250f, 100f), board.arrows.first { it.id == arrow.id }.to)
         assertTrue(board.undo())
         assertEquals(130f, board.elements.first { it.id == "inside" }.x)
+        assertEquals(ArrowEnd.Free(220f, 100f), board.arrows.first { it.id == arrow.id }.to)
+    }
+
+    @Test
+    fun gapMovesOnlyFreeArrowEndsOnAffectedSide() {
+        val board = BoardState()
+        val arrow = board.addArrow(ArrowEnd.Free(60f, 20f), ArrowEnd.Free(160f, 20f))!!
+        assertTrue(board.insertGap(WorldPoint(100f, 0f), true, 30f))
+        assertEquals(ArrowEnd.Free(60f, 20f), board.arrows.single().from)
+        assertEquals(ArrowEnd.Free(190f, 20f), board.arrows.single().to)
+        assertTrue(board.undo())
+        assertEquals(arrow, board.arrows.single())
     }
 
     @Test

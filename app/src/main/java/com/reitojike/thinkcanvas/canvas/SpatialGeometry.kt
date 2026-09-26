@@ -245,5 +245,15 @@ fun BoardSnapshot.withGap(origin: WorldPoint, horizontal: Boolean, amount: Float
             }
         }
     }
-    return BoardSnapshot(updatedTexts, updatedShapes, arrows)
+    fun shiftFreeEnd(end: ArrowEnd): ArrowEnd {
+        if (end !is ArrowEnd.Free) return end
+        val point = WorldPoint(end.x, end.y)
+        if (scope != null && !scope.bounds().contains(point)) return end
+        val delta = shift(if (horizontal) end.x else end.y)
+        return if (horizontal) end.copy(x = end.x + delta) else end.copy(y = end.y + delta)
+    }
+    val updatedArrows = arrows.map { arrow ->
+        arrow.copy(from = shiftFreeEnd(arrow.from), to = shiftFreeEnd(arrow.to))
+    }
+    return BoardSnapshot(updatedTexts, updatedShapes, updatedArrows)
 }
