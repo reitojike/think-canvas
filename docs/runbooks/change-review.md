@@ -15,12 +15,14 @@
 3. リポジトリの root で、現在の必須チェックを実行します。
 
    ```powershell
-   .\gradlew.bat :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
+   .\gradlew.bat :app:lintDebug
+   .\gradlew.bat :app:testDebugUnitTest
+   .\gradlew.bat :app:assembleDebug
    pwsh -File scripts/check-public-boundary.ps1
    git diff --check
    ```
 
-   macOS / Linux では `bash ./gradlew :app:lintDebug :app:testDebugUnitTest :app:assembleDebug` を使います。保存や空間配置の不変条件は、実装の形を
+   macOS / Linux では各 Gradle コマンドの先頭を `./gradlew` に置き換えます。保存や空間配置の不変条件は、実装の形を
    なぞるだけでなく、振る舞いを確かめるテストで検証します。
 4. 変更ファイルの一覧と差分を読み、秘密情報、ローカルパス、個人情報、非公開サービス、
    会話ログ、PRD の本文、HTML モックの内容が含まれていないか確認します。チェック

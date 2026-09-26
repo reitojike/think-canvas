@@ -4,7 +4,7 @@
 
 ## Phase 1: セットアップ
 
-- [x] T001 `build.gradle.kts` と `app/build.gradle.kts` に Room 3.0.3、KSP 2.2.21-2.0.5、JUnit と schema export を設定する
+- [x] T001 `build.gradle.kts` と `app/build.gradle.kts` に Room 3.0.3、KSP 2.3.12、JUnit と schema export を設定する（KSP は Issue #10 で更新）
 
 ## Phase 2: 共通基盤
 

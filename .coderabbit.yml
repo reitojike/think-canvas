@@ -1,0 +1,10 @@
+language: ja-JP
+reviews:
+  auto_review:
+    enabled: false
+  review_status: false
+  review_progress: false
+  commit_status: false
+  path_filters:
+    - '!**/build/**'
+    - '!**/.gradle/**'
