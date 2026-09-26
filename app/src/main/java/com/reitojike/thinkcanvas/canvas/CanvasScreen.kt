@@ -191,7 +191,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             val height = maxOf(size.height * view.scale, with(density) { 44.dp.toPx() })
             val inText = point.x in x..(x + width) && point.y in y..(y + height)
             val gripCenter = x + size.width * view.scale / 2f
-            val gripRadius = with(density) { 22.dp.toPx() }
+            val gripRadius = with(density) { 24.dp.toPx() }
             val inGrip = latestSelected.value == element.id &&
                 point.x in (gripCenter - gripRadius)..(gripCenter + gripRadius) &&
                 point.y in (y + size.height * view.scale)..(y + size.height * view.scale + gripRadius * 2f)
@@ -327,6 +327,11 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                         val (x, y) = latestViewport.value.worldToScreen(shape.x + shape.width, shape.y + shape.height)
                         (start - Offset(x, y)).getDistance() <= radius
                     }?.let { shape -> targetId = shape.id; handle = HandleKind.RESIZE }
+                    snapshot.shapes.filter { it.id in latestSelectedIds.value }.firstOrNull { shape ->
+                        val (x, y) = latestViewport.value.worldToScreen(shape.x + shape.width / 2f,
+                            shape.y + shape.height + 14f)
+                        (start - Offset(x, y)).getDistance() <= radius
+                    }?.let { shape -> if (handle == null) { targetId = shape.id; handle = HandleKind.MOVE } }
                     snapshot.arrows.filter { it.id in latestSelectedIds.value }.forEach { arrow ->
                         snapshot.arrowPoints(arrow)?.let { (a, b) ->
                             val (ax, ay) = latestViewport.value.worldToScreen(a.x, a.y)
@@ -425,7 +430,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                                     if (board.moveSelection(ids, dx, dy)) {
                                         val afterRegion = board.snapshot().centerOf(activeId)?.let { board.snapshot().smallestRegionAt(it)?.id }
                                         if (beforeRegion != afterRegion) {
-                                            guidance = if (afterRegion == null) "囲みから出ました" else "囲みに入りました"
+                                            val id = afterRegion ?: beforeRegion
+                                            val label = board.shapes.firstOrNull { it.id == id }?.name
+                                                ?.takeIf { it.isNotBlank() } ?: "囲み"
+                                            guidance = if (afterRegion == null) "${label}から出ました" else "${label}に入りました"
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         }
                                         saveSnapshot()
@@ -438,6 +446,11 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                             "handle" -> if (activeId != null && handle != null) {
                                 val worldEnd = latestViewport.value.screenToWorld(end.x, end.y)
                                 val changed = when (handle) {
+                                    HandleKind.MOVE -> board.moveSelection(
+                                        if (activeId in latestSelectedIds.value) latestSelectedIds.value else setOf(activeId),
+                                        (end.x - start.x) / latestViewport.value.scale,
+                                        (end.y - start.y) / latestViewport.value.scale,
+                                    )
                                     HandleKind.RESIZE -> board.shapes.firstOrNull { it.id == activeId }?.let {
                                         board.resizeShape(activeId, worldEnd.first - it.x, worldEnd.second - it.y)
                                     } ?: false
@@ -567,6 +580,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             onHandle = { id, kind ->
             if (!saving && !saveFailed) {
                 val changed = when (kind) {
+                    HandleKind.MOVE -> board.moveSelection(setOf(id), 16f, 0f)
                     HandleKind.RESIZE -> board.shapes.firstOrNull { it.id == id }?.let {
                         board.resizeShape(id, it.width + 16f, it.height + 16f)
                     } ?: false
@@ -645,10 +659,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 )
                 if (selected && draft == null) {
                     val size = elementSizes[element.id] ?: IntSize(160, 48)
-                    val gripX = screenX + size.width * viewport.scale / 2f - with(density) { 22.dp.toPx() }
+                    val gripX = screenX + size.width * viewport.scale / 2f - with(density) { 24.dp.toPx() }
                     val gripY = screenY + size.height * viewport.scale + with(density) { 2.dp.toPx() }
                     Box(
-                        modifier = Modifier.offsetPx(gripX, gripY).size(44.dp)
+                        modifier = Modifier.offsetPx(gripX, gripY).size(48.dp)
                             .semantics {
                                 contentDescription = moveElementLabel
                                 if (!elementActionsEnabled) disabled()

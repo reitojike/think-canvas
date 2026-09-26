@@ -74,12 +74,15 @@ class SpatialGeometryTest {
         val outer = board.addShape(ShapeKind.REGION, 0f, 0f, 500f, 300f)
         val inner = board.addShape(ShapeKind.REGION, 20f, 20f, 250f, 200f)
         val crossing = board.addShape(ShapeKind.RECTANGLE, 60f, 80f, 100f, 50f)
+        val arrow = board.addArrow(ArrowEnd.Attached(crossing.id, 1f, .5f),
+            ArrowEnd.Free(220f, 100f))!!
         assertTrue(board.insertGap(WorldPoint(120f, 60f), true, 30f))
         assertEquals(160f, board.elements.first { it.id == "inside" }.x)
         assertEquals(400f, board.elements.first { it.id == "outside" }.x)
         assertEquals(130f, board.shapes.first { it.id == crossing.id }.width)
         assertEquals(280f, board.shapes.first { it.id == inner.id }.width)
         assertEquals(500f, board.shapes.first { it.id == outer.id }.width)
+        assertEquals(ArrowEnd.Free(220f, 100f), board.arrows.first { it.id == arrow.id }.to)
         assertTrue(board.undo())
         assertEquals(130f, board.elements.first { it.id == "inside" }.x)
     }

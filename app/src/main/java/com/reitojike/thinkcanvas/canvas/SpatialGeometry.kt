@@ -167,6 +167,12 @@ fun BoardSnapshot.translatedSelection(ids: Set<String>, dx: Float, dy: Float): B
             shapes.filter { it.id != region.id }.forEach {
                 if (region.bounds().contains(it.bounds().center)) moved += it.id
             }
+            arrows.forEach { arrow ->
+                arrowPoints(arrow)?.let { (a, b) ->
+                    val middle = WorldPoint((a.x + b.x) / 2f, (a.y + b.y) / 2f)
+                    if (region.bounds().contains(middle)) moved += arrow.id
+                }
+            }
         }
         expanded = moved.size != previousSize
     } while (expanded)
@@ -225,13 +231,5 @@ fun BoardSnapshot.withGap(origin: WorldPoint, horizontal: Boolean, amount: Float
             }
         }
     }
-    val updatedArrows = arrows.map { arrow ->
-        fun move(end: ArrowEnd): ArrowEnd = if (end is ArrowEnd.Free &&
-            (scope == null || scope.bounds().contains(WorldPoint(end.x, end.y)))) {
-            val delta = shift(if (horizontal) end.x else end.y)
-            if (horizontal) end.copy(x = end.x + delta) else end.copy(y = end.y + delta)
-        } else end
-        arrow.copy(from = move(arrow.from), to = move(arrow.to))
-    }
-    return BoardSnapshot(updatedTexts, updatedShapes, updatedArrows)
+    return BoardSnapshot(updatedTexts, updatedShapes, arrows)
 }

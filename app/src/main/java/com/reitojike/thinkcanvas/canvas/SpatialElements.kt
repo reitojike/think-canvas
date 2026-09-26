@@ -223,6 +223,9 @@ fun SpatialElements(
     snapshot.shapes.filter { it.id in selected }.forEach { shape ->
         val (x, y) = viewport.worldToScreen(shape.x + shape.width, shape.y + shape.height)
         Handle(x, y, "サイズ変更") { onHandle(shape.id, HandleKind.RESIZE) }
+        val (moveX, moveY) = viewport.worldToScreen(shape.x + shape.width / 2f,
+            shape.y + shape.height + 14f)
+        Handle(moveX, moveY, "移動") { onHandle(shape.id, HandleKind.MOVE) }
     }
     snapshot.arrows.filter { it.id in selected }.forEach { arrow ->
         snapshot.arrowPoints(arrow)?.let { (a, b) ->
@@ -238,7 +241,7 @@ fun SpatialElements(
     }
 }
 
-enum class HandleKind { RESIZE, FROM, TO, BEND }
+enum class HandleKind { MOVE, RESIZE, FROM, TO, BEND }
 
 @Composable
 private fun Handle(x: Float, y: Float, label: String, onClick: () -> Unit) {

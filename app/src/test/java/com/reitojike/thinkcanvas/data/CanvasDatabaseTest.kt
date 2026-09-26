@@ -38,7 +38,7 @@ class CanvasDatabaseTest {
     }
 
     @Test
-    fun shapesAndArrowsSurviveReopenWithoutChangingBoardName() = runBlocking {
+    fun shapesAndArrowsSurviveReopenWithoutChangingBoardName() { runBlocking {
         val file = Files.createTempFile("think-canvas-spatial-", ".db").toFile()
         file.delete()
         fun open() = Room.databaseBuilder<CanvasDatabase>(file.absolutePath)
@@ -61,5 +61,5 @@ class CanvasDatabaseTest {
         assertEquals(emptyList<ArrowElementRow>(), second.canvasDao().arrows())
         second.close()
         file.delete()
-    }
+    } }
 }
