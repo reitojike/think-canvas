@@ -45,7 +45,7 @@
 
 - [x] T018 `app/src/test/java/com/thinkcanvas/canvas/SemanticNavigationTest.kt` と既存の保存テストで、表示・検索・視点操作が board snapshot と Undo/Redo 履歴を変更しないことを確認する。
 - [x] T019 `specs/004-semantic-navigation/quickstart.md` に沿って lint・単体テスト・ビルド・Android 17 エミュレーター・公開情報境界を確認し、モックとの差をレビューする。
-- [ ] T020 converge で仕様との差を確認し、残作業があれば追記して完了する。PR に実機で後日確認する項目を記録する。
+- [x] T020 converge で仕様との差を確認し、残作業があれば追記して完了する。PR に実機で後日確認する項目を記録する。
 
 ## 依存関係
 
