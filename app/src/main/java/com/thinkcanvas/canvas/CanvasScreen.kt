@@ -171,35 +171,38 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     }
     val rawSearchMatches = if (searchOpen) board.snapshot().searchCanvas(searchQuery) else emptyList()
     val matchIds = rawSearchMatches.map { it.id }.toSet()
+    fun measureTextExtent(element: TextElement, atScale: Float,
+                          keepIds: Set<String>): TextExtent {
+        val tier = semanticTier(bodyDp, atScale)
+        val title = element.kind == TextKind.TITLE
+        val minimumDp = when (tier) {
+            SemanticTier.NEAR -> if (title) 11f else 10f
+            SemanticTier.MID -> if (title) 11f else 9.5f
+            SemanticTier.FAR -> if (title) 9f else 10f
+        }
+        val size = with(density) {
+            maxOf(if (title) titleDp else bodyDp, minimumDp / atScale).dp.toSp()
+        }
+        val lineWorld = with(density) { (size * 1.5f).toDp().toPx() }
+        val widthDp = if (title && tier != SemanticTier.NEAR && element.id !in keepIds)
+            board.snapshot().titleAvailableWidth(element, lineWorld)
+                ?.let { (it / density.density).dp } ?: 166.dp
+        else 166.dp
+        val measured = textMeasurer.measure(
+            text = AnnotatedString(element.text),
+            style = TextStyle(fontSize = size, lineHeight = size * 1.5f,
+                fontWeight = if (title) FontWeight.Bold else FontWeight.Normal),
+            maxLines = if (tier == SemanticTier.NEAR) Int.MAX_VALUE else 1,
+            overflow = TextOverflow.Ellipsis,
+            constraints = Constraints(maxWidth = with(density) {
+                widthDp.roundToPx().coerceAtLeast(0) }),
+        ).size
+        return TextExtent(measured.width.toFloat(), measured.height.toFloat())
+    }
     val measuredTextExtents = remember(board.elements, board.shapes, viewport.scale, density,
         selectedIds, matchIds) {
-        val snapshot = board.snapshot()
         board.elements.associate { element ->
-            val title = element.kind == TextKind.TITLE
-            val minimumDp = when (titleTier) {
-                SemanticTier.NEAR -> if (title) 11f else 10f
-                SemanticTier.MID -> if (title) 11f else 9.5f
-                SemanticTier.FAR -> if (title) 9f else 10f
-            }
-            val size = with(density) {
-                (maxOf(if (title) titleDp else bodyDp,
-                    minimumDp / viewport.scale).dp.toSp())
-            }
-            val widthDp = if (title && titleTier != SemanticTier.NEAR &&
-                element.id !in selectedIds && element.id !in matchIds)
-                snapshot.titleAvailableWidth(element, titleLineHeightWorld)
-                    ?.let { (it / density.density).dp } ?: 166.dp
-            else 166.dp
-            val measured = textMeasurer.measure(
-                text = AnnotatedString(element.text),
-                style = TextStyle(fontSize = size, lineHeight = size * 1.5f,
-                    fontWeight = if (title) FontWeight.Bold else FontWeight.Normal),
-                maxLines = if (titleTier == SemanticTier.NEAR) Int.MAX_VALUE else 1,
-                overflow = TextOverflow.Ellipsis,
-                constraints = Constraints(maxWidth = with(density) {
-                    widthDp.roundToPx().coerceAtLeast(0) }),
-            ).size
-            element.id to TextExtent(measured.width.toFloat(), measured.height.toFloat())
+            element.id to measureTextExtent(element, viewport.scale, selectedIds + matchIds)
         }
     }
     val searchMatches = rawSearchMatches.map { match ->
@@ -241,8 +244,16 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     fun focusMatch(index: Int) {
         if (searchMatches.isEmpty() || canvasSize == IntSize.Zero) return
         searchPosition = searchIndex(index, 0, searchMatches.size)
-        animateViewport(viewport.focusMatch(searchMatches[searchPosition],
-            canvasSize.width.toFloat(), canvasSize.height.toFloat()))
+        val width = canvasSize.width.toFloat()
+        val height = canvasSize.height.toFloat()
+        val match = searchMatches[searchPosition]
+        val initialTarget = viewport.focusMatch(match, width, height)
+        val targetMatch = board.elements.firstOrNull { it.id == match.id }?.let { element ->
+            val extent = measureTextExtent(element, initialTarget.scale, selectedIds + matchIds)
+            match.copy(bounds = WorldBounds(element.x, element.y,
+                element.x + extent.width, element.y + extent.height))
+        } ?: match
+        animateViewport(viewport.focusMatch(targetMatch, width, height))
     }
     val selectedLabel = stringResource(R.string.selection_state_selected)
     val unselectedLabel = stringResource(R.string.unselected)

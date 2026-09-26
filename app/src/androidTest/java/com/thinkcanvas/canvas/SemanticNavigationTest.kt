@@ -100,7 +100,8 @@ class SemanticNavigationTest {
     @Test fun farRegionFitsAndSearchFindsSavedText() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
-        val body = TextElement(id = "search-body", text = "Idea note", x = 450f, y = 1040f)
+        val body = TextElement(id = "search-body",
+            text = "Idea note\nMore detail\nAnother line", x = 450f, y = 1040f)
         val secondBody = TextElement(id = "search-second", text = "Second idea", x = 900f, y = 1400f)
         val region = ShapeElement(id = "search-region", kind = ShapeKind.REGION,
             x = 400f, y = 1000f, width = 450f, height = 400f, name = "Cluster")
