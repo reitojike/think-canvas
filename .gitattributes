@@ -1,0 +1,2 @@
+# Spec Kit が Windows で生成する JSON の CRLF を行末空白とみなさない。
+*.json whitespace=cr-at-eol

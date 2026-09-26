@@ -1,0 +1,47 @@
+# Android / Gradle build state
+.gradle/
+**/build/
+local.properties
+.cxx/
+captures/
+*.apk
+*.aab
+*.ap_
+*.hprof
+
+# IDE and machine-local files
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Credentials, private inputs, and local overrides
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+*.p12
+*.p8
+*.pem
+*.key
+*.mobileprovision
+google-services.json
+GoogleService-Info.plist
+secrets.properties
+**/secrets.properties
+**/private/**
+**/non-public/**
+**/conversation-logs/**
+PRD.md
+PRD.*
+**/*mock*.html
+**/*mock*.htm
+*.log
+*.log.*
+
+# Share only the generated Spec Kit skills in the agent folder
+.agents/*
+!.agents/skills/
+!.agents/skills/**
