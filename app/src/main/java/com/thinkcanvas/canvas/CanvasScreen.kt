@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInParent
@@ -105,6 +106,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var tool by remember { mutableStateOf(SpatialTool.NONE) }
+    var inkTool by remember { mutableStateOf<InkKind?>(null) }
+    var inkPreview by remember { mutableStateOf<InkPreview?>(null) }
     var toolsExpanded by remember { mutableStateOf(false) }
     var spatialPreview by remember { mutableStateOf<SpatialPreview?>(null) }
     var lassoPoints by remember { mutableStateOf<List<WorldPoint>>(emptyList()) }
@@ -121,6 +124,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     var saving by remember { mutableStateOf(false) }
     var saveFailed by remember { mutableStateOf(false) }
     var finishDraftAfterSave by remember { mutableStateOf(false) }
+    var pendingInkSave by remember { mutableStateOf(false) }
     var pendingNewElementId by remember { mutableStateOf<String?>(null) }
     val elementSizes = remember { mutableStateMapOf<String, IntSize>() }
     val chromeBounds = remember { mutableStateMapOf<String, Rect>() }
@@ -139,6 +143,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val latestSelected = rememberUpdatedState(selectedId)
     val latestSelectedIds = rememberUpdatedState(selectedIds)
     val latestTool = rememberUpdatedState(tool)
+    val latestInkTool = rememberUpdatedState(inkTool)
     val latestDraft = rememberUpdatedState(draft)
     val latestSaveBlocked = rememberUpdatedState(saving || saveFailed)
     val latestCommit = rememberUpdatedState(onCommittedChange)
@@ -158,7 +163,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val regionNameLabel = stringResource(R.string.region_name)
 
     fun saveSnapshot(closeDraft: Boolean = false) {
-        if (saving) return
+        if (saving) { pendingInkSave = true; return }
         finishDraftAfterSave = closeDraft
         saving = true
         saveFailed = false
@@ -184,6 +189,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 saveFailed = true
             } finally {
                 saving = false
+                if (pendingInkSave && !saveFailed) {
+                    pendingInkSave = false
+                    saveSnapshot()
+                }
             }
         }
     }
@@ -210,6 +219,9 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         val (wx, wy) = view.screenToWorld(point.x, point.y)
         val world = WorldPoint(wx, wy)
         val snapshot = latestSnapshot.value
+        snapshot.ink.asReversed().firstOrNull { element ->
+            element.hitStroke(world, (if (element.kind == InkKind.MARKER) 12f else 7f) / view.scale)
+        }?.let { return it.id }
         snapshot.arrows.asReversed().firstOrNull { arrow ->
             snapshot.distanceToArrow(world, arrow, 6f / view.scale) <= 12f / view.scale
         }?.let { return it.id }
@@ -269,6 +281,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         if (chromeBounds.values.any { it.contains(point) }) return
         val element = hitTest(point)
         val spatial = if (element == null) hitSpatial(point) else null
+        if (latestInkTool.value != null) return
         if (element == null && spatial == null) {
             if (latestSelectedIds.value.isNotEmpty()) { selectedId = null; selectedIds = emptySet() }
             else {
@@ -340,8 +353,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             keyboard?.show()
         }
     }
-    LaunchedEffect(guidance, tool, selectedIds) {
-        if (guidance == null && tool == SpatialTool.NONE && selectedIds.size <= 1)
+    LaunchedEffect(guidance, tool, inkTool, selectedIds) {
+        if (guidance == null && tool == SpatialTool.NONE && inkTool == null && selectedIds.size <= 1)
             chromeBounds.remove("guidance")
     }
     LaunchedEffect(guidance, tool) {
@@ -384,8 +397,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             }.pointerInput(board) {
             awaitEachGesture {
                 try {
-                val down = awaitFirstDown()
-                if (latestDraft.value != null || latestSaveBlocked.value) return@awaitEachGesture
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val requestedInk = down.type == PointerType.Stylus || latestInkTool.value != null
+                if (latestDraft.value != null || saveFailed || (saving && !requestedInk))
+                    return@awaitEachGesture
                 if (chromeBounds.values.any { it.contains(down.position) }) return@awaitEachGesture
                 val target = hitTest(down.position)
                 var targetId = target?.id ?: hitSpatial(down.position)
@@ -394,6 +409,14 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 var end = start
                 var gapDirectionConfirmed = false
                 val activeTool = latestTool.value
+                var drawingKind = if (down.type == PointerType.Stylus) InkKind.PEN else latestInkTool.value
+                var drawingInput = if (down.type == PointerType.Stylus) InkInputType.STYLUS else InkInputType.TOUCH
+                var drawingStart = startTime
+                var drawingPointer = down.id
+                var drawingPoints = if (drawingKind != null)
+                    latestViewport.value.screenToWorld(down.position.x, down.position.y).let { (x, y) ->
+                        listOf(InkPoint(x, y, 0L))
+                    } else emptyList()
                 val selectedGrip = target != null && target.id in latestSelectedIds.value &&
                     run {
                         val (_, y) = latestViewport.value.worldToScreen(target.x, target.y)
@@ -434,6 +457,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 val activeId = targetId
                 val gestureSnapshot = latestSnapshot.value
                 var mode = when {
+                    drawingKind != null -> "ink"
                     activeTool == SpatialTool.LASSO -> "lasso"
                     activeTool != SpatialTool.NONE -> "create"
                     handle != null -> "handle"
@@ -441,6 +465,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     else -> "tap"
                 }
                 val startWorld = latestViewport.value.screenToWorld(start.x, start.y).let { WorldPoint(it.first, it.second) }
+                if (mode == "ink") inkPreview = InkPreview(drawingKind!!, drawingInput, drawingPoints)
                 if (mode == "lasso") lassoPoints = listOf(startWorld)
                 while (true) {
                     val remaining = longPressMillis - (SystemClock.uptimeMillis() - startTime)
@@ -462,10 +487,24 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                         continue
                     }
                     val pressed = event.changes.filter { it.pressed }
-                    if (pressed.isEmpty()) {
+                    val activeReleased = mode == "ink" && event.changes.any { it.id == drawingPointer && !it.pressed }
+                    if (pressed.isEmpty() || activeReleased) {
                         if (event.type != PointerEventType.Release) break
-                        end = event.changes.firstOrNull()?.position ?: end
+                        end = event.changes.firstOrNull { it.id == drawingPointer }?.position
+                            ?: event.changes.firstOrNull()?.position ?: end
                         when (mode) {
+                            "ink" -> if (drawingKind != null && drawingPoints.isNotEmpty()) {
+                                val endTime = SystemClock.uptimeMillis()
+                                val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
+                                val last = drawingPoints.last()
+                                if (last.x != x || last.y != y) drawingPoints = drawingPoints +
+                                    InkPoint(x, y, (endTime - drawingStart).coerceAtLeast(last.elapsedMillis))
+                                val stroke = InkStroke(startedAt = drawingStart, endedAt = endTime,
+                                    inputType = drawingInput, points = drawingPoints)
+                                if (board.addInkStroke(drawingKind, stroke))
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                saveSnapshot()
+                            }
                             "tap" -> tap(start)
                             "create" -> {
                                 guidance = null
@@ -591,10 +630,22 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                         spatialPreview = null
                         gapPreview = null
                         lassoPoints = emptyList()
+                        inkPreview = null
                         break
                     }
-                    if (pressed.size >= 2) {
+                    val activeStylus = pressed.firstOrNull { it.type == PointerType.Stylus }
+                    if (activeStylus != null && drawingInput != InkInputType.STYLUS) {
+                        mode = "ink"
+                        drawingKind = InkKind.PEN
+                        drawingInput = InkInputType.STYLUS
+                        drawingPointer = activeStylus.id
+                        drawingStart = SystemClock.uptimeMillis()
+                        drawingPoints = listOf(latestViewport.value.screenToWorld(
+                            activeStylus.position.x, activeStylus.position.y).let { (x, y) -> InkPoint(x, y, 0L) })
+                        inkPreview = InkPreview(InkKind.PEN, InkInputType.STYLUS, drawingPoints)
+                    } else if (pressed.size >= 2 && activeStylus == null) {
                         mode = "zoom"
+                        inkPreview = null
                         movePreview = null
                         handlePreview = null
                         spatialPreview = null
@@ -614,11 +665,23 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                             )
                         }
                     } else {
-                        val change = pressed.first()
+                        val change = if (mode == "ink") pressed.firstOrNull { it.id == drawingPointer }
+                            ?: pressed.first() else pressed.first()
                         end = change.position
                         val delta = change.position - change.previousPosition
                         if (mode == "tap" && (change.position - start).getDistance() > touchSlop) mode = "pan"
                         when (mode) {
+                            "ink" -> {
+                                val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
+                                val elapsed = (SystemClock.uptimeMillis() - drawingStart).coerceAtLeast(0L)
+                                val last = drawingPoints.lastOrNull()
+                                if (last == null || (last.x != x || last.y != y) && elapsed >= last.elapsedMillis) {
+                                    drawingPoints = drawingPoints + InkPoint(x, y, elapsed)
+                                    inkPreview = InkPreview(
+                                        if (drawingInput == InkInputType.STYLUS) InkKind.PEN else drawingKind!!,
+                                        drawingInput, drawingPoints)
+                                }
+                            }
                             "pan" -> viewport = latestViewport.value.pan(delta.x, delta.y)
                             "move" -> if (activeId != null) {
                                 val dx = (change.position.x - start.x) / latestViewport.value.scale
@@ -666,11 +729,13 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     spatialPreview = null
                     gapPreview = null
                     lassoPoints = emptyList()
+                    inkPreview = null
                 }
             }
         },
     ) {
-        if (board.elements.isEmpty() && board.shapes.isEmpty() && board.arrows.isEmpty() && draft == null) {
+        if (board.elements.isEmpty() && board.shapes.isEmpty() && board.arrows.isEmpty() &&
+            board.ink.isEmpty() && draft == null) {
             Text(
                 stringResource(R.string.empty_hint), color = Color(0xFFB1ACA5), fontSize = 13.sp,
                 modifier = Modifier.align(Alignment.Center),
@@ -698,6 +763,18 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 displaySnapshot.shapes.filterIndexed { index, it -> it != sourceSnapshot.shapes[index] }.map { it.id }).toSet()
         }
         val movingIds = movingPreview?.first ?: emptySet()
+        InkLayer(displaySnapshot.ink, InkKind.MARKER, viewport, selectedIds, movingIds, inkPreview,
+            onSelect = { id -> selectedIds = setOf(id); selectedId = null },
+            onMove = { id, dx, dy ->
+                if (saving || saveFailed) false else board.moveSelection(
+                    if (id in selectedIds) selectedIds else setOf(id), dx, dy,
+                ).also { if (it) saveSnapshot() }
+            },
+            onDelete = { id ->
+                if (saving || saveFailed) false else board.delete(setOf(id)).also {
+                    if (it) { selectedIds = emptySet(); selectedId = null; saveSnapshot() }
+                }
+            })
         SpatialElements(displaySnapshot, viewport, selectedIds, movingIds, spatialPreview, lassoPoints, gapPreview, ghostIds,
             onHandle = { id, kind ->
             if (saving || saveFailed) false else {
@@ -890,6 +967,19 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             )
         }
 
+        InkLayer(displaySnapshot.ink, InkKind.PEN, viewport, selectedIds, movingIds, inkPreview,
+            onSelect = { id -> selectedIds = setOf(id); selectedId = null },
+            onMove = { id, dx, dy ->
+                if (saving || saveFailed) false else board.moveSelection(
+                    if (id in selectedIds) selectedIds else setOf(id), dx, dy,
+                ).also { if (it) saveSnapshot() }
+            },
+            onDelete = { id ->
+                if (saving || saveFailed) false else board.delete(setOf(id)).also {
+                    if (it) { selectedIds = emptySet(); selectedId = null; saveSnapshot() }
+                }
+            })
+
         if (draft == null) {
             Box(
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = 8.dp)
@@ -898,6 +988,22 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     .onGloballyPositioned { chromeBounds["board"] = it.boundsInParent() },
                 contentAlignment = Alignment.Center,
             ) { Text(stringResource(R.string.board_name), color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+
+            if (inkTool != null) {
+                Row(Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 14.dp)
+                    .background(Color.White, RoundedCornerShape(24.dp)).pillBorder(24f)
+                    .padding(horizontal = 4.dp)
+                    .onGloballyPositioned { chromeBounds["ink"] = it.boundsInParent() },
+                    verticalAlignment = Alignment.CenterVertically) {
+                    EditorOption("ペン", inkTool == InkKind.PEN, false, !saving && !saveFailed) {
+                        inkTool = InkKind.PEN
+                    }
+                    EditorOption("マーカー", inkTool == InkKind.MARKER, true, !saving && !saveFailed) {
+                        inkTool = InkKind.MARKER
+                    }
+                    EditorOption("やめる", false, false, true) { inkTool = null }
+                }
+            } else chromeBounds.remove("ink")
 
             Row(
                 modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 16.dp)
@@ -924,7 +1030,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     .onGloballyPositioned { chromeBounds["zoom"] = it.boundsInParent() },
             ) { Text("${(viewport.scale * 100).roundToInt()}%  近", color = muted, fontSize = 11.sp) }
 
-            Column(
+            if (inkTool == null) Column(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 70.dp)
                     .onGloballyPositioned { chromeBounds["tools"] = it.boundsInParent() },
                 horizontalAlignment = Alignment.End,
@@ -980,10 +1086,16 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                             if (created) { tool = SpatialTool.NONE; toolsExpanded = false }
                             created
                         }
+                    }, onInkSelect = { kind ->
+                        inkTool = kind
+                        tool = SpatialTool.NONE
+                        toolsExpanded = false
+                        selectedIds = emptySet()
+                        selectedId = null
                     })
             }
 
-            val message = guidance ?: when (tool) {
+            val message = if (inkTool != null) "1本指で描く ・ 2本指で移動" else guidance ?: when (tool) {
                 SpatialTool.NONE -> if (selectedIds.size > 1) "${selectedIds.size}個を選択" else null
                 SpatialTool.LASSO -> "指で囲んで選択"
                 SpatialTool.ARROW -> "ドラッグして矢印を作成"

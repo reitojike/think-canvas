@@ -23,6 +23,7 @@ class CanvasStore private constructor(context: Context) {
             texts = dao.elements().map { it.toModel() },
             shapes = dao.spatialElements().map { it.toModel() },
             arrows = dao.arrows().map { it.toModel() },
+            ink = InkStrokeRow.toElements(dao.inkStrokes()),
         )
     }
 
@@ -31,11 +32,12 @@ class CanvasStore private constructor(context: Context) {
         require(snapshot.arrows.all { arrow ->
             listOf(arrow.from, arrow.to).all { it !is ArrowEnd.Attached || it.targetId in targets }
         }) { "矢印の接続先が見つかりません" }
-        val texts = snapshot.texts.map(TextElementRow::fromModel)
-        val shapes = snapshot.shapes.map(SpatialElementRow::fromModel)
-        val arrows = snapshot.arrows.map(ArrowElementRow::fromModel)
         return scope.async {
-            mutex.withLock { dao.replaceAll(texts, shapes, arrows) }
+            val texts = snapshot.texts.map(TextElementRow::fromModel)
+            val shapes = snapshot.shapes.map(SpatialElementRow::fromModel)
+            val arrows = snapshot.arrows.map(ArrowElementRow::fromModel)
+            val ink = snapshot.ink.flatMap(InkStrokeRow::fromModel)
+            mutex.withLock { dao.replaceAll(texts, shapes, arrows, ink) }
         }
     }
 

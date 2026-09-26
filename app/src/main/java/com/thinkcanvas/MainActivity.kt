@@ -54,7 +54,7 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             val snapshot = store.load()
-            board.value = BoardState(snapshot.texts, snapshot.shapes, snapshot.arrows)
+            board.value = BoardState(snapshot.texts, snapshot.shapes, snapshot.arrows, snapshot.ink)
         }
     }
 }

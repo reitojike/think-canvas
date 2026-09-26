@@ -37,9 +37,24 @@ enum class SpatialTool(val label: String, val icon: String, @StringRes val label
 @Composable
 fun SpatialTools(tool: SpatialTool, expanded: Boolean, enabled: Boolean,
                  onExpand: () -> Unit, onSelect: (SpatialTool) -> Unit,
-                 onAccessibleAction: (SpatialTool) -> Boolean) {
+                 onAccessibleAction: (SpatialTool) -> Boolean,
+                 onInkSelect: (InkKind) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
         if (expanded) {
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("ペン", color = Color.White, fontSize = 12.sp,
+                    modifier = Modifier.background(Color(0xFF23211E), RoundedCornerShape(5.dp))
+                        .padding(horizontal = 8.dp, vertical = 5.dp))
+                ToolButton("✎", "ペン", enabled, onClick = { onInkSelect(InkKind.PEN) })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("マーカー", color = Color.White, fontSize = 12.sp,
+                    modifier = Modifier.background(Color(0xFF23211E), RoundedCornerShape(5.dp))
+                        .padding(horizontal = 8.dp, vertical = 5.dp))
+                ToolButton("▰", "マーカー", enabled, onClick = { onInkSelect(InkKind.MARKER) })
+            }
             listOf(SpatialTool.LASSO, SpatialTool.REGION, SpatialTool.ARROW,
                 SpatialTool.ELLIPSE, SpatialTool.RECTANGLE).forEach { item ->
                 val label = stringResource(item.labelRes)

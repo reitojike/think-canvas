@@ -19,6 +19,7 @@ android {
         targetSdk = 37
         versionCode = providers.environmentVariable("THINKCANVAS_VERSION_CODE").orNull?.toInt() ?: 1
         versionName = providers.environmentVariable("THINKCANVAS_VERSION_NAME").orNull ?: "0.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -62,9 +63,15 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.ink:ink-brush:1.0.0")
+    implementation("androidx.ink:ink-strokes:1.0.0")
+    implementation("androidx.ink:ink-rendering:1.0.0")
+    implementation("androidx.ink:ink-storage:1.0.0")
     implementation("androidx.room3:room3-runtime:3.0.3")
     implementation("androidx.sqlite:sqlite-framework:2.7.1")
     ksp("androidx.room3:room3-compiler:3.0.3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("androidx.sqlite:sqlite-bundled-jvm:2.7.1")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
 }

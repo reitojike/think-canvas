@@ -20,6 +20,7 @@ fun ShapeElement.bounds() = WorldBounds(x, y, x + width, y + height)
 
 fun BoardSnapshot.boundsOf(id: String): WorldBounds? =
     shapes.firstOrNull { it.id == id }?.bounds()
+        ?: ink.firstOrNull { it.id == id }?.bounds()
         ?: texts.firstOrNull { it.id == id }?.let { element ->
             val fontSize = if (element.kind == TextKind.TITLE) 15f else 14f
             val width = (element.text.lines().maxOfOrNull { it.length } ?: 1).toFloat()
@@ -167,7 +168,7 @@ fun BoardSnapshot.distanceToArrow(point: WorldPoint, arrow: ArrowElement, offset
 }
 
 fun BoardSnapshot.lassoSelection(vertices: List<WorldPoint>): Set<String> {
-    val selected = (texts.map { it.id } + shapes.map { it.id })
+    val selected = (texts.map { it.id } + shapes.map { it.id } + ink.map { it.id })
         .filter { id -> centerOf(id)?.let { pointInPolygon(it, vertices) } == true }.toMutableSet()
     arrows.forEach { arrow ->
         val points = arrowPoints(arrow)
@@ -187,6 +188,7 @@ fun BoardSnapshot.translatedSelection(ids: Set<String>, dx: Float, dy: Float): B
             shapes.filter { it.id != region.id }.forEach {
                 if (region.bounds().contains(it.bounds().center)) moved += it.id
             }
+            ink.forEach { if (region.bounds().contains(it.bounds().center)) moved += it.id }
         }
         expanded = moved.size != previousSize
     } while (expanded)
@@ -196,6 +198,7 @@ fun BoardSnapshot.translatedSelection(ids: Set<String>, dx: Float, dy: Float): B
         shapes = shapes.map { if (it.id in moved) it.copy(x = it.x + dx, y = it.y + dy) else it },
         arrows = arrows.map { arrow -> if (arrow.id in ids)
             arrow.copy(from = arrow.from.shift(), to = arrow.to.shift()) else arrow },
+        ink = ink.map { if (it.id in moved) it.translated(dx, dy) else it },
     )
 }
 
@@ -246,5 +249,12 @@ fun BoardSnapshot.withGap(origin: WorldPoint, horizontal: Boolean, amount: Float
         }
     }
     // 余白挿入は矢印の選択ではない。自由端は固定し、接続端は移動した接続先に描画時に追従する。
-    return BoardSnapshot(updatedTexts, updatedShapes, arrows)
+    val updatedInk = ink.map { element ->
+        if (!inScope(element.id)) element else {
+            val center = source.centerOf(element.id)!!
+            val delta = shift(if (horizontal) center.x else center.y)
+            if (horizontal) element.translated(delta, 0f) else element.translated(0f, delta)
+        }
+    }
+    return BoardSnapshot(updatedTexts, updatedShapes, arrows, updatedInk)
 }
