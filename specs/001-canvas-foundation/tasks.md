@@ -60,3 +60,5 @@ US1 を最初の MVP とし、世界座標を崩さず US2/US3 を積み上げ�
 - [x] T019 gesture 中断時に preview を破棄し、未確定移動を表示・保存へ残さない per 境界条件 (partial)
 - [x] T020 Room 再オープンテストの名称と実際の検証範囲を一致させる per T014 (partial)
 - [x] T021 保存待ち・保存失敗時に編集ツールの無効状態を表示と accessibility semantics に反映し、再試行操作は有効に保つ per accessibility contract (partial)
+- [x] T022 保存ブロック中の要素と移動グリップの accessibility action を無効化する per accessibility contract (partial)
+- [x] T023 ボード名・履歴・倍率表示の範囲を canvas tap 判定から除き、表示部から Draft を作らない per US1 (partial)

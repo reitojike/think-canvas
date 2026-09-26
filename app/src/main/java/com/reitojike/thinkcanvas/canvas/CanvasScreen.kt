@@ -42,6 +42,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
@@ -50,6 +51,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalViewConfiguration
@@ -102,6 +105,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     var finishDraftAfterSave by remember { mutableStateOf(false) }
     var pendingNewElementId by remember { mutableStateOf<String?>(null) }
     val elementSizes = remember { mutableStateMapOf<String, IntSize>() }
+    val chromeBounds = remember { mutableStateMapOf<String, Rect>() }
     val uiScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -179,6 +183,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
 
     fun tap(point: Offset) {
         if (latestDraft.value != null || latestSaveBlocked.value) return
+        if (chromeBounds.values.any { it.contains(point) }) return
         val element = hitTest(point)
         if (element == null) {
             if (latestSelected.value != null) selectedId = null
@@ -321,6 +326,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 val display = preview?.takeIf { it.first == element.id }?.second
                 val (screenX, screenY) = viewport.worldToScreen(display?.first ?: element.x, display?.second ?: element.y)
                 val selected = selectedId == element.id
+                val elementActionsEnabled = !saving && !saveFailed
                 Text(
                     text = element.text,
                     color = if (element.color == TextColor.INK) ink else vermilion,
@@ -339,16 +345,20 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                         .semantics {
                             contentDescription = element.text
                             stateDescription = if (selected) selectedLabel else unselectedLabel
-                            onClick(label = if (selected) editLabel else selectLabel) {
-                                tap(Offset(screenX + 1, screenY + 1))
-                                true
+                            if (elementActionsEnabled) {
+                                onClick(label = if (selected) editLabel else selectLabel) {
+                                    tap(Offset(screenX + 1, screenY + 1))
+                                    true
+                                }
+                                if (selected) customActions = listOf(
+                                    CustomAccessibilityAction(moveUpLabel) { nudge(element.id, 0f, -16f) },
+                                    CustomAccessibilityAction(moveDownLabel) { nudge(element.id, 0f, 16f) },
+                                    CustomAccessibilityAction(moveLeftLabel) { nudge(element.id, -16f, 0f) },
+                                    CustomAccessibilityAction(moveRightLabel) { nudge(element.id, 16f, 0f) },
+                                )
+                            } else {
+                                disabled()
                             }
-                            if (selected) customActions = listOf(
-                                CustomAccessibilityAction(moveUpLabel) { nudge(element.id, 0f, -16f) },
-                                CustomAccessibilityAction(moveDownLabel) { nudge(element.id, 0f, 16f) },
-                                CustomAccessibilityAction(moveLeftLabel) { nudge(element.id, -16f, 0f) },
-                                CustomAccessibilityAction(moveRightLabel) { nudge(element.id, 16f, 0f) },
-                            )
                         },
                 )
                 if (selected && draft == null) {
@@ -357,7 +367,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     val gripY = screenY + size.height * viewport.scale + with(density) { 2.dp.toPx() }
                     Box(
                         modifier = Modifier.offsetPx(gripX, gripY).size(44.dp)
-                            .semantics { contentDescription = moveElementLabel },
+                            .semantics {
+                                contentDescription = moveElementLabel
+                                if (!elementActionsEnabled) disabled()
+                            },
                         contentAlignment = Alignment.Center,
                     ) {
                         Box(Modifier.size(30.dp).background(vermilion, CircleShape), contentAlignment = Alignment.Center) {
@@ -407,13 +420,15 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             Box(
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = 8.dp)
                     .height(44.dp).background(Color.White, RoundedCornerShape(24.dp))
-                    .pillBorder(24f).padding(horizontal = 14.dp),
+                    .pillBorder(24f).padding(horizontal = 14.dp)
+                    .onGloballyPositioned { chromeBounds["board"] = it.boundsInParent() },
                 contentAlignment = Alignment.Center,
             ) { Text(stringResource(R.string.board_name), color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
 
             Row(
                 modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 16.dp)
-                    .background(Color.White, RoundedCornerShape(24.dp)).pillBorder(24f),
+                    .background(Color.White, RoundedCornerShape(24.dp)).pillBorder(24f)
+                    .onGloballyPositioned { chromeBounds["history"] = it.boundsInParent() },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(
@@ -431,7 +446,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             Box(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 22.dp)
                     .background(Color.White, RoundedCornerShape(16.dp)).pillBorder(16f)
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                    .onGloballyPositioned { chromeBounds["zoom"] = it.boundsInParent() },
             ) { Text("${(viewport.scale * 100).roundToInt()}%  近", color = muted, fontSize = 11.sp) }
         } else {
             Row(
