@@ -1,5 +1,7 @@
 # データモデル: Spatial Organization
 
+**現行の保存形式**: この文書の v1→v2 migration は #3 実装時の記録です。Issue #26 で四表を新しい schema v1 とし、DB ファイルを `thinkcanvas.db` に変更します。旧内部版の DB は読み込みません。
+
 ## Board と TextElement
 
 既存の `boards` と `text_elements` を schema v1 のまま保持する。文字要素の位置と内容を移行中に書き換えない。文字の中心判定には、表示倍率・端末文字サイズから独立した論理境界を使う。ボードの名前と更新時刻を新しい要素の保存で失わない。

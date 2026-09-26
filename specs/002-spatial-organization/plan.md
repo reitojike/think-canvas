@@ -2,6 +2,8 @@
 
 **Branch**: `002-spatial-organization` | **日付**: 2026-09-26 | **仕様**: [spec.md](spec.md)
 
+**現行の保存形式**: 以下の v1→v2 migration は #3 実装時の設計記録です。Issue #26 で内部版のデータを引き継がず、四表を `thinkcanvas.db` の新しい schema v1 として開始します。
+
 ## 概要
 
 既存の単一ボードへ四角・丸・囲み・矢印を追加し、複数選択と余白挿入を扱う。位置と接続は世界座標で保持し、Room schema v2 へ追加する。図形と矢印の幾何計算を UI から分け、gesture 中の preview は正常な確定時だけ保存する。

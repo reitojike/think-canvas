@@ -1,8 +1,8 @@
-package com.thinkcanvas.internal.data
+package com.thinkcanvas.data
 
 import android.content.Context
-import com.thinkcanvas.internal.canvas.BoardSnapshot
-import com.thinkcanvas.internal.canvas.ArrowEnd
+import com.thinkcanvas.canvas.BoardSnapshot
+import com.thinkcanvas.canvas.ArrowEnd
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Deferred

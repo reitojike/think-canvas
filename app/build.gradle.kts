@@ -10,7 +10,7 @@ room3 {
 }
 
 android {
-    namespace = "com.thinkcanvas.internal"
+    namespace = "com.thinkcanvas"
     compileSdk = 37
 
     defaultConfig {

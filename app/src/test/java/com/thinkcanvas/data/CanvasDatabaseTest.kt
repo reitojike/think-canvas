@@ -1,4 +1,4 @@
-package com.thinkcanvas.internal.data
+package com.thinkcanvas.data
 
 import androidx.room3.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
