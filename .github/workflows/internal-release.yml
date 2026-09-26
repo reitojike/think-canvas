@@ -74,7 +74,14 @@ jobs:
           set -euo pipefail
           apk='app/build/outputs/apk/internal/app-internal.apk'
           test -f "$apk"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
+          expected_cert_sha256='D1CA4B588C4390050018897E6F3E9C3AB16C497FC1ED509D76ED757629BD8438'
+          certs="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk")"
+          printf '%s\n' "$certs"
+          actual_cert_sha256="$(printf '%s\n' "$certs" | awk -F ': ' '/^Signer #1 certificate SHA-256 digest: / { print toupper($2) }')"
+          test "$actual_cert_sha256" = "$expected_cert_sha256" || {
+            echo 'internal APK の署名証明書が登録済み証明書と異なります' >&2
+            exit 1
+          }
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep -E "^package: name='com\.thinkcanvas\.internal' versionCode='${{ github.run_number }}'"
           cp "$apk" "$RUNNER_TEMP/think-canvas.apk"
       - name: GitHub pre-release に公開
