@@ -73,6 +73,11 @@ class SemanticNavigationTest {
         val snapshot = BoardSnapshot(texts = listOf(title), shapes = listOf(neighbor))
         assertFalse(snapshot.semanticProjection(.5f, 14f).visible("title"))
         assertTrue(snapshot.semanticProjection(.5f, 14f, setOf("title")).visible("title"))
+        val partlyClipped = title.copy(x = 50f)
+        val midSnapshot = BoardSnapshot(texts = listOf(partlyClipped), shapes = listOf(neighbor))
+        assertTrue(midSnapshot.semanticProjection(.5f, 14f).visible("title"))
+        assertFalse(midSnapshot.semanticProjection(.5f, 14f,
+            pixelsPerDp = 3f, titleDp = 15f).visible("title"))
     }
 
     @Test fun lassoCannotSelectElementsHiddenByFarView() {

@@ -26,6 +26,7 @@ fun BoardSnapshot.semanticProjection(
     bodyDp: Float,
     keep: Set<String> = emptySet(),
     pixelsPerDp: Float = 1f,
+    titleDp: Float = 15f,
 ): SemanticProjection {
     val tier = semanticTier(bodyDp, scale)
     fun apparentDp(worldLength: Float) = worldLength * scale / pixelsPerDp
@@ -47,8 +48,9 @@ fun BoardSnapshot.semanticProjection(
     texts.filter { it.id !in keep &&
         (covered(it.id) || tier == SemanticTier.FAR && it.kind == TextKind.BODY) }
         .forEach { hidden += it.id }
+    val titleGlyphDp = max(titleDp * scale, if (tier == SemanticTier.FAR) 9f else 11f)
     if (tier != SemanticTier.NEAR) texts.filter { it.kind == TextKind.TITLE && it.id !in keep &&
-        titleAvailableWidth(it)?.let { width -> apparentDp(width) < 14f } == true }
+        titleAvailableWidth(it)?.let { width -> apparentDp(width) < titleGlyphDp * 2f } == true }
         .forEach { hidden += it.id }
     shapes.filter { it.kind != ShapeKind.REGION && it.id !in keep }.forEach { shape ->
         val contained = texts.filter { shape.bounds().contains(centerOf(it.id)!!) }

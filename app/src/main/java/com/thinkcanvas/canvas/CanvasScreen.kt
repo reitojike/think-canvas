@@ -159,11 +159,12 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val latestElements = rememberUpdatedState(board.elements)
     val latestSnapshot = rememberUpdatedState(board.snapshot())
     val bodyDp = with(density) { 14.sp.toDp().value }
+    val titleDp = with(density) { 15.sp.toDp().value }
     val searchMatches = if (searchOpen) board.snapshot().searchCanvas(searchQuery) else emptyList()
     val matchIds = searchMatches.map { it.id }.toSet()
     val currentMatch = searchMatches.getOrNull(searchPosition)
     val projection = board.snapshot().semanticProjection(viewport.scale, bodyDp,
-        selectedIds + matchIds, density.density)
+        selectedIds + matchIds, density.density, titleDp)
     val latestProjection = rememberUpdatedState(projection)
     val latestLastBlankTap = rememberUpdatedState(lastBlankTap)
     val latestSearchOpen = rememberUpdatedState(searchOpen)
@@ -873,7 +874,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         }
         val movingIds = movingPreview?.first ?: emptySet()
         val displayProjection = displaySnapshot.semanticProjection(viewport.scale, bodyDp,
-            selectedIds + matchIds + movingIds, density.density)
+            selectedIds + matchIds + movingIds, density.density, titleDp)
         InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.MARKER,
             viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
             onSelect = { id -> selectedIds = setOf(id); selectedId = null },
@@ -967,10 +968,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
 
         attachmentEditor?.let { (arrowId, endKind) ->
             board.arrows.firstOrNull { it.id == arrowId }?.let { arrow ->
-                ArrowAttachmentDialog(board.snapshot(), arrow, endKind,
+                ArrowAttachmentDialog(board.snapshot(), projection, arrow, endKind,
                     onDismiss = { attachmentEditor = null },
                     onAttach = { end ->
-                        if (saving || saveFailed) false else {
+                        if (saving || saveFailed || !projection.visible(end.targetId)) false else {
                             val current = if (endKind == HandleKind.FROM) arrow.from else arrow.to
                             if (current == end) return@ArrowAttachmentDialog true
                             val changed = if (endKind == HandleKind.FROM)
