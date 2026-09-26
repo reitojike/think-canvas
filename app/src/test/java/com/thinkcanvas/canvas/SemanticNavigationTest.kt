@@ -78,6 +78,22 @@ class SemanticNavigationTest {
         assertTrue(midSnapshot.semanticProjection(.5f, 14f).visible("title"))
         assertFalse(midSnapshot.semanticProjection(.5f, 14f,
             pixelsPerDp = 3f, titleDp = 15f).visible("title"))
+        val wrapped = title.copy(text = "長い見出し".repeat(12), x = 70f, y = 0f)
+        val firstLineNeighbor = neighbor.copy(y = 0f, height = 25f)
+        assertFalse(BoardSnapshot(texts = listOf(wrapped), shapes = listOf(firstLineNeighbor))
+            .semanticProjection(.5f, 14f).visible("title"))
+    }
+
+    @Test fun bentArrowUsesRenderedCurveExtentInFarView() {
+        val curved = ArrowElement(id = "curved", from = ArrowEnd.Free(0f, 0f),
+            to = ArrowEnd.Free(10f, 0f), bend = 200f)
+        val straight = curved.copy(id = "straight", bend = 0f)
+        val snapshot = BoardSnapshot(arrows = listOf(curved, straight))
+        val far = snapshot.semanticProjection(.25f, 14f)
+        assertTrue(far.visible("curved"))
+        assertFalse(far.visible("straight"))
+        assertFalse(snapshot.semanticProjection(.25f, 14f, pixelsPerDp = 3f)
+            .visible("curved"))
     }
 
     @Test fun lassoCannotSelectElementsHiddenByFarView() {

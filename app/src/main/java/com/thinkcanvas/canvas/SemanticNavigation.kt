@@ -49,8 +49,10 @@ fun BoardSnapshot.semanticProjection(
         (covered(it.id) || tier == SemanticTier.FAR && it.kind == TextKind.BODY) }
         .forEach { hidden += it.id }
     val titleGlyphDp = max(titleDp * scale, if (tier == SemanticTier.FAR) 9f else 11f)
+    val titleLineWorld = titleLineHeightWorld(tier, scale, titleDp, pixelsPerDp)
     if (tier != SemanticTier.NEAR) texts.filter { it.kind == TextKind.TITLE && it.id !in keep &&
-        titleAvailableWidth(it)?.let { width -> apparentDp(width) < titleGlyphDp * 2f } == true }
+        titleAvailableWidth(it, titleLineWorld)?.let { width ->
+            apparentDp(width) < titleGlyphDp * 2f } == true }
         .forEach { hidden += it.id }
     shapes.filter { it.kind != ShapeKind.REGION && it.id !in keep }.forEach { shape ->
         val contained = texts.filter { shape.bounds().contains(centerOf(it.id)!!) }
@@ -69,7 +71,8 @@ fun BoardSnapshot.semanticProjection(
             it is ArrowEnd.Attached && it.targetId in hidden
         }
         val length = arrowPoints(arrow)?.let { (a, b) ->
-            apparentDp(kotlin.math.hypot(b.x - a.x, b.y - a.y))
+            apparentDp(max(kotlin.math.hypot(b.x - a.x, b.y - a.y),
+                kotlin.math.abs(arrow.bend) / 2f))
         } ?: 0f
         attachedHidden || covered(arrow.id) || tier == SemanticTier.FAR && length < 20f
     }.forEach { hidden += it.id }
@@ -92,12 +95,19 @@ fun BoardSnapshot.searchCanvas(query: String): List<CanvasMatch> {
         .toList()
 }
 
-fun BoardSnapshot.titleAvailableWidth(element: TextElement): Float? {
+fun titleLineHeightWorld(tier: SemanticTier, scale: Float, titleDp: Float,
+                         pixelsPerDp: Float): Float =
+    max(titleDp * scale, if (tier == SemanticTier.FAR) 9f else 11f) *
+        1.5f * pixelsPerDp / scale
+
+fun BoardSnapshot.titleAvailableWidth(element: TextElement,
+                                      lineHeightWorld: Float = 22.5f): Float? {
     val center = centerOf(element.id) ?: return null
+    val lineCenter = WorldPoint(center.x, element.y + lineHeightWorld / 2f)
     val rightEdges = shapes.asSequence().filter { it.kind == ShapeKind.REGION &&
-        it.bounds().contains(center) }.map { it.x + it.width } +
+        it.bounds().contains(lineCenter) }.map { it.x + it.width } +
         shapes.asSequence().filter { it.x > element.x &&
-            center.y in it.y..(it.y + it.height) }.map { it.x }
+            it.y < element.y + lineHeightWorld && it.y + it.height > element.y }.map { it.x }
     return rightEdges.minOrNull()?.let { (it - element.x).coerceAtLeast(0f) }
 }
 

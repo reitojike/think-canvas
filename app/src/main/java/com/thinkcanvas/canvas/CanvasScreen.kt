@@ -994,7 +994,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 val title = element.kind == TextKind.TITLE
                 val tier = displayProjection.tier
                 val availableWorld = if (title && tier != SemanticTier.NEAR)
-                    displaySnapshot.titleAvailableWidth(element) else null
+                    displaySnapshot.titleAvailableWidth(element,
+                        titleLineHeightWorld(tier, viewport.scale, titleDp, density.density)) else null
                 val availableDp = availableWorld?.takeUnless { element.id in selectedIds || element.id in matchIds }
                     ?.let { with(density) { it.toDp() } }
                 val (screenX, screenY) = viewport.worldToScreen(element.x, element.y)
