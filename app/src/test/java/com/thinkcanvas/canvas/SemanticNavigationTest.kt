@@ -60,6 +60,17 @@ class SemanticNavigationTest {
         assertTrue(snapshot.semanticProjection(.25f, 14f, setOf("body")).visible("body"))
     }
 
+    @Test fun farInkVisibilityIncludesRenderedBrushWidth() {
+        val stroke = InkStroke(id = "line", startedAt = 0, endedAt = 1,
+            inputType = InkInputType.TOUCH,
+            points = listOf(InkPoint(0f, 0f, 0), InkPoint(60f, 0f, 1)))
+        val marker = InkElement(id = "marker", kind = InkKind.MARKER, strokes = listOf(stroke))
+        val pen = InkElement(id = "pen", kind = InkKind.PEN, strokes = listOf(stroke))
+        val projection = BoardSnapshot(ink = listOf(marker, pen)).semanticProjection(.25f, 14f)
+        assertTrue(projection.visible("marker"))
+        assertFalse(projection.visible("pen"))
+    }
+
     @Test fun regionCollapseUsesStrictWidthAndHeightBoundaries() {
         fun collapsed(width: Float, height: Float): Boolean {
             val region = ShapeElement(id = "region", kind = ShapeKind.REGION,

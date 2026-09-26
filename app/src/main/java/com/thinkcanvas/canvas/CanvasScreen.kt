@@ -511,6 +511,15 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
 
     LaunchedEffect(menuTarget) { if (menuTarget == null) chromeBounds.remove("menu") }
     LaunchedEffect(regionNameId) { if (regionNameId == null) chromeBounds.remove("regionName") }
+    LaunchedEffect(projection.hidden, menuTarget, attachmentEditor, regionNameId) {
+        if (menuTarget?.let { !projection.visible(it) } == true) menuTarget = null
+        if (attachmentEditor?.first?.let { !projection.visible(it) } == true)
+            attachmentEditor = null
+        if (regionNameId?.let { !projection.visible(it) } == true) {
+            regionNameId = null
+            keyboard?.hide()
+        }
+    }
     LaunchedEffect(regionNameId) {
         if (regionNameId != null) {
             regionNameFocusRequester.requestFocus()
@@ -1041,7 +1050,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             },
         )
 
-        attachmentEditor?.let { (arrowId, endKind) ->
+        attachmentEditor?.takeIf { displayProjection.visible(it.first) }?.let { (arrowId, endKind) ->
             board.arrows.firstOrNull { it.id == arrowId }?.let { arrow ->
                 ArrowAttachmentDialog(board.snapshot(), projection, arrow, endKind,
                     onDismiss = { attachmentEditor = null },
@@ -1408,7 +1417,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 }
             }
 
-            menuTarget?.let { id ->
+            menuTarget?.takeIf(projection::visible)?.let { id ->
                 val center = board.snapshot().centerOf(id) ?: WorldPoint(0f, 0f)
                 val (anchorX, anchorY) = viewport.worldToScreen(center.x, center.y)
                 val menuX = anchorX.coerceIn(8f, maxOf(8f, canvasSize.width - with(density) { 320.dp.toPx() }))
@@ -1455,7 +1464,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 }
             }
 
-            val editingRegionId = regionNameId
+            val editingRegionId = regionNameId?.takeIf(projection::visible)
             if (editingRegionId != null) {
                 Row(Modifier.align(Alignment.Center).background(Color.White, RoundedCornerShape(10.dp))
                     .pillBorder(10f).padding(8.dp).onGloballyPositioned {

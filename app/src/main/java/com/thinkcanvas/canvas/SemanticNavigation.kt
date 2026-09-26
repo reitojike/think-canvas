@@ -90,7 +90,8 @@ fun BoardSnapshot.semanticProjection(
     ink.filter { it.id !in keep &&
         (covered(it.id) || tier == SemanticTier.FAR &&
             apparentDp(max(it.bounds().right - it.bounds().left,
-                it.bounds().bottom - it.bounds().top)) < 16f) }
+                it.bounds().bottom - it.bounds().top) +
+                if (it.kind == InkKind.MARKER) MARKER_WIDTH_WORLD else PEN_WIDTH_WORLD) < 16f) }
         .forEach { hidden += it.id }
     arrows.filter { arrow ->
         if (arrow.id in keep) return@filter false
