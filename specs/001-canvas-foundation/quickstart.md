@@ -2,10 +2,12 @@
 
 ## 準備
 
-JDK 17 と Android SDK API 36 を用意する。エミュレーターまたは実機に API 26 以上の Android を用意する。
+JDK 17 と Android SDK Platform 37.0 / Build Tools 36.0.0 を用意する。エミュレーターまたは実機に API 26 以上の Android を用意する。`targetSdk` は 36 のまま。
 
 ```powershell
-.\gradlew.bat :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
+.\gradlew.bat :app:lintDebug
+.\gradlew.bat :app:testDebugUnitTest
+.\gradlew.bat :app:assembleDebug
 pwsh -File scripts/check-public-boundary.ps1
 git diff --check
 ```

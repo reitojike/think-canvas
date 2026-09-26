@@ -7,27 +7,27 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 
 ## 開発環境
 
-- Android Studio と Android SDK Platform 36 / Build Tools 35.0.0
+- Android Studio と Android SDK Platform 37.0 / Build Tools 36.0.0
 - JDK 17（Android Studio 同梱の JDK も利用できます）
 - インターネット接続（初回の Gradle と Android 依存関係の取得に必要）
 - Spec Kit の操作には Python 環境と `uv` が必要です
 
-この初期構成は AGP 8.13.2、Gradle 8.13、API 36 と Compose BOM `2026.04.01` を使用します。
-[AGP 8.13 の互換表](https://developer.android.com/build/releases/agp-8-13-0-release-notes)
-と [Compose 2026 年 4 月リリース](https://developer.android.com/blog/posts/whats-new-in-the-jetpack-compose-april-26-release)
-を基準に選んでいます。Compose 1.12 系を含む新しい BOM へ上げる場合は
-[API 37 / AGP 9.1 以上への移行](https://developer.android.com/blog/posts/what-s-new-in-the-jetpack-compose-august-26-release)
-も同時に検討してください。
+現在の構成は AGP 9.4.0、Gradle 9.7.1、`compileSdk 37`、`targetSdk 36`、
+Compose BOM `2026.09.00` を使用します。[AGP 9.4 の互換表](https://developer.android.com/build/releases/agp-9-4-0-release-notes)
+を基準にしています。`targetSdk 37` は Android 17 の動作変更を端末で確認してから判断します。
 
-リポジトリを clone して Android Studio で開き、SDK 36 をインストールしてください。
+リポジトリを clone して Android Studio で開き、SDK Platform 37.0 をインストールしてください。
+コマンドラインでは `sdkmanager --channel=3 "platforms;android-37.0" "build-tools;36.0.0"` を使います。
 Android Studio が作成する `local.properties` は追跡しません。コマンドラインでは JDK 17 と
 `ANDROID_HOME` または `ANDROID_SDK_ROOT` を設定し、Windows なら次を実行します。
 
 ```powershell
-.\gradlew.bat :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
+.\gradlew.bat :app:lintDebug
+.\gradlew.bat :app:testDebugUnitTest
+.\gradlew.bat :app:assembleDebug
 ```
 
-macOS / Linux では `bash ./gradlew :app:lintDebug :app:testDebugUnitTest :app:assembleDebug` を使います。ビルド成果物は
+macOS / Linux では各 Gradle コマンドの先頭を `./gradlew` に置き換えます。ビルド成果物は
 `app/build/outputs/apk/debug/` に作成されます。
 
 ## Spec Kit
