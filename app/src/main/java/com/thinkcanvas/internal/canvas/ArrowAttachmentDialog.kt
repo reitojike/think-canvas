@@ -1,4 +1,4 @@
-package com.reitojike.thinkcanvas.canvas
+package com.thinkcanvas.internal.canvas
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column

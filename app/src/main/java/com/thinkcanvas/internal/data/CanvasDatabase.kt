@@ -1,4 +1,4 @@
-package com.reitojike.thinkcanvas.data
+package com.thinkcanvas.internal.data
 
 import android.content.Context
 import androidx.room3.Dao
@@ -13,13 +13,13 @@ import androidx.room3.Room
 import androidx.room3.RoomDatabase
 import androidx.room3.Transaction
 import androidx.sqlite.driver.AndroidSQLiteDriver
-import com.reitojike.thinkcanvas.canvas.TextColor
-import com.reitojike.thinkcanvas.canvas.TextElement
-import com.reitojike.thinkcanvas.canvas.TextKind
-import com.reitojike.thinkcanvas.canvas.ArrowElement
-import com.reitojike.thinkcanvas.canvas.ArrowEnd
-import com.reitojike.thinkcanvas.canvas.ShapeElement
-import com.reitojike.thinkcanvas.canvas.ShapeKind
+import com.thinkcanvas.internal.canvas.TextColor
+import com.thinkcanvas.internal.canvas.TextElement
+import com.thinkcanvas.internal.canvas.TextKind
+import com.thinkcanvas.internal.canvas.ArrowElement
+import com.thinkcanvas.internal.canvas.ArrowEnd
+import com.thinkcanvas.internal.canvas.ShapeElement
+import com.thinkcanvas.internal.canvas.ShapeKind
 
 @Entity(tableName = "boards")
 data class BoardRow(

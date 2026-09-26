@@ -1,4 +1,4 @@
-package com.reitojike.thinkcanvas.canvas
+package com.thinkcanvas.internal.canvas
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf

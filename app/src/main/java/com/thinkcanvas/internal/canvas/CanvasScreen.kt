@@ -1,4 +1,4 @@
-package com.reitojike.thinkcanvas.canvas
+package com.thinkcanvas.internal.canvas
 
 import android.os.SystemClock
 import androidx.compose.foundation.background
@@ -74,7 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import com.reitojike.thinkcanvas.R
+import com.thinkcanvas.internal.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.launch

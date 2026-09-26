@@ -1,4 +1,4 @@
-package com.reitojike.thinkcanvas.canvas
+package com.thinkcanvas.internal.canvas
 
 data class Viewport(
     val scale: Float = 1f,
