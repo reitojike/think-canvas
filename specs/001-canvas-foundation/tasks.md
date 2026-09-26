@@ -73,7 +73,7 @@ US1 を最初の MVP とし、世界座標を崩さず US2/US3 を積み上げ�
 ## Phase 10: Issue #25 system bar のコントラスト
 
 - [x] T026 `MainActivity.kt` で明るいキャンバスに合わせて system bar のアイコン色を固定する
-- [x] T027 更新した internal APK を実機のライトモード・ダークモードで開き、status bar と navigation bar の判読性を確認する（`v0.1.0-alpha.5`、ユーザー確認済み）
+- [ ] T027 更新した internal APK を実機のライトモード・ダークモードで開き、status bar と navigation bar の判読性を確認する。gesture navigation と 3-button navigation の両方の記録を待つ
 
 ## Phase 11: Issue #26 ソース namespace の整理
 
