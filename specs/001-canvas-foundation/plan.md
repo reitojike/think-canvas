@@ -8,6 +8,10 @@ Compose の単一画面で世界座標を保持するキャンバス、テキス
 
 ## 技術コンテキスト
 
+以下の版数は #2 の計画時点の記録です。現在のビルド構成は
+[root の Gradle 設定](../../build.gradle.kts)、[app の Gradle 設定](../../app/build.gradle.kts)、
+[Gradle Wrapper の設定](../../gradle/wrapper/gradle-wrapper.properties) を参照してください。
+
 - **言語**: AGP 9.4.0 組み込み Kotlin、Compose compiler plugin 2.4.20、JVM 17
 - **主な依存**: Jetpack Compose BOM 2026.06.01（API 36 に対応する stable 系）、Activity Compose、Room 3.0.3、KSP 2.3.12
 - **保存**: Room 3 / SQLite。Board 1 件と TextElement、schema v1
