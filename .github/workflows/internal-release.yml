@@ -99,7 +99,9 @@ jobs:
             echo 'internal APK の署名証明書が登録済み証明書と異なります' >&2
             exit 1
           }
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep -E "^package: name='com\.thinkcanvas\.internal' versionCode='${{ github.run_number }}'"
+          badging="$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk")"
+          printf '%s\n' "$badging" | grep -E "^package: name='com\.thinkcanvas\.internal' versionCode='${{ github.run_number }}'"
+          printf '%s\n' "$badging" | grep -E "^targetSdkVersion:'37'$"
           cp "$apk" "$RUNNER_TEMP/think-canvas.apk"
       - name: GitHub pre-release に公開
         env:

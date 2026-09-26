@@ -8,15 +8,15 @@ Compose の単一画面で世界座標を保持するキャンバス、テキス
 
 ## 技術コンテキスト
 
-以下の版数は #2 の計画時点の記録です。現在のビルド構成は
+以下は現行のビルド構成です。版数の根拠は
 [root の Gradle 設定](../../build.gradle.kts)、[app の Gradle 設定](../../app/build.gradle.kts)、
 [Gradle Wrapper の設定](../../gradle/wrapper/gradle-wrapper.properties) を参照してください。
 
-- **言語**: AGP 9.4.0 組み込み Kotlin、Compose compiler plugin 2.4.20、JVM 17
-- **主な依存**: Jetpack Compose BOM 2026.06.01（API 36 に対応する stable 系）、Activity Compose、Room 3.0.3、KSP 2.3.12
-- **保存**: Room 3 / SQLite。Board 1 件と TextElement、schema v1
+- **言語**: AGP 9.4.1 組み込み Kotlin、Compose compiler plugin 2.4.20、CI の JDK 25、Java 17 bytecode
+- **主な依存**: Jetpack Compose BOM 2026.09.00、Activity Compose 1.13.0、Room 3.0.3、KSP 2.3.12
+- **保存**: Room 3 / SQLite。Board、TextElement、SpatialElement、ArrowElement の四表、schema v1
 - **検証**: JUnit による座標変換と履歴の単体テスト、Android 上での Room と操作シナリオ確認、GitHub Actions で lint・テスト・ビルド・公開情報境界チェック
-- **対象**: Android API 26 以上、compile API 36、target API 36。Gradle 9.7.1。ビルド基盤は Issue #10 で更新。Android 17 SDK は Preview のため採用を保留
+- **対象**: Android API 26 以上、compile API 37、target API 37、Gradle 9.8.0
 - **性能目標**: 100 テキスト要素でパン・ズーム時の操作が追従し、確定後の再起動で欠損しない
 - **制約**: オフライン、AI なし、既存の単一 app module を維持
 

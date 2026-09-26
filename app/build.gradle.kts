@@ -16,7 +16,7 @@ android {
     defaultConfig {
         applicationId = "com.thinkcanvas.internal"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = providers.environmentVariable("THINKCANVAS_VERSION_CODE").orNull?.toInt() ?: 1
         versionName = providers.environmentVariable("THINKCANVAS_VERSION_NAME").orNull ?: "0.1.0"
     }
