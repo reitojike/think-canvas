@@ -10,20 +10,39 @@ room3 {
 }
 
 android {
-    namespace = "com.reitojike.thinkcanvas"
+    namespace = "com.thinkcanvas.internal"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.reitojike.thinkcanvas"
+        applicationId = "com.thinkcanvas.internal"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = providers.environmentVariable("THINKCANVAS_VERSION_CODE").orNull?.toInt() ?: 1
+        versionName = providers.environmentVariable("THINKCANVAS_VERSION_NAME").orNull ?: "0.1.0"
+    }
+
+    signingConfigs {
+        create("internal") {
+            providers.environmentVariable("THINKCANVAS_INTERNAL_KEYSTORE_FILE").orNull?.let {
+                storeFile = file(it)
+            }
+            storePassword = providers.environmentVariable("THINKCANVAS_INTERNAL_STORE_PASSWORD").orNull
+            keyAlias = providers.environmentVariable("THINKCANVAS_INTERNAL_KEY_ALIAS").orNull
+            keyPassword = providers.environmentVariable("THINKCANVAS_INTERNAL_KEY_PASSWORD").orNull
+            storeType = "PKCS12"
+        }
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+        }
         release {
             isMinifyEnabled = false
+        }
+        create("internal") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("internal")
         }
     }
 

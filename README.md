@@ -30,6 +30,9 @@ Android Studio が作成する `local.properties` は追跡しません。コマ
 macOS / Linux では各 Gradle コマンドの先頭を `./gradlew` に置き換えます。ビルド成果物は
 `app/build/outputs/apk/debug/` に作成されます。
 
+PR の一時 APK と署名済み internal APK の実機配布は
+[Android 実機確認](docs/runbooks/device-verification.md) にまとめています。
+
 ## Spec Kit
 
 Spec Kit は **v1.0.12** に固定しています。Codex skills integration は `.agents/skills/`、

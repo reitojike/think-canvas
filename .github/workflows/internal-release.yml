@@ -1,0 +1,114 @@
+name: Internal APK release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '新しい pre-release tag（例: v0.1.0-alpha.1）'
+        required: true
+        type: string
+      commit:
+        description: '配布する main commit の 40 桁 SHA'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: internal-release
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: tag と main commit を確認
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(alpha|dev)\.[1-9][0-9]*$ ]] || {
+            echo 'tag は vX.Y.Z-alpha.N または vX.Y.Z-dev.N にしてください' >&2
+            exit 1
+          }
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null; then
+            echo "tag は既に存在します: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          [[ "$RELEASE_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]] || {
+            echo 'commit は main に含まれる 40 桁 SHA を指定してください' >&2
+            exit 1
+          }
+          git fetch --no-tags origin main
+          git cat-file -e "$RELEASE_COMMIT^{commit}"
+          git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main || {
+            echo '指定した commit は main の履歴にありません' >&2
+            exit 1
+          }
+          git checkout --detach "$RELEASE_COMMIT"
+          echo "THINKCANVAS_RELEASE_COMMIT=$RELEASE_COMMIT" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: android-actions/setup-android@v4
+        with:
+          log-accepted-android-sdk-licenses: false
+      - name: Android SDK 36 / 37
+        run: sdkmanager "platforms;android-36" "platforms;android-37.0" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+      - name: 署名鍵を復元
+        env:
+          KEYSTORE_BASE64: ${{ secrets.THINKCANVAS_INTERNAL_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.THINKCANVAS_INTERNAL_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.THINKCANVAS_INTERNAL_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.THINKCANVAS_INTERNAL_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for value in "$KEYSTORE_BASE64" "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD"; do
+            test -n "$value" || { echo 'internal-release の署名用 Secrets が不足しています' >&2; exit 1; }
+          done
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/think-canvas-internal.p12"
+          chmod 600 "$RUNNER_TEMP/think-canvas-internal.p12"
+      - name: lint・単体テスト
+        run: ./gradlew :app:lintDebug :app:testDebugUnitTest --no-daemon
+      - name: internal APK をビルド
+        env:
+          THINKCANVAS_INTERNAL_KEYSTORE_FILE: ${{ runner.temp }}/think-canvas-internal.p12
+          THINKCANVAS_INTERNAL_STORE_PASSWORD: ${{ secrets.THINKCANVAS_INTERNAL_STORE_PASSWORD }}
+          THINKCANVAS_INTERNAL_KEY_ALIAS: ${{ secrets.THINKCANVAS_INTERNAL_KEY_ALIAS }}
+          THINKCANVAS_INTERNAL_KEY_PASSWORD: ${{ secrets.THINKCANVAS_INTERNAL_KEY_PASSWORD }}
+          THINKCANVAS_VERSION_NAME: ${{ inputs.tag }}
+          THINKCANVAS_VERSION_CODE: ${{ github.run_number }}
+        run: ./gradlew :app:assembleInternal --no-daemon
+      - name: APK の署名と識別子を確認
+        run: |
+          set -euo pipefail
+          apk='app/build/outputs/apk/internal/app-internal.apk'
+          test -f "$apk"
+          expected_cert_sha256='D1CA4B588C4390050018897E6F3E9C3AB16C497FC1ED509D76ED757629BD8438'
+          certs="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk")"
+          printf '%s\n' "$certs"
+          actual_cert_sha256="$(printf '%s\n' "$certs" | awk -F ': ' '/^Signer #1 certificate SHA-256 digest: / { print toupper($2) }' | tr -d ':')"
+          test "$actual_cert_sha256" = "$expected_cert_sha256" || {
+            echo 'internal APK の署名証明書が登録済み証明書と異なります' >&2
+            exit 1
+          }
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep -E "^package: name='com\.thinkcanvas\.internal' versionCode='${{ github.run_number }}'"
+          cp "$apk" "$RUNNER_TEMP/think-canvas.apk"
+      - name: GitHub pre-release に公開
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          gh release create "$RELEASE_TAG" "$RUNNER_TEMP/think-canvas.apk" \
+            --target "$THINKCANVAS_RELEASE_COMMIT" --prerelease --title "$RELEASE_TAG" \
+            --notes '実機確認用の internal APK。applicationId: com.thinkcanvas.internal。'
+      - name: 一時署名鍵を削除
+        if: always()
+        run: rm -f "$RUNNER_TEMP/think-canvas-internal.p12"

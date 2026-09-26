@@ -64,7 +64,7 @@ specs/002-spatial-organization/
 ├── checklists/
 └── tasks.md
 
-app/src/main/java/com/reitojike/thinkcanvas/
+app/src/main/java/com/thinkcanvas/internal/
 ├── canvas/
 │   ├── BoardState.kt          # 確定状態と履歴
 │   ├── SpatialElement.kt      # 図形と矢印の型
@@ -76,7 +76,7 @@ app/src/main/java/com/reitojike/thinkcanvas/
     ├── CanvasDatabase.kt     # schema v2 と DAO
     └── CanvasStore.kt        # 一貫した snapshot の読込・保存
 
-app/src/test/java/com/reitojike/thinkcanvas/
+app/src/test/java/com/thinkcanvas/internal/
 ├── canvas/SpatialGeometryTest.kt
 ├── canvas/BoardStateTest.kt
 ├── data/CanvasDatabaseTest.kt
