@@ -21,13 +21,17 @@ jobs:
       - uses: android-actions/setup-android@v4
         with:
           log-accepted-android-sdk-licenses: false
-      - name: Android SDK 36
-        run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
+      - name: Android SDK 37
+        run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v6
         with:
           cache-provider: basic
-      - name: Android lint・単体テスト・デバッグビルド
-        run: ./gradlew :app:lintDebug :app:testDebugUnitTest :app:assembleDebug --no-daemon
+      - name: Android lint
+        run: ./gradlew :app:lintDebug --no-daemon
+      - name: 単体テスト
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+      - name: デバッグビルド
+        run: ./gradlew :app:assembleDebug --no-daemon
       - name: 公開情報境界
         shell: pwsh
         run: ./scripts/check-public-boundary.ps1
