@@ -12,13 +12,9 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 - インターネット接続（初回の Gradle と Android 依存関係の取得に必要）
 - Spec Kit の操作には Python 環境と `uv` が必要です
 
-現在の構成は AGP 9.4.1、Gradle 9.7.1、`compileSdk 36`、`targetSdk 36`、
-Compose BOM `2026.06.01` を使用します。[AGP 9.4 の互換表](https://developer.android.com/build/releases/agp-9-4-0-release-notes)
-を基準にしています。[Android 17 SDK](https://developer.android.com/about/versions/17/setup-sdk) は
-現在 Preview として案内されているため、`compileSdk 37` は stable channel で入手できるように
-なってから再検討します。Compose BOM `2026.09.00` は API 37 以上を要求するため、
-API 36 に対応する最新の stable 系である `2026.06.01` に留めます。`targetSdk 37` は、
-その後 Android 17 の動作変更を端末で確認してから判断します。
+プラグインとライブラリの版数は [root の Gradle 設定](build.gradle.kts) と
+[app の Gradle 設定](app/build.gradle.kts)、Gradle の版数は
+[Gradle Wrapper の設定](gradle/wrapper/gradle-wrapper.properties) を参照してください。
 
 リポジトリを clone して Android Studio で開き、SDK Platform 36 をインストールしてください。
 コマンドラインでは `sdkmanager "platforms;android-36" "build-tools;36.0.0"` を使います。
