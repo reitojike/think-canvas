@@ -71,16 +71,21 @@ fun BoardSnapshot.semanticProjection(
     texts.filter { it.id !in keep &&
         (covered(it.id) || tier == SemanticTier.FAR && it.kind == TextKind.BODY) }
         .forEach { hidden += it.id }
-    val titleGlyphDp = max(titleDp * scale, if (tier == SemanticTier.FAR) 9f else 11f)
-    if (tier != SemanticTier.NEAR) texts.filter { it.kind == TextKind.TITLE && it.id !in keep &&
-        titleAvailableWidth(it, titleLineHeightWorld)?.let { width ->
-            apparentDp(width) < titleGlyphDp * 2f } == true }
-        .forEach { hidden += it.id }
     shapes.filter { it.kind != ShapeKind.REGION && it.id !in keep }.forEach { shape ->
         val contained = texts.filter { shape.bounds().contains(textCenter(it)) }
         if (covered(shape.id) || tier == SemanticTier.FAR &&
-            (apparentDp(min(shape.width, shape.height)) < 24f ||
-                contained.isNotEmpty() && contained.all { it.id in hidden })) hidden += shape.id
+            apparentDp(min(shape.width, shape.height)) < 24f ||
+            contained.isNotEmpty() && contained.all { it.id in hidden }) hidden += shape.id
+    }
+    val titleGlyphDp = max(titleDp * scale, if (tier == SemanticTier.FAR) 9f else 11f)
+    if (tier != SemanticTier.NEAR) texts.filter { it.kind == TextKind.TITLE && it.id !in keep &&
+        titleAvailableWidth(it, titleLineHeightWorld,
+            shapes.filter { shape -> shape.id !in hidden })?.let { width ->
+            apparentDp(width) < titleGlyphDp * 2f } == true }
+        .forEach { hidden += it.id }
+    shapes.filter { it.kind != ShapeKind.REGION && it.id !in keep && it.id !in hidden }.forEach { shape ->
+        val contained = texts.filter { shape.bounds().contains(textCenter(it)) }
+        if (contained.isNotEmpty() && contained.all { it.id in hidden }) hidden += shape.id
     }
     ink.filter { it.id !in keep &&
         (covered(it.id) || tier == SemanticTier.FAR &&
@@ -126,11 +131,12 @@ fun BoardSnapshot.searchCanvas(query: String): List<CanvasMatch> {
 }
 
 fun BoardSnapshot.titleAvailableWidth(element: TextElement,
-                                      lineHeightWorld: Float = 22.5f): Float? {
+                                      lineHeightWorld: Float = 22.5f,
+                                      boundaryShapes: List<ShapeElement> = shapes): Float? {
     val lineCenter = WorldPoint(element.x, element.y + lineHeightWorld / 2f)
-    val rightEdges = shapes.asSequence().filter { it.kind == ShapeKind.REGION &&
+    val rightEdges = boundaryShapes.asSequence().filter { it.kind == ShapeKind.REGION &&
         it.bounds().contains(lineCenter) }.map { it.x + it.width } +
-        shapes.asSequence().filter { shape ->
+        boundaryShapes.asSequence().filter { shape ->
             !(shape.kind == ShapeKind.REGION && shape.bounds().contains(lineCenter)) &&
                 shape.x + shape.width > element.x &&
                 shape.y < element.y + lineHeightWorld && shape.y + shape.height > element.y

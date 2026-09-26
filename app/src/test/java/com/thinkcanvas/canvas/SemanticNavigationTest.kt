@@ -105,6 +105,19 @@ class SemanticNavigationTest {
             .semanticProjection(.5f, 14f).visible("title"))
     }
 
+    @Test fun hiddenSmallShapeDoesNotClipFarTitle() {
+        val title = TextElement(id = "title", text = "見出し", kind = TextKind.TITLE,
+            x = 0f, y = 0f)
+        val small = ShapeElement(id = "small", kind = ShapeKind.RECTANGLE,
+            x = 10f, y = 0f, width = 40f, height = 30f)
+        val snapshot = BoardSnapshot(texts = listOf(title), shapes = listOf(small))
+        val projection = snapshot.semanticProjection(.25f, 14f)
+        assertFalse(projection.visible("small"))
+        assertTrue(projection.visible("title"))
+        assertEquals(null, snapshot.titleAvailableWidth(title, 22.5f,
+            snapshot.shapes.filter { projection.visible(it.id) }))
+    }
+
     @Test fun bentArrowUsesRenderedCurveExtentInFarView() {
         val curved = ArrowElement(id = "curved", from = ArrowEnd.Free(0f, 0f),
             to = ArrowEnd.Free(10f, 0f), bend = 200f)

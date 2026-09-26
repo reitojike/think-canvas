@@ -171,8 +171,13 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     }
     val rawSearchMatches = if (searchOpen) board.snapshot().searchCanvas(searchQuery) else emptyList()
     val matchIds = rawSearchMatches.map { it.id }.toSet()
+    val snapshot = board.snapshot()
+    val keptIds = selectedIds + matchIds
+    val initialProjection = snapshot.semanticProjection(viewport.scale, bodyDp,
+        keptIds, density.density, titleDp, titleLineHeightWorld)
+    val boundaryShapes = snapshot.shapes.filter { initialProjection.visible(it.id) }
     fun measureTextExtent(element: TextElement, atScale: Float,
-                          keepIds: Set<String>): TextExtent {
+                          keepIds: Set<String>, visibleShapes: List<ShapeElement>): TextExtent {
         val tier = semanticTier(bodyDp, atScale)
         val title = element.kind == TextKind.TITLE
         val minimumDp = when (tier) {
@@ -185,7 +190,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         }
         val lineWorld = with(density) { (size * 1.5f).toDp().toPx() }
         val widthDp = if (title && tier != SemanticTier.NEAR && element.id !in keepIds)
-            board.snapshot().titleAvailableWidth(element, lineWorld)
+            snapshot.titleAvailableWidth(element, lineWorld, visibleShapes)
                 ?.let { (it / density.density).dp } ?: 166.dp
         else 166.dp
         val measured = textMeasurer.measure(
@@ -202,7 +207,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val measuredTextExtents = remember(board.elements, board.shapes, viewport.scale, density,
         selectedIds, matchIds) {
         board.elements.associate { element ->
-            element.id to measureTextExtent(element, viewport.scale, selectedIds + matchIds)
+            element.id to measureTextExtent(element, viewport.scale, keptIds, boundaryShapes)
         }
     }
     val searchMatches = rawSearchMatches.map { match ->
@@ -249,7 +254,15 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         val match = searchMatches[searchPosition]
         val initialTarget = viewport.focusMatch(match, width, height)
         val targetMatch = board.elements.firstOrNull { it.id == match.id }?.let { element ->
-            val extent = measureTextExtent(element, initialTarget.scale, selectedIds + matchIds)
+            val targetTier = semanticTier(bodyDp, initialTarget.scale)
+            val targetMinDp = if (targetTier == SemanticTier.FAR) 9f else 11f
+            val targetLineWorld = with(density) {
+                (maxOf(titleDp, targetMinDp / initialTarget.scale).dp.toSp() * 1.5f).toDp().toPx()
+            }
+            val targetProjection = snapshot.semanticProjection(initialTarget.scale, bodyDp,
+                keptIds, density.density, titleDp, targetLineWorld)
+            val targetShapes = snapshot.shapes.filter { targetProjection.visible(it.id) }
+            val extent = measureTextExtent(element, initialTarget.scale, keptIds, targetShapes)
             match.copy(bounds = WorldBounds(element.x, element.y,
                 element.x + extent.width, element.y + extent.height))
         } ?: match
@@ -936,6 +949,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         val displayProjection = displaySnapshot.semanticProjection(viewport.scale, bodyDp,
             selectedIds + matchIds + movingIds, density.density, titleDp, titleLineHeightWorld,
             measuredTextExtents)
+        val displayBoundaryShapes = displaySnapshot.shapes.filter { displayProjection.visible(it.id) }
         InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.MARKER,
             viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
             onSelect = { id -> selectedIds = setOf(id); selectedId = null },
@@ -1052,7 +1066,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 val title = element.kind == TextKind.TITLE
                 val tier = displayProjection.tier
                 val availableWorld = if (title && tier != SemanticTier.NEAR)
-                    displaySnapshot.titleAvailableWidth(element, titleLineHeightWorld) else null
+                    displaySnapshot.titleAvailableWidth(element, titleLineHeightWorld,
+                        displayBoundaryShapes) else null
                 val availableDp = availableWorld?.takeUnless { element.id in selectedIds || element.id in matchIds }
                     ?.let { with(density) { it.toDp() } }
                 val (screenX, screenY) = viewport.worldToScreen(element.x, element.y)
