@@ -32,14 +32,15 @@ private enum class AttachmentAnchor(val u: Float, val v: Float, val label: Strin
 @Composable
 fun ArrowAttachmentDialog(
     snapshot: BoardSnapshot,
+    projection: SemanticProjection,
     arrow: ArrowElement,
     endKind: HandleKind,
     onDismiss: () -> Unit,
     onAttach: (ArrowEnd.Attached) -> Boolean,
 ) {
-    val targets = snapshot.texts.mapIndexed { index, text ->
+    val targets = snapshot.texts.filter { projection.visible(it.id) }.mapIndexed { index, text ->
         text.id to "文字 ${index + 1}: ${text.text.lineSequence().first().take(24)}"
-    } + snapshot.shapes.mapIndexed { index, shape ->
+    } + snapshot.shapes.filter { projection.visible(it.id) }.mapIndexed { index, shape ->
         val kind = when (shape.kind) {
             ShapeKind.RECTANGLE -> "四角"
             ShapeKind.ELLIPSE -> "丸"
@@ -48,7 +49,7 @@ fun ArrowAttachmentDialog(
         shape.id to "$kind ${index + 1}${shape.name.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ""}"
     }
     val current = (if (endKind == HandleKind.FROM) arrow.from else arrow.to) as? ArrowEnd.Attached
-    var selectedTarget by remember(arrow.id, endKind) {
+    var selectedTarget by remember(arrow.id, endKind, targets) {
         mutableStateOf(current?.targetId?.takeIf { id -> targets.any { it.first == id } }
             ?: targets.firstOrNull()?.first)
     }
