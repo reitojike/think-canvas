@@ -1,4 +1,4 @@
-package com.thinkcanvas.internal.canvas
+package com.thinkcanvas.canvas
 
 data class Viewport(
     val scale: Float = 1f,

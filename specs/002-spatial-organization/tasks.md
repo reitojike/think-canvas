@@ -3,6 +3,8 @@
 **入力**: [仕様](spec.md)、[計画](plan.md)、[データモデル](data-model.md)、[操作契約](contracts/interaction.md)
 **検証**: 保存・空間配置・接続の不変条件を JUnit で確認し、画面操作は [quickstart.md](quickstart.md) で確認する。
 
+この完了済みタスクに記載した旧 source path と v1→v2 migration は #3 実装時の記録です。Issue #26 以降の source path と保存形式は [計画](plan.md) を参照します。
+
 ## Phase 1: セットアップ
 
 - [x] T001 JVM の単体テストで Room 3 の migration を再現できる `sqlite-bundled-jvm` を維持する。`room3-testing` は instrumentation を必須とするため追加しない

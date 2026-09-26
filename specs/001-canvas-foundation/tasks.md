@@ -1,5 +1,7 @@
 # 実装タスク: Canvas Foundation
 
+T001〜T024 の完了済みタスクに記載した `com/thinkcanvas/internal` は実装当時の source path です。Issue #26 以降の source path は `com/thinkcanvas` です。
+
 **入力**: [仕様](spec.md)、[計画](plan.md)、[データモデル](data-model.md)、[操作契約](contracts/interaction.md)
 
 ## Phase 1: セットアップ
@@ -72,3 +74,9 @@ US1 を最初の MVP とし、世界座標を崩さず US2/US3 を積み上げ�
 
 - [x] T026 `MainActivity.kt` で明るいキャンバスに合わせて system bar のアイコン色を固定する
 - [ ] T027 更新した internal APK を実機のライトモード・ダークモードで開き、status bar と navigation bar の判読性を確認する
+
+## Phase 11: Issue #26 ソース namespace の整理
+
+- [x] T028 `namespace`、ソースとテストの package、Manifest の Activity 名、`R` import を `com.thinkcanvas` にそろえ、`applicationId=com.thinkcanvas.internal` を維持する
+- [x] T029 Room 3 の現行四表を新しい database class 名の schema v1 に整理し、lint、単体テスト、デバッグビルド、内部 APK の識別子を検証する
+- [ ] T030 更新した internal APK で上書き更新、Activity の起動、新規ボードの保存と再起動後の復元を実機確認する

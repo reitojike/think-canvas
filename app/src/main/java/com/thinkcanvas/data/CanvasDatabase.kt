@@ -1,10 +1,9 @@
-package com.thinkcanvas.internal.data
+package com.thinkcanvas.data
 
 import android.content.Context
 import androidx.room3.Dao
 import androidx.room3.Database
 import androidx.room3.Entity
-import androidx.room3.AutoMigration
 import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.PrimaryKey
@@ -13,13 +12,13 @@ import androidx.room3.Room
 import androidx.room3.RoomDatabase
 import androidx.room3.Transaction
 import androidx.sqlite.driver.AndroidSQLiteDriver
-import com.thinkcanvas.internal.canvas.TextColor
-import com.thinkcanvas.internal.canvas.TextElement
-import com.thinkcanvas.internal.canvas.TextKind
-import com.thinkcanvas.internal.canvas.ArrowElement
-import com.thinkcanvas.internal.canvas.ArrowEnd
-import com.thinkcanvas.internal.canvas.ShapeElement
-import com.thinkcanvas.internal.canvas.ShapeKind
+import com.thinkcanvas.canvas.TextColor
+import com.thinkcanvas.canvas.TextElement
+import com.thinkcanvas.canvas.TextKind
+import com.thinkcanvas.canvas.ArrowElement
+import com.thinkcanvas.canvas.ArrowEnd
+import com.thinkcanvas.canvas.ShapeElement
+import com.thinkcanvas.canvas.ShapeKind
 
 @Entity(tableName = "boards")
 data class BoardRow(
@@ -185,9 +184,8 @@ interface CanvasDao {
 
 @Database(
     entities = [BoardRow::class, TextElementRow::class, SpatialElementRow::class, ArrowElementRow::class],
-    version = 2,
+    version = 1,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
 )
 abstract class CanvasDatabase : RoomDatabase() {
     abstract fun canvasDao(): CanvasDao
@@ -196,7 +194,7 @@ abstract class CanvasDatabase : RoomDatabase() {
         fun open(context: Context): CanvasDatabase = Room.databaseBuilder(
             context.applicationContext,
             CanvasDatabase::class.java,
-            "think-canvas.db",
+            "thinkcanvas.db",
         ).setDriver(AndroidSQLiteDriver()).build()
     }
 }

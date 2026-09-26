@@ -2,16 +2,18 @@
 
 **Branch**: `002-spatial-organization` | **日付**: 2026-09-26 | **仕様**: [spec.md](spec.md)
 
+**保存形式の更新**: #3 実装時は二表の v1 から四表の v2 へ migration しました。Issue #26 では旧内部版のデータを引き継がず、四表を `thinkcanvas.db` の新しい schema v1 として開始します。
+
 ## 概要
 
-既存の単一ボードへ四角・丸・囲み・矢印を追加し、複数選択と余白挿入を扱う。位置と接続は世界座標で保持し、Room schema v2 へ追加する。図形と矢印の幾何計算を UI から分け、gesture 中の preview は正常な確定時だけ保存する。
+単一ボードで四角・丸・囲み・矢印、複数選択と余白挿入を扱う。位置と接続は世界座標で保持し、Room の現行四表に保存する。図形と矢印の幾何計算を UI から分け、gesture 中の preview は正常な確定時だけ保存する。
 
 ## 技術コンテキスト
 
 - **言語と環境**: Android/Kotlin、Jetpack Compose、CI の JDK 25、`compileSdk 37`、`targetSdk 36`。プラグインとライブラリの版数は root/app の Gradle 設定を基準にする。
-- **主な依存**: 既存の Compose と Room 3 を継続する。schema migration は既存の `sqlite-bundled-jvm` で旧 DB を再現し、JVM の Room 再オープンで検証する。新しい描画ライブラリは導入しない。
-- **保存**: Room 3 の `boards`・`text_elements` を維持し、v2 で `spatial_elements`・`arrow_elements` を追加する。確定済み snapshot を単一 transaction で保存する。
-- **検証**: JUnit で包含、移動、矢印接続、余白、Undo/Redo、v1→v2 migration と再オープンを検証する。GitHub CI では lint、単体テスト、デバッグビルド、公開情報境界を実行する。
+- **主な依存**: Compose と Room 3 を使う。JVM の Room 再オープン検証には `sqlite-bundled-jvm` を使う。新しい描画ライブラリは導入しない。
+- **保存**: Room 3 の `boards`・`text_elements`・`spatial_elements`・`arrow_elements` を schema v1 として export する。確定済み snapshot を単一 transaction で保存する。
+- **検証**: JUnit で包含、移動、矢印接続、余白、Undo/Redo、現行四表の保存と再オープンを検証する。GitHub CI では lint、単体テスト、デバッグビルド、公開情報境界を実行する。
 - **対象**: Android API 26 以上の単一ボード。文字要素と既存のパン・ズーム・編集を保持する。
 - **性能目標**: 100 要素を含むボードで、gesture 中に Room 書き込みを行わず、パン・ズームと移動 preview が連続して追従する。大規模ボードの上限は別途実機で評価する。
 - **制約**: オフライン、端末内保存、80 操作のセッション内履歴。PRD と HTML モックは公開リポジトリへ追加しない。
@@ -23,7 +25,7 @@
 | PRD の authority | §4〜9、§14、§16〜17 を仕様へ反映した。HTML モックは対象の見た目と状態遷移の参考に限定する。非公開ファイルは追加しない。 |
 | Standard-first | ボタン・メニュー・文字入力・semantics は Compose の標準手段を使う。要素起点パン、長押し移動、余白、図形ツールの優先順位が重なるため、キャンバスの gesture 調停だけ単一の `pointerInput` を使う。48dp 以上の新しい操作つまみと代替操作を設ける。 |
 | 空間配置 | 世界座標だけを保存する。囲みの所属は論理中心から導き、明示された移動・余白以外で位置を変えない。吸着と自動整列はしない。 |
-| ローカル優先 | Room の migration と transaction で既存文字と新要素を保持する。基本操作にネットワーク・アカウント・AI を使わない。 |
+| ローカル優先 | Room の transaction で文字と空間要素を保持する。基本操作にネットワーク・アカウント・AI を使わない。 |
 | 仕様先行 | 本仕様の clarify、plan、checklist、tasks、analyze の後に実装する。 |
 
 設計後もすべての原則を満たす。独自の pointer input は空間操作の複合判定に限り、支援技術向けの actions と視覚フィードバックを併用する。
@@ -37,12 +39,12 @@
 - 囲み移動と余白挿入の対象集合は gesture 開始時の snapshot で決め、ID で重複除去する。接続先だけを動かした場合、矢印の自由端は変えない。複数選択で矢印自体が含まれる場合は自由端も同じ差分で動かす。
 - `BoardState` は文字・図形・矢印の確定済み snapshot と 80 件の Undo/Redo を持つ。複数要素の変更を一つの履歴項目として適用し、失敗した操作や表示だけの変更は記録しない。
 
-### 保存と移行
+### 保存
 
-- v1 schema を保持し、Room 3 の自動 migration で v2 の二表を追加する。v1 の既存行を削除・再作成しない。
+- `com.thinkcanvas.data.CanvasDatabase` が四表を含む schema v1 を export し、`thinkcanvas.db` を開く。旧 `think-canvas.db` は読み込まない。
 - `CanvasStore` の読込と保存を三種類の要素に拡張する。テキスト、図形、矢印の置換とボードの更新時刻を一つの transaction で扱い、ボード名を既定値で上書きしない。
 - 接続先は文字表と図形表の両方を参照する。DB の単一外部キーで表せないため、削除と保存前に参照を検証する。対象削除時は接続矢印を同じ履歴・transaction で削除する。
-- JVM の単体テストで v1 の既存ボード名と文字を入れた DB を作り、Room の再オープンで v2 へ移す。行と座標の保持、新表の空状態、schema 検証を行う。v2 の全種を保存・再オープンするテストも行う。
+- JVM の単体テストで現行 v1 のボード名、文字、図形、矢印を保存し、Room の再オープン後も保持されることを確認する。
 
 ### 画面と gesture
 
@@ -64,7 +66,7 @@ specs/002-spatial-organization/
 ├── checklists/
 └── tasks.md
 
-app/src/main/java/com/thinkcanvas/internal/
+app/src/main/java/com/thinkcanvas/
 ├── canvas/
 │   ├── BoardState.kt          # 確定状態と履歴
 │   ├── SpatialElement.kt      # 図形と矢印の型
@@ -73,14 +75,13 @@ app/src/main/java/com/thinkcanvas/internal/
 │   ├── SpatialElements.kt    # 図形・矢印・選択表示と semantics
 │   └── CanvasControls.kt     # ツール、案内、操作メニュー
 └── data/
-    ├── CanvasDatabase.kt     # schema v2 と DAO
+    ├── CanvasDatabase.kt     # 四表の schema v1 と DAO
     └── CanvasStore.kt        # 一貫した snapshot の読込・保存
 
-app/src/test/java/com/thinkcanvas/internal/
+app/src/test/java/com/thinkcanvas/
 ├── canvas/SpatialGeometryTest.kt
 ├── canvas/BoardStateTest.kt
-├── data/CanvasDatabaseTest.kt
-└── data/CanvasMigrationTest.kt
+└── data/CanvasDatabaseTest.kt
 ```
 
 既存の単一 `app` module を維持する。幾何計算と描画・gesture を分けるのは、保存される配置の不変条件を UI なしで検証するため。新しい基盤や汎用 framework は作らない。

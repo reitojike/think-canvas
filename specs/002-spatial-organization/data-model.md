@@ -1,8 +1,10 @@
 # データモデル: Spatial Organization
 
+**保存形式の更新**: #3 実装時は二表の v1 から四表の v2 へ migration しました。Issue #26 では四表を新しい schema v1 とし、DB ファイルを `thinkcanvas.db` に変更します。旧内部版の DB は読み込みません。
+
 ## Board と TextElement
 
-既存の `boards` と `text_elements` を schema v1 のまま保持する。文字要素の位置と内容を移行中に書き換えない。文字の中心判定には、表示倍率・端末文字サイズから独立した論理境界を使う。ボードの名前と更新時刻を新しい要素の保存で失わない。
+`boards` と `text_elements` を現行 schema v1 に含める。文字の中心判定には、表示倍率・端末文字サイズから独立した論理境界を使う。ボードの名前と更新時刻を空間要素の保存で失わない。
 
 ## SpatialElement
 
@@ -36,9 +38,9 @@
 
 `BoardSnapshot` は文字・図形/囲み・矢印の確定済み集合を持つ。選択集合、gesture preview、viewport は含めない。一回の確定操作について変更前後を履歴に記録し、80 件まで保持する。複数要素の移動、余白挿入、削除は一つの履歴項目で戻す。保存は snapshot 全体を一つの transaction で反映する。
 
-## Room schema v2
+## Room schema v1
 
-v1 の二表に `spatial_elements` と `arrow_elements` を追加する。矢印の接続先が複数の表を指すため、アプリ側で ID の存在と削除時の整合を検証する。v1→v2 の migration は既存のボード名・文字・座標を保持し、新表を空で開始する。schema v1 と v2 をともに export する。
+`boards`・`text_elements`・`spatial_elements`・`arrow_elements` の四表を `com.thinkcanvas.data.CanvasDatabase` の schema v1 として export する。矢印の接続先が複数の表を指すため、アプリ側で ID の存在と削除時の整合を検証する。`thinkcanvas.db` で新規開始し、旧内部版の DB からは移行しない。
 
 ## 不変条件
 

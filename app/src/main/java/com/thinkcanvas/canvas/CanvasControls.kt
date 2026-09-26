@@ -1,4 +1,4 @@
-package com.thinkcanvas.internal.canvas
+package com.thinkcanvas.canvas
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import androidx.annotation.StringRes
-import com.thinkcanvas.internal.R
+import com.thinkcanvas.R
 
 enum class SpatialTool(val label: String, val icon: String, @StringRes val labelRes: Int) {
     NONE("閉じる", "＋", R.string.tool_close),

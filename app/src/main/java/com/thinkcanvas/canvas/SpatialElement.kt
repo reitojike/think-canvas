@@ -1,4 +1,4 @@
-package com.thinkcanvas.internal.canvas
+package com.thinkcanvas.canvas
 
 import java.util.UUID
 

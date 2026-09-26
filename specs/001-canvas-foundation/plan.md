@@ -35,14 +35,14 @@ Phase 1 の設計後も上記を満たす。例外はキャンバス上の複合
 ## 構成
 
 ```text
-app/src/main/java/com/thinkcanvas/internal/
+app/src/main/java/com/thinkcanvas/
 ├── MainActivity.kt
 ├── canvas/BoardState.kt
 ├── canvas/Viewport.kt
 ├── canvas/CanvasScreen.kt
 ├── data/CanvasDatabase.kt
 └── data/CanvasStore.kt
-app/src/test/java/com/thinkcanvas/internal/canvas/
+app/src/test/java/com/thinkcanvas/canvas/
 └── BoardStateTest.kt
 app/schemas/
 ```
@@ -63,7 +63,8 @@ app/schemas/
 - system bars、画面の切り欠き、IME には Compose の `safeDrawing` inset を適用する。余白は canvas の表示領域に含めず、保存済みの世界座標や画面内の gesture 計算は変えない。Draft の可視位置は縮小後の canvas の高さから決め、IME 高さを再度差し引かない。
 - キャンバスは固定の明色なので、`ComponentActivity.enableEdgeToEdge` の `SystemBarStyle.light` で system bar のアイコンを暗色に固定する。端末のダークモードに色を追従させず、白い背景とのコントラストを保つ。
 - GitHub Actions は PR と main push で Android lint、JUnit、debug build、公開情報境界チェックを実行する。
-- Room の schema v1 を export し、将来の migration に使う。破壊的 migration はしない。
+- Room の現行の四表を schema v1 として export し、将来の migration に使う。
+- ソースの namespace と Kotlin package は `com.thinkcanvas` とし、内部配布の `applicationId=com.thinkcanvas.internal` を明示して維持する。Manifest の Activity 名は完全修飾名で指定する。Room の class は `com.thinkcanvas.data.CanvasDatabase`、DB ファイルは `thinkcanvas.db` とし、旧内部版の `think-canvas.db` は読み込まない。
 
 ## リスクと検証
 
