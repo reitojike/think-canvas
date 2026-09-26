@@ -57,6 +57,12 @@ class SemanticNavigationTest {
         assertFalse(collapsed(120f, 90f))
         assertTrue(collapsed(119.9f, 90f))
         assertTrue(collapsed(120f, 89.9f))
+        val denseRegion = ShapeElement(id = "dense", kind = ShapeKind.REGION,
+            x = 0f, y = 0f, width = 300f, height = 300f, name = "Group")
+        val denseSnapshot = BoardSnapshot(shapes = listOf(denseRegion))
+        assertFalse("dense" in denseSnapshot.semanticProjection(.5f, 14f).collapsedRegions)
+        assertTrue("dense" in denseSnapshot.semanticProjection(.5f, 14f,
+            pixelsPerDp = 3f).collapsedRegions)
     }
 
     @Test fun clippedTitleIsNotRenderedOrHitUnlessSelected() {

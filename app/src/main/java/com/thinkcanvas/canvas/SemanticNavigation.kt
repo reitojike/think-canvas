@@ -25,11 +25,13 @@ fun BoardSnapshot.semanticProjection(
     scale: Float,
     bodyDp: Float,
     keep: Set<String> = emptySet(),
+    pixelsPerDp: Float = 1f,
 ): SemanticProjection {
     val tier = semanticTier(bodyDp, scale)
+    fun apparentDp(worldLength: Float) = worldLength * scale / pixelsPerDp
     val collapsed = shapes.filter { shape ->
         shape.kind == ShapeKind.REGION && shape.name.isNotBlank() &&
-            (tier == SemanticTier.FAR || shape.width * scale < 120f || shape.height * scale < 90f)
+            (tier == SemanticTier.FAR || apparentDp(shape.width) < 120f || apparentDp(shape.height) < 90f)
     }
     val hidden = mutableSetOf<String>()
     fun covered(id: String): Boolean {
@@ -46,17 +48,18 @@ fun BoardSnapshot.semanticProjection(
         (covered(it.id) || tier == SemanticTier.FAR && it.kind == TextKind.BODY) }
         .forEach { hidden += it.id }
     if (tier != SemanticTier.NEAR) texts.filter { it.kind == TextKind.TITLE && it.id !in keep &&
-        titleAvailableWidth(it)?.let { width -> width * scale < 14f } == true }
+        titleAvailableWidth(it)?.let { width -> apparentDp(width) < 14f } == true }
         .forEach { hidden += it.id }
     shapes.filter { it.kind != ShapeKind.REGION && it.id !in keep }.forEach { shape ->
         val contained = texts.filter { shape.bounds().contains(centerOf(it.id)!!) }
         if (covered(shape.id) || tier == SemanticTier.FAR &&
-            (min(shape.width, shape.height) * scale < 24f ||
+            (apparentDp(min(shape.width, shape.height)) < 24f ||
                 contained.isNotEmpty() && contained.all { it.id in hidden })) hidden += shape.id
     }
     ink.filter { it.id !in keep &&
         (covered(it.id) || tier == SemanticTier.FAR &&
-            max(it.bounds().right - it.bounds().left, it.bounds().bottom - it.bounds().top) * scale < 16f) }
+            apparentDp(max(it.bounds().right - it.bounds().left,
+                it.bounds().bottom - it.bounds().top)) < 16f) }
         .forEach { hidden += it.id }
     arrows.filter { arrow ->
         if (arrow.id in keep) return@filter false
@@ -64,7 +67,7 @@ fun BoardSnapshot.semanticProjection(
             it is ArrowEnd.Attached && it.targetId in hidden
         }
         val length = arrowPoints(arrow)?.let { (a, b) ->
-            kotlin.math.hypot(b.x - a.x, b.y - a.y) * scale
+            apparentDp(kotlin.math.hypot(b.x - a.x, b.y - a.y))
         } ?: 0f
         attachedHidden || covered(arrow.id) || tier == SemanticTier.FAR && length < 20f
     }.forEach { hidden += it.id }

@@ -62,6 +62,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.stringResource
@@ -147,8 +148,12 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val focusRequester = remember { FocusRequester() }
     val regionNameFocusRequester = remember { FocusRequester() }
     val searchFocusRequester = remember { FocusRequester() }
-    val touchSlop = LocalViewConfiguration.current.touchSlop
-    val longPressMillis = LocalViewConfiguration.current.longPressTimeoutMillis
+    val viewConfiguration = LocalViewConfiguration.current
+    val context = LocalContext.current
+    val touchSlop = viewConfiguration.touchSlop
+    val longPressMillis = viewConfiguration.longPressTimeoutMillis
+    val doubleTapTimeoutMillis = viewConfiguration.doubleTapTimeoutMillis
+    val doubleTapSlop = android.view.ViewConfiguration.get(context).scaledDoubleTapSlop.toFloat()
     val imeBottom = WindowInsets.ime.getBottom(density)
     val latestViewport = rememberUpdatedState(viewport)
     val latestElements = rememberUpdatedState(board.elements)
@@ -157,7 +162,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val searchMatches = if (searchOpen) board.snapshot().searchCanvas(searchQuery) else emptyList()
     val matchIds = searchMatches.map { it.id }.toSet()
     val currentMatch = searchMatches.getOrNull(searchPosition)
-    val projection = board.snapshot().semanticProjection(viewport.scale, bodyDp, selectedIds + matchIds)
+    val projection = board.snapshot().semanticProjection(viewport.scale, bodyDp,
+        selectedIds + matchIds, density.density)
     val latestProjection = rememberUpdatedState(projection)
     val latestLastBlankTap = rememberUpdatedState(lastBlankTap)
     val latestSearchOpen = rememberUpdatedState(searchOpen)
@@ -487,8 +493,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 val previousBlankTap = latestLastBlankTap.value
                 if (previousBlankTap != null && latestTool.value == SpatialTool.NONE &&
                     latestInkTool.value == null &&
-                    SystemClock.uptimeMillis() - previousBlankTap.first <= 320L &&
-                    (down.position - previousBlankTap.second).getDistance() <= 30f &&
+                    SystemClock.uptimeMillis() - previousBlankTap.first <= doubleTapTimeoutMillis &&
+                    (down.position - previousBlankTap.second).getDistance() <= doubleTapSlop &&
                     hitCanvas(down.position).let { it.first == null && it.second == null } &&
                     canvasSize != IntSize.Zero) {
                     draft = null
@@ -865,7 +871,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         }
         val movingIds = movingPreview?.first ?: emptySet()
         val displayProjection = displaySnapshot.semanticProjection(viewport.scale, bodyDp,
-            selectedIds + matchIds + movingIds)
+            selectedIds + matchIds + movingIds, density.density)
         InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.MARKER,
             viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
             onSelect = { id -> selectedIds = setOf(id); selectedId = null },
@@ -984,7 +990,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 val availableWorld = if (title && tier != SemanticTier.NEAR)
                     displaySnapshot.titleAvailableWidth(element) else null
                 val availableDp = availableWorld?.takeUnless { element.id in selectedIds || element.id in matchIds }
-                    ?.let { with(density) { (it * viewport.scale).toDp() } }
+                    ?.let { with(density) { it.toDp() } }
                 val (screenX, screenY) = viewport.worldToScreen(element.x, element.y)
                 val selected = element.id in selectedIds || element.id in movingIds
                 val elementActionsEnabled = !saving && !saveFailed
