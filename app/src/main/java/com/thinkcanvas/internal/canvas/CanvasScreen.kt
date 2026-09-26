@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -362,8 +363,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     }
 
     Box(
-        modifier = Modifier.fillMaxSize().onSizeChanged { canvasSize = it }
-            .background(paper).clipToBounds()
+        modifier = Modifier.fillMaxSize().background(paper).safeDrawingPadding()
+            .onSizeChanged { canvasSize = it }.clipToBounds()
             .semantics {
                 contentDescription = "キャンバス"
                 customActions = listOf(

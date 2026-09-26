@@ -60,6 +60,7 @@ app/schemas/
 - 編集はタップ位置のインライン入力とキーボード上の見出し・本文・朱・完了ツールバーを使い、確定時だけ履歴と保存に反映する。空白だけの新規入力は破棄する。
 - 選択要素にはモックの朱色枠と移動ハンドルを表示する。長押し gesture を使えない場合の位置調整と編集は accessibility action で提供する。
 - ボード名ピル、空ボード案内、Undo/Redo ピル、倍率表示はモックの配置・大きさ・色に合わせる。対象外の検索、FAB、ボード一覧は表示しない。
+- system bars と画面の切り欠きには Compose の `safeDrawing` inset を適用する。余白は canvas の表示領域に含めず、保存済みの世界座標や画面内の gesture 計算は変えない。
 - GitHub Actions は PR と main push で Android lint、JUnit、debug build、公開情報境界チェックを実行する。
 - Room の schema v1 を export し、将来の migration に使う。破壊的 migration はしない。
 
