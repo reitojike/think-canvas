@@ -586,6 +586,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                                             beforeSnapshot.shapes.zip(afterSnapshot.shapes)
                                                 .filter { (old, new) -> old != new }.map { it.first.id } +
                                             beforeSnapshot.arrows.zip(afterSnapshot.arrows)
+                                                .filter { (old, new) -> old != new }.map { it.first.id } +
+                                            beforeSnapshot.ink.zip(afterSnapshot.ink)
                                                 .filter { (old, new) -> old != new }.map { it.first.id })
                                         val transition = changedIds.firstNotNullOfOrNull { id ->
                                             val beforeRegion = beforeSnapshot.centerOf(id)
