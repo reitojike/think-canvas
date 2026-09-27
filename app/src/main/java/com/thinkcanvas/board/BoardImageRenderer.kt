@@ -10,6 +10,7 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import androidx.ink.rendering.android.canvas.CanvasStrokeRenderer
+import com.thinkcanvas.canvas.InkKind
 import com.thinkcanvas.canvas.ShapeKind
 import com.thinkcanvas.canvas.TextColor
 import com.thinkcanvas.canvas.TextKind
@@ -34,10 +35,12 @@ object BoardImageRenderer {
             }
             canvas.save()
             canvas.concat(transform)
+            val inkRenderer = CanvasStrokeRenderer.create()
+            drawInk(canvas, plan, transform, InkKind.MARKER, inkRenderer)
             drawShapes(canvas, plan)
             drawArrows(canvas, plan)
             drawTexts(canvas, plan)
-            drawInk(canvas, plan, transform)
+            drawInk(canvas, plan, transform, InkKind.PEN, inkRenderer)
             canvas.restore()
             return bitmap
         } catch (error: Throwable) {
@@ -127,9 +130,9 @@ object BoardImageRenderer {
         }
     }
 
-    private fun drawInk(canvas: Canvas, plan: SharePlan, transform: Matrix) {
-        val renderer = CanvasStrokeRenderer.create()
-        plan.source.ink.filter { it.id in plan.includedIds }.forEach { element ->
+    private fun drawInk(canvas: Canvas, plan: SharePlan, transform: Matrix,
+                        kind: InkKind, renderer: CanvasStrokeRenderer) {
+        plan.source.ink.filter { it.id in plan.includedIds && it.kind == kind }.forEach { element ->
             element.strokes.forEach { stroke ->
                 renderer.draw(canvas, makeStroke(element.kind, stroke.inputType, stroke.points),
                     transform)

@@ -24,6 +24,30 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class BoardImageDeliveryTest {
+    @Test fun markerStaysBehindShapesAndPenInExport() {
+        fun stroke(id: String, kind: InkKind) = InkElement(id = id, kind = kind,
+            strokes = listOf(InkStroke(id = "$id-stroke", startedAt = 1, endedAt = 21,
+                inputType = InkInputType.TOUCH,
+                points = listOf(InkPoint(0f, 70f, 0), InkPoint(120f, 70f, 20)))))
+        val source = BoardSnapshot(shapes = listOf(ShapeElement(id = "outline",
+            kind = ShapeKind.RECTANGLE, x = 40f, y = 30f, width = 80f, height = 80f)),
+            ink = listOf(stroke("marker", InkKind.MARKER), stroke("pen", InkKind.PEN)))
+        val plan = planShare(source)
+        val outlineOnly = BoardImageRenderer.render(plan.copy(includedIds = setOf("outline")))
+        val withMarker = BoardImageRenderer.render(plan.copy(includedIds = setOf("outline", "marker")))
+        val withPen = BoardImageRenderer.render(plan)
+        fun pixel(bitmap: android.graphics.Bitmap, x: Float, y: Float): Int = bitmap.getPixel(
+            ((x - plan.imageBounds.left) * plan.pixelsPerWorldUnit).toInt(),
+            ((y - plan.imageBounds.top) * plan.pixelsPerWorldUnit).toInt())
+        assertNotEquals("marker が背景に見える", pixel(outlineOnly, 80f, 70f),
+            pixel(withMarker, 80f, 70f))
+        assertEquals("図形の線が marker より前面", pixel(outlineOnly, 40f, 70f),
+            pixel(withMarker, 40f, 70f))
+        assertNotEquals("pen が marker より前面", pixel(withMarker, 80f, 70f),
+            pixel(withPen, 80f, 70f))
+        outlineOnly.recycle(); withMarker.recycle(); withPen.recycle()
+    }
+
     @Test fun allElementKindsArePresentInSharedBitmap() {
         val source = BoardSnapshot(
             texts = listOf(TextElement(id = "text", text = "A", x = 10f, y = 10f)),
