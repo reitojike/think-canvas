@@ -126,8 +126,12 @@ class CanvasStore private constructor(context: Context) {
         }
     }
 
-    // 既存の単一ボード画面を段階的に移行する間も、同じ保存経路を使う。
-    suspend fun load(): BoardSnapshot = restore()?.snapshot ?: BoardSnapshot()
+    // 既存の単一ボード画面は読み書きとも ID 1 に固定する。複数ボードは ID 指定 API を使う。
+    suspend fun load(): BoardSnapshot {
+        val restored = restore()
+        return if (restored?.details?.id == 1L) restored.snapshot
+        else savedBoard(1L)?.snapshot ?: BoardSnapshot()
+    }
     fun save(snapshot: BoardSnapshot): Deferred<Unit> = save(1L, snapshot)
 
     fun shouldShowGuide(boardId: Long, snapshot: BoardSnapshot): Boolean =
