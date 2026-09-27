@@ -132,7 +132,8 @@ fun BoardSnapshot.visibleLassoSelection(
     projection: SemanticProjection,
     resolvedRenderedBounds: Map<String, WorldBounds> = resolveRenderedGeometry(
         emptyMap()).boundsById,
-): Set<String> = lassoSelection(vertices, resolvedRenderedBounds)
+    arrowEndpointOffset: Float = 6f,
+): Set<String> = lassoSelection(vertices, resolvedRenderedBounds, arrowEndpointOffset)
     .filterTo(mutableSetOf()) { projection.visible(it) }
 
 fun Viewport.centerOn(point: WorldPoint, width: Float, height: Float, targetScale: Float,

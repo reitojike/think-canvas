@@ -167,12 +167,13 @@ fun BoardSnapshot.distanceToArrow(point: WorldPoint, arrow: ArrowElement, offset
 }
 
 fun BoardSnapshot.lassoSelection(vertices: List<WorldPoint>,
-                                 renderedBounds: Map<String, WorldBounds> = emptyMap()): Set<String> {
+                                 renderedBounds: Map<String, WorldBounds> = emptyMap(),
+                                 arrowEndpointOffset: Float = 6f): Set<String> {
     val selected = (texts.map { it.id } + shapes.map { it.id } + ink.map { it.id })
         .filter { id -> (renderedBounds[id]?.center ?: centerOf(id))
             ?.let { pointInPolygon(it, vertices) } == true }.toMutableSet()
     arrows.forEach { arrow ->
-        val points = arrowPoints(arrow, renderedBounds = renderedBounds)
+        val points = arrowPoints(arrow, arrowEndpointOffset, renderedBounds)
         if (points != null && pointInPolygon(points.first, vertices) &&
             pointInPolygon(points.second, vertices)) selected += arrow.id
     }

@@ -95,15 +95,34 @@ class SpatialGeometryTest {
             x = 0f, y = 0f, width = 100f, height = 100f)
         val text = TextElement(id = "text", text = "scale", x = 40f, y = 30f)
         val source = BoardSnapshot(texts = listOf(text), shapes = listOf(region))
-        val previews = listOf(.25f to 100f, 3f to 100f).mapIndexed { index, (scale, measuredWidth) ->
+        val previews = listOf(.25f to 100f, 3f to 100f).map { (scale, measuredWidth) ->
             val geometry = source.resolveRenderedGeometry(mapOf(text.id to WorldBounds(
-                text.x, text.y, text.x + measuredWidth / scale, text.y + 40f / scale)), scale)
-            assertEquals(index != 0, region.bounds().contains(geometry.bounds(text.id)!!.center))
+                text.x, text.y, text.x + measuredWidth, text.y + 40f)), scale)
+            assertTrue(region.bounds().contains(geometry.bounds(text.id)!!.center))
             source.translatedSelection(setOf(region.id), 5f, 0f)
         }
 
         assertEquals(previews.first(), previews.last())
         assertEquals(45f, previews.first().texts.single().x)
+    }
+
+    @Test fun lassoUsesTheSameScaleAwareAttachedArrowEndpointAsRendering() {
+        val shape = ShapeElement(id = "target", kind = ShapeKind.RECTANGLE,
+            x = 0f, y = 0f, width = 40f, height = 40f)
+        val arrow = ArrowElement(id = "arrow", from = ArrowEnd.Attached(shape.id, 1f, .5f),
+            to = ArrowEnd.Free(200f, 20f))
+        val source = BoardSnapshot(shapes = listOf(shape), arrows = listOf(arrow))
+        val display = source.resolveRenderedGeometry(emptyMap())
+        val concaveLasso = listOf(
+            WorldPoint(40f, 10f), WorldPoint(55f, 10f), WorldPoint(55f, 45f),
+            WorldPoint(195f, 45f), WorldPoint(195f, 10f), WorldPoint(205f, 10f),
+            WorldPoint(205f, 55f), WorldPoint(40f, 55f),
+        )
+
+        assertEquals(setOf(arrow.id), source.lassoSelection(concaveLasso,
+            display.boundsById, arrowEndpointOffset = 6f))
+        assertFalse(arrow.id in source.lassoSelection(concaveLasso,
+            display.boundsById, arrowEndpointOffset = 30f))
     }
 
     @Test fun regionMembershipIsInvariantAcrossMeasuredTextExtents() {

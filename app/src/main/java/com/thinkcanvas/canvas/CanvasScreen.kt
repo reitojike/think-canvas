@@ -239,9 +239,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 }
                 val resolvedTextBounds = textSizes.mapNotNull { (id, extent) ->
                     val text = snapshot.texts.first { it.id == id }
-                    val widthWorld = extent.width / fitted.scale
-                    val heightWorld = extent.height / fitted.scale
-                    id to WorldBounds(text.x, text.y, text.x + widthWorld, text.y + heightWorld)
+                    id to WorldBounds(text.x, text.y, text.x + extent.width, text.y + extent.height)
                 }.toMap()
                 val geometry = snapshot.resolveRenderedGeometry(resolvedTextBounds,
                     fitted.scale, density.density)
@@ -263,8 +261,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     }
     val resolvedTextBounds = measuredTextExtents.mapNotNull { (id, extent) ->
         val text = snapshot.texts.firstOrNull { it.id == id } ?: return@mapNotNull null
-        id to WorldBounds(text.x, text.y, text.x + extent.width / viewport.scale,
-            text.y + extent.height / viewport.scale)
+        id to WorldBounds(text.x, text.y, text.x + extent.width, text.y + extent.height)
     }.toMap()
     val renderedGeometry = remember(resolvedTextBounds, snapshot.shapes, snapshot.arrows,
         snapshot.ink, viewport.scale, density.density) {
@@ -324,8 +321,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             val targetShapes = snapshot.shapes.filter { targetProjection.visible(it.id) }
             val extent = measureTextExtent(element, initialTarget.scale, keptIds, targetShapes)
             match.copy(bounds = WorldBounds(element.x, element.y,
-                element.x + extent.width / initialTarget.scale,
-                element.y + extent.height / initialTarget.scale))
+                element.x + extent.width, element.y + extent.height))
         } ?: match
         animateViewport(viewport.focusMatch(targetMatch, width, height))
     }
@@ -821,7 +817,9 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                                 val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
                                 selectedIds = latestSnapshot.value.visibleLassoSelection(
                                     lassoPoints + WorldPoint(x, y), latestProjection.value,
-                                    latestRenderedGeometry.value.boundsById)
+                                    latestRenderedGeometry.value.boundsById,
+                                    DetailedRenderFacts.ARROW_ENDPOINT_OFFSET_DP * density.density /
+                                        latestViewport.value.scale)
                                 selectedId = selectedIds.singleOrNull()?.takeIf { id -> board.elements.any { it.id == id } }
                                 guidance = "${selectedIds.size}個を選択"
                                 tool = SpatialTool.NONE
@@ -1034,8 +1032,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         val movingIds = movingPreview?.first ?: emptySet()
         val displayTextBounds = displaySnapshot.texts.mapNotNull { text ->
             val extent = measuredTextExtents[text.id] ?: return@mapNotNull null
-            text.id to WorldBounds(text.x, text.y, text.x + extent.width / viewport.scale,
-                text.y + extent.height / viewport.scale)
+            text.id to WorldBounds(text.x, text.y, text.x + extent.width, text.y + extent.height)
         }.toMap()
         val displayGeometry = displaySnapshot.resolveRenderedGeometry(displayTextBounds,
             viewport.scale, density.density)
@@ -1470,7 +1467,9 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                                     selectedIds = board.snapshot().visibleLassoSelection(listOf(
                                         WorldPoint(left, top), WorldPoint(right, top),
                                         WorldPoint(right, bottom), WorldPoint(left, bottom),
-                                    ), projection, renderedGeometry.boundsById)
+                                    ), projection, renderedGeometry.boundsById,
+                                        DetailedRenderFacts.ARROW_ENDPOINT_OFFSET_DP * density.density /
+                                            viewport.scale)
                                     selectedId = null
                                     guidance = "${selectedIds.size}個を選択"
                                     true
