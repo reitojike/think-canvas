@@ -3,6 +3,10 @@ package com.thinkcanvas
 import com.thinkcanvas.canvas.BoardSnapshot
 import com.thinkcanvas.canvas.TextColor
 import com.thinkcanvas.canvas.TextKind
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
@@ -11,6 +15,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BoardSessionViewModelTest {
+    private fun testSessions() = BoardSessionViewModel(
+        CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
+    )
+
     @Test fun reopeningBoardReusesUndoAndRedoHistory() {
         val sessions = BoardSessionViewModel()
         val state = sessions.stateFor(1L, BoardSnapshot())
@@ -90,5 +98,110 @@ class BoardSessionViewModelTest {
         assertEquals(persisted, restored.snapshot())
         assertFalse(restored.canUndo)
         assertFalse(restored.canRedo)
+    }
+
+    @Test fun runningSaveSurvivesReopeningSessionAndCompletesToIdle() {
+        val sessions = testSessions()
+        val initial = BoardSnapshot()
+        val saved = CompletableDeferred<Unit>()
+        sessions.stateFor(1L, initial)
+        sessions.setSaveOperation { _, _ -> saved }
+
+        sessions.requestSave(1L, initial)
+        assertTrue(sessions.saveStateFor(1L, initial).value is BoardSaveState.Running)
+
+        sessions.stateFor(1L, initial) // Activity recreation reuses this ViewModel session.
+        assertTrue(sessions.saveStateFor(1L, initial).value is BoardSaveState.Running)
+        saved.complete(Unit)
+
+        assertEquals(BoardSaveState.Idle, sessions.saveStateFor(1L, initial).value)
+    }
+
+    @Test fun failureAfterReopeningSessionIsRetainedAndRetryable() {
+        val sessions = testSessions()
+        val initial = BoardSnapshot()
+        val first = CompletableDeferred<Unit>()
+        val retry = CompletableDeferred<Unit>()
+        val calls = mutableListOf<BoardSnapshot>()
+        sessions.stateFor(1L, initial)
+        sessions.setSaveOperation { _, snapshot ->
+            calls += snapshot
+            if (calls.size == 1) first else retry
+        }
+
+        sessions.requestSave(1L, initial)
+        sessions.stateFor(1L, initial)
+        first.completeExceptionally(IllegalStateException("write failed"))
+        assertEquals(BoardSaveState.Failed(initial), sessions.saveStateFor(1L, initial).value)
+
+        sessions.retrySave(1L)
+        sessions.retrySave(1L)
+        assertEquals(2, calls.size)
+        assertTrue(sessions.saveStateFor(1L, initial).value is BoardSaveState.Running)
+        retry.complete(Unit)
+        assertEquals(BoardSaveState.Idle, sessions.saveStateFor(1L, initial).value)
+    }
+
+    @Test fun latestDirtySnapshotIsSavedOnceAfterCurrentOperation() {
+        val sessions = testSessions()
+        val board = sessions.stateFor(1L, BoardSnapshot())
+        val first = CompletableDeferred<Unit>()
+        val second = CompletableDeferred<Unit>()
+        val calls = mutableListOf<BoardSnapshot>()
+        sessions.setSaveOperation { _, snapshot ->
+            calls += snapshot
+            if (calls.size == 1) first else second
+        }
+        board.create("A", TextKind.BODY, TextColor.INK, 1f, 2f)
+        val snapshotA = board.snapshot()
+        sessions.requestSave(1L, snapshotA)
+        board.create("B", TextKind.BODY, TextColor.INK, 3f, 4f)
+        val snapshotB = board.snapshot()
+        board.create("C", TextKind.BODY, TextColor.INK, 5f, 6f)
+        val newest = board.snapshot()
+
+        sessions.requestSave(1L, snapshotB)
+        sessions.requestSave(1L, newest)
+        assertEquals(1, calls.size)
+        first.complete(Unit)
+
+        assertEquals(listOf(snapshotA, newest), calls)
+        assertTrue(sessions.saveStateFor(1L, newest).value is BoardSaveState.Running)
+        second.complete(Unit)
+        assertEquals(BoardSaveState.Idle, sessions.saveStateFor(1L, newest).value)
+    }
+
+    @Test fun boardSaveLifecyclesRemainIsolated() {
+        val sessions = testSessions()
+        val a = BoardSnapshot()
+        val b = BoardSnapshot()
+        val saves = mapOf(1L to CompletableDeferred<Unit>(), 2L to CompletableDeferred<Unit>())
+        sessions.stateFor(1L, a)
+        sessions.stateFor(2L, b)
+        sessions.setSaveOperation { boardId, _ -> requireNotNull(saves[boardId]) }
+
+        sessions.requestSave(1L, a)
+        sessions.requestSave(2L, b)
+        saves.getValue(2L).complete(Unit)
+
+        assertTrue(sessions.saveStateFor(1L, a).value is BoardSaveState.Running)
+        assertEquals(BoardSaveState.Idle, sessions.saveStateFor(2L, b).value)
+    }
+
+    @Test fun discardingBoardPreventsDirtyFollowUpSave() {
+        val sessions = testSessions()
+        val board = sessions.stateFor(1L, BoardSnapshot())
+        val first = CompletableDeferred<Unit>()
+        var calls = 0
+        sessions.setSaveOperation { _, _ -> calls++; first }
+        sessions.requestSave(1L, board.snapshot())
+        board.create("newest", TextKind.BODY, TextColor.INK, 1f, 2f)
+        sessions.requestSave(1L, board.snapshot())
+
+        sessions.discard(1L)
+        first.complete(Unit)
+
+        assertEquals(1, calls)
+        assertEquals(BoardSaveState.Idle, sessions.saveStateFor(1L, BoardSnapshot()).value)
     }
 }

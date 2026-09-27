@@ -1,6 +1,7 @@
 package com.thinkcanvas.canvas
 
 import android.os.SystemClock
+import com.thinkcanvas.BoardSaveState
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
@@ -36,6 +37,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -91,8 +93,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.thinkcanvas.R
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -116,8 +116,11 @@ private data class Draft(
 )
 
 @Composable
-fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
-                 onCommittedChange: () -> Deferred<Unit>,
+fun CanvasScreen(board: BoardState, boardName: String,
+                 saveState: kotlinx.coroutines.flow.StateFlow<BoardSaveState>,
+                 onRequestSave: (BoardSnapshot) -> Unit,
+                 onRetrySave: () -> Unit,
+                 onOpenList: () -> Unit,
                  onShareSelection: (Set<String>) -> Unit) {
     var viewport by remember { mutableStateOf(Viewport()) }
     var initialFitApplied by remember(board) { mutableStateOf(false) }
@@ -139,10 +142,11 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
     var movePreview by remember { mutableStateOf<Pair<Set<String>, WorldPoint>?>(null) }
     var handlePreview by remember { mutableStateOf<BoardSnapshot?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
-    var saving by remember { mutableStateOf(false) }
-    var saveFailed by remember { mutableStateOf(false) }
+    val currentSaveState by saveState.collectAsState()
+    val saving = currentSaveState is BoardSaveState.Running
+    val saveFailed = currentSaveState is BoardSaveState.Failed
+    var observedSaving by remember { mutableStateOf(false) }
     var finishDraftAfterSave by remember { mutableStateOf(false) }
-    var pendingInkSave by remember { mutableStateOf(false) }
     var pendingNewElementId by remember { mutableStateOf<String?>(null) }
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -155,13 +159,28 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
     val canLeaveBoard = !saving && !saveFailed && draft == null &&
         regionNameId == null && attachmentEditor == null && inkPreview == null &&
         spatialPreview == null && movePreview == null && handlePreview == null &&
-        gapPreview == null && lassoPoints.isEmpty() && !pendingInkSave
+        gapPreview == null && lassoPoints.isEmpty()
     BackHandler {
         if (canLeaveBoard) onOpenList()
     }
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(currentSaveState) {
+        when (currentSaveState) {
+            is BoardSaveState.Running -> observedSaving = true
+            BoardSaveState.Idle -> if (observedSaving) {
+                if (finishDraftAfterSave) {
+                    draft = null
+                    keyboard?.hide()
+                }
+                pendingNewElementId = null
+                finishDraftAfterSave = false
+                observedSaving = false
+            }
+            is BoardSaveState.Failed -> observedSaving = false
+        }
+    }
     val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
     val regionNameFocusRequester = remember { FocusRequester() }
@@ -308,7 +327,6 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
     val latestInkTool = rememberUpdatedState(inkTool)
     val latestDraft = rememberUpdatedState(draft)
     val latestSaveBlocked = rememberUpdatedState(saving || saveFailed)
-    val latestCommit = rememberUpdatedState(onCommittedChange)
 
     fun animateViewport(target: Viewport) {
         latestAnimation.value?.cancel()
@@ -362,40 +380,8 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
     val regionNameLabel = stringResource(R.string.region_name)
 
     fun saveSnapshot(closeDraft: Boolean = false) {
-        if (saving) { pendingInkSave = true; return }
-        // 再試行は現在の全 stroke を保存するため、古い待機フラグを持ち越さない。
-        pendingInkSave = false
-        finishDraftAfterSave = closeDraft
-        saving = true
-        saveFailed = false
-        val pending = try {
-            latestCommit.value()
-        } catch (_: Exception) {
-            saving = false
-            saveFailed = true
-            return
-        }
-        uiScope.launch {
-            try {
-                pending.await()
-                if (finishDraftAfterSave) {
-                    draft = null
-                    keyboard?.hide()
-                }
-                pendingNewElementId = null
-                finishDraftAfterSave = false
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                saveFailed = true
-            } finally {
-                saving = false
-                if (pendingInkSave && !saveFailed) {
-                    pendingInkSave = false
-                    saveSnapshot()
-                }
-            }
-        }
+        if (closeDraft) finishDraftAfterSave = true
+        onRequestSave(board.snapshot())
     }
 
     fun hitTest(point: Offset): TextElement? {
@@ -564,7 +550,7 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
     fun commitDraft() {
         if (saving) return
         if (saveFailed) {
-            saveSnapshot(finishDraftAfterSave)
+            onRetrySave()
             return
         }
         val current = draft ?: return
@@ -1537,7 +1523,7 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
                     .background(Color.White, RoundedCornerShape(10.dp))
                     .pillBorder(10f).padding(6.dp)
                     .onGloballyPositioned { chromeBounds["shareSelection"] = it.boundsInParent() }) {
-                    val enabled = !saving && !saveFailed && !pendingInkSave
+                    val enabled = !saving && !saveFailed
                     Box(Modifier.height(48.dp).clip(RoundedCornerShape(8.dp))
                         .clickable(enabled = enabled) { onShareSelection(selectedIds.toSet()) }
                         .semantics {
@@ -1654,7 +1640,7 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
                 modifier = Modifier.align(Alignment.TopEnd)
                     .padding(top = if (inkTool != null) 70.dp else 8.dp, end = 8.dp)
                     .height(44.dp)
-                    .then(if (saveFailed && draft == null) Modifier.clickable { saveSnapshot() } else Modifier)
+                    .then(if (saveFailed && draft == null) Modifier.clickable { onRetrySave() } else Modifier)
                     .semantics {
                         if (saveFailed && draft == null) contentDescription = saveFailedLabel
                     }

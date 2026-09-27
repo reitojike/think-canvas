@@ -193,7 +193,8 @@ class BoardListScreenTest {
         try {
             act(waitFor("ボード1、", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
             waitFor("‹ ボード1")
-            act(waitFor("ボード一覧を開く", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            act(waitFor("ボード一覧を開く", byDescription = true),
+                AccessibilityNodeInfo.ACTION_CLICK)
             waitFor("ボード1、", byDescription = true)
             var last = find(automation.rootInActiveWindow) {
                 it.contentDescription?.toString()?.startsWith("ボード20、") == true
@@ -743,6 +744,142 @@ class BoardListScreenTest {
                     .getActivitiesInStage(Stage.RESUMED).filterIsInstance<MainActivity>()
                     .forEach { it.finish() }
             }
+        }
+    }
+
+    @Test fun pendingBoardSaveSurvivesRecreationAndBlocksLeaving() {
+        seed(listOf(BoardRow(21, "保存中のボード", 10)))
+        assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+            .edit().putLong("lastOpenedBoardId", 21).commit())
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        val session = ViewModelProvider(activity)[BoardSessionViewModel::class.java]
+        val board = session.stateFor(21L, BoardSnapshot())
+        val started = CompletableDeferred<Unit>()
+        val releaseFirst = CompletableDeferred<Unit>()
+        val startedSecond = CompletableDeferred<Unit>()
+        val releaseSecond = CompletableDeferred<Unit>()
+        val savedSnapshots = mutableListOf<BoardSnapshot>()
+        var calls = 0
+        session.setSaveOperation { _, snapshot ->
+            calls++
+            savedSnapshots += snapshot
+            if (calls == 1) {
+                started.complete(Unit)
+                releaseFirst
+            } else {
+                startedSecond.complete(Unit)
+                releaseSecond
+            }
+        }
+        try {
+            instrumentation.runOnMainSync { session.requestSave(21L, board.snapshot()) }
+            runBlocking { withTimeout(5_000) { started.await() } }
+            waitFor("保存中")
+            instrumentation.runOnMainSync { activity.recreate() }
+            waitFor("保存中")
+            instrumentation.runOnMainSync {
+                assertEquals(1, calls)
+                assertTrue(session.saveStateFor(21L, board.snapshot()).value is
+                    com.thinkcanvas.BoardSaveState.Running)
+            }
+
+            assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                .GLOBAL_ACTION_BACK))
+            waitFor("‹ 保存中のボード")
+            assertEquals(null, find(automation.rootInActiveWindow) {
+                it.contentDescription?.toString()?.startsWith("保存中のボード、") == true
+            })
+
+            lateinit var latest: BoardSnapshot
+            instrumentation.runOnMainSync {
+                board.create("再作成後の最新", TextKind.BODY, TextColor.INK, 30f, 40f)
+                latest = board.snapshot()
+                session.requestSave(21L, latest)
+            }
+            releaseFirst.complete(Unit)
+            runBlocking { withTimeout(5_000) { startedSecond.await() } }
+            waitFor("保存中")
+            instrumentation.runOnMainSync {
+                assertEquals(2, calls)
+                assertEquals(latest, savedSnapshots.last())
+                assertTrue(session.saveStateFor(21L, latest).value is
+                    com.thinkcanvas.BoardSaveState.Running)
+            }
+            releaseSecond.complete(Unit)
+            instrumentation.runOnMainSync {
+                assertEquals(com.thinkcanvas.BoardSaveState.Idle,
+                    session.saveStateFor(21L, latest).value)
+            }
+            assertEquals(2, calls)
+        } finally {
+            releaseFirst.complete(Unit)
+            releaseSecond.complete(Unit)
+            finishResumedActivities()
+        }
+    }
+
+    @Test fun failedSaveAndRetryRemainObservableAcrossRecreation() {
+        seed(listOf(BoardRow(22, "再試行するボード", 10)))
+        assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+            .edit().putLong("lastOpenedBoardId", 22).commit())
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        val session = ViewModelProvider(activity)[BoardSessionViewModel::class.java]
+        val board = session.stateFor(22L, BoardSnapshot())
+        val firstStarted = CompletableDeferred<Unit>()
+        val first = CompletableDeferred<Unit>()
+        var calls = 0
+        session.setSaveOperation { _, _ ->
+            calls++
+            firstStarted.complete(Unit)
+            first
+        }
+        try {
+            instrumentation.runOnMainSync { session.requestSave(22L, board.snapshot()) }
+            runBlocking { withTimeout(5_000) { firstStarted.await() } }
+            waitFor("保存中")
+            instrumentation.runOnMainSync { activity.recreate() }
+            waitFor("保存中")
+            first.completeExceptionally(IllegalStateException("controlled failure"))
+            waitFor("保存できません。再試行", byDescription = true)
+            assertSame(board, session.stateFor(22L, BoardSnapshot()))
+            assertTrue(session.saveStateFor(22L, board.snapshot()).value is
+                com.thinkcanvas.BoardSaveState.Failed)
+            assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                .GLOBAL_ACTION_BACK))
+            waitFor("‹ 再試行するボード")
+            assertEquals(null, find(automation.rootInActiveWindow) {
+                it.contentDescription?.toString()?.startsWith("再試行するボード、") == true
+            })
+
+            val retryStarted = CompletableDeferred<Unit>()
+            val retry = CompletableDeferred<Unit>()
+            session.setSaveOperation { _, _ ->
+                calls++
+                retryStarted.complete(Unit)
+                retry
+            }
+            act(waitFor("保存できません。再試行", byDescription = true),
+                AccessibilityNodeInfo.ACTION_CLICK)
+            runBlocking { withTimeout(5_000) { retryStarted.await() } }
+            waitFor("保存中")
+            instrumentation.runOnMainSync { activity.recreate() }
+            waitFor("保存中")
+            instrumentation.runOnMainSync {
+                assertEquals(2, calls)
+                assertTrue(session.saveStateFor(22L, board.snapshot()).value is
+                    com.thinkcanvas.BoardSaveState.Running)
+            }
+            retry.complete(Unit)
+            instrumentation.runOnMainSync {
+                assertEquals(com.thinkcanvas.BoardSaveState.Idle,
+                    session.saveStateFor(22L, board.snapshot()).value)
+            }
+            instrumentation.runOnMainSync { assertEquals(2, calls) }
+        } finally {
+            first.complete(Unit)
+            finishResumedActivities()
         }
     }
 

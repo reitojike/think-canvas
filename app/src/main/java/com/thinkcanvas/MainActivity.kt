@@ -78,6 +78,7 @@ class MainActivity : ComponentActivity() {
         )
         val store = CanvasStore.get(this)
         val boardSessions = ViewModelProvider(this)[BoardSessionViewModel::class.java]
+        boardSessions.setSaveOperation { boardId, snapshot -> store.save(boardId, snapshot) }
         val boardListActions = ViewModelProvider(this)[BoardListActionViewModel::class.java]
         val page = mutableStateOf<Page>(Page.Loading)
         val cards = mutableStateOf<List<StoredBoard>>(emptyList())
@@ -358,8 +359,13 @@ class MainActivity : ComponentActivity() {
                     is Page.Board -> key(current.id) {
                         CanvasScreen(current.state,
                             boardName = current.name.ifBlank { "無題のボード" },
+                            saveState = boardSessions.saveStateFor(current.id, current.state.snapshot()),
+                            onRequestSave = { snapshot -> boardSessions.requestSave(current.id, snapshot) },
+                            onRetrySave = { boardSessions.retrySave(current.id) },
                             onOpenList = {
-                                if (!transientPending.value && listActionState == BoardListActionState.Idle) {
+                                if (boardSessions.saveStateFor(current.id, current.state.snapshot()).value ==
+                                    BoardSaveState.Idle && !transientPending.value &&
+                                    listActionState == BoardListActionState.Idle) {
                                     navigationTargetIsList = true
                                     page.value = Page.Loading
                                     performTransient {
@@ -377,9 +383,7 @@ class MainActivity : ComponentActivity() {
                                     ?: error("ボードが見つかりません")
                                 showShare(stored.details.name, stored.snapshot, shareTypography, ids)
                             } },
-                            onCommittedChange = {
-                                store.save(current.id, current.state.snapshot())
-                            })
+                            )
                     }
                 }
                 if (guideVisible.value) GuideSheet(
