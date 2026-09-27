@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
@@ -57,6 +58,7 @@ fun SpatialElements(
     searchMatches: Set<String>,
     currentMatchId: String?,
     searching: Boolean,
+    canvasWidthPx: Int,
     onHandle: (String, HandleKind) -> Boolean,
     onConnect: (String, HandleKind) -> Boolean,
     onSelect: (String) -> Unit,
@@ -228,8 +230,10 @@ fun SpatialElements(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.semantics { contentDescription = "囲み: ${shape.name}" })
             }
-        } else Text(shape.name, color = labelColor, fontSize = 12.sp,
+        } else Text(shape.name, color = labelColor, fontSize = 12.sp, maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }
+                .widthIn(max = with(density) { (canvasWidthPx - 40).coerceAtLeast(1).toDp() })
                 .background(Color(0xFFFCFCFB)).semantics { contentDescription = "囲み: ${shape.name}" })
     }
     snapshot.shapes.filter { projection.visible(it.id) }.forEach { shape ->

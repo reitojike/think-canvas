@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import com.thinkcanvas.board.fittedViewport
+import com.thinkcanvas.board.RegionLabelSize
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -163,6 +165,7 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
     val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
     val regionNameFocusRequester = remember { FocusRequester() }
+    val regionLabelStyle = LocalTextStyle.current.copy(fontSize = 12.sp)
     val searchFocusRequester = remember { FocusRequester() }
     val viewConfiguration = LocalViewConfiguration.current
     val context = LocalContext.current
@@ -172,8 +175,24 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
     val doubleTapSlop = android.view.ViewConfiguration.get(context).scaledDoubleTapSlop.toFloat()
     LaunchedEffect(board, canvasSize) {
         if (!initialFitApplied && canvasSize != IntSize.Zero) {
-            viewport = board.snapshot().fittedViewport(
-                canvasSize.width.toFloat(), canvasSize.height.toFloat())
+            val labelWidth = (canvasSize.width - 40).coerceAtLeast(1)
+            val openingSnapshot = board.snapshot()
+            val geometricFit = openingSnapshot.fittedViewport(canvasSize.width.toFloat(),
+                canvasSize.height.toFloat())
+            val openingProjection = openingSnapshot.semanticProjection(geometricFit.scale,
+                with(density) { 14.sp.toDp().value }, pixelsPerDp = density.density)
+            val labelSizes = board.shapes.filter { it.kind == ShapeKind.REGION &&
+                it.name.isNotBlank() && openingProjection.visible(it.id) &&
+                !openingProjection.farLikeRegion(it.id) }
+                .associate { shape ->
+                    val size = textMeasurer.measure(AnnotatedString(shape.name),
+                        style = regionLabelStyle, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        constraints = Constraints(maxWidth = labelWidth)).size
+                    shape.id to RegionLabelSize(size.width.toFloat(), size.height.toFloat())
+                }
+            viewport = openingSnapshot.fittedViewport(canvasSize.width.toFloat(),
+                canvasSize.height.toFloat(), labelSizes)
             initialFitApplied = true
         }
     }
@@ -993,7 +1012,7 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
             })
         SpatialElements(displaySnapshot, viewport, selectedIds, movingIds, spatialPreview, lassoPoints,
             gapPreview, ghostIds, displayProjection, matchIds, currentMatch?.id,
-            searchOpen && searchQuery.isNotBlank(),
+            searchOpen && searchQuery.isNotBlank(), canvasSize.width,
             onHandle = { id, kind ->
             if (saving || saveFailed) false else {
                 val changed = when (kind) {
