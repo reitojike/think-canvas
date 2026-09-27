@@ -75,7 +75,7 @@ jobs:
           api-level: '37.0'
           target: google_apis
           arch: x86_64
-          profile: pixel_2
-          ram-size: 2048M
+          profile: pixel_9a
+          ram-size: 3072M
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu software -feature -Vulkan -camera-back none -camera-front none
           script: ./gradlew :app:connectedDebugAndroidTest --no-daemon
