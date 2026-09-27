@@ -7,6 +7,7 @@ import com.thinkcanvas.canvas.ShapeElement
 import com.thinkcanvas.canvas.ShapeKind
 import com.thinkcanvas.canvas.TextElement
 import com.thinkcanvas.canvas.WorldBounds
+import com.thinkcanvas.canvas.arrowRenderGeometry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -32,8 +33,65 @@ class SharePlanTest {
             typography = typography)
 
         assertEquals(measured, plan.contentBounds)
+        assertEquals(measured, plan.resolvedGeometry.bounds(text.id))
         assertEquals(typography, plan.typography)
         assertTrue(plan.imageBounds.right >= measured.right + 24f)
+    }
+
+    @Test fun arrowBoundsAndDrawGeometryUseTheSameResolvedTargets() {
+        val first = TextElement(id = "first", text = "From", x = 20f, y = 40f)
+        val second = TextElement(id = "second", text = "To", x = 260f, y = 80f)
+        val arrow = ArrowElement(id = "arrow",
+            from = ArrowEnd.Attached(first.id, 1f, .5f),
+            to = ArrowEnd.Attached(second.id, 0f, .5f), bend = 24f)
+        val source = BoardSnapshot(texts = listOf(first, second), arrows = listOf(arrow))
+        val textBounds = mapOf(
+            first.id to WorldBounds(20f, 40f, 110f, 76f),
+            second.id to WorldBounds(260f, 80f, 315f, 116f),
+        )
+
+        val plan = planShare(source, renderedBounds = textBounds)
+        val geometry = source.arrowRenderGeometry(arrow,
+            pixelsPerDp = plan.typography.pixelsPerDp,
+            renderedBounds = plan.resolvedGeometry.boundsById)
+
+        assertEquals(textBounds[first.id], plan.resolvedGeometry.bounds(first.id))
+        assertEquals(textBounds[second.id], plan.resolvedGeometry.bounds(second.id))
+        assertEquals(geometry?.bounds, plan.resolvedGeometry.bounds(arrow.id))
+        assertTrue(plan.contentBounds.left <= geometry!!.bounds.left)
+        assertTrue(plan.contentBounds.top <= geometry.bounds.top)
+        assertTrue(plan.contentBounds.right >= geometry.bounds.right)
+        assertTrue(plan.contentBounds.bottom >= geometry.bounds.bottom)
+    }
+
+    @Test fun namedRegionLabelEnvelopeDoesNotChangeArrowAttachmentGeometry() {
+        fun planned(name: String): Pair<SharePlan, ArrowElement> {
+            val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+                x = 40f, y = 60f, width = 100f, height = 80f, name = name)
+            val arrow = ArrowElement(id = "arrow",
+                from = ArrowEnd.Attached(region.id, 1f, .5f), to = ArrowEnd.Free(260f, 100f))
+            val source = BoardSnapshot(shapes = listOf(region), arrows = listOf(arrow))
+            val labelEnvelope = WorldBounds(region.x - 1f, region.y - 22f,
+                maxOf(region.x + region.width + 1f, region.x + 8f + name.length * 16f),
+                region.y + region.height + 1f)
+            return planShare(source, renderedBounds = mapOf(region.id to labelEnvelope)) to arrow
+        }
+
+        val (shortPlan, shortArrow) = planned("A")
+        val (longPlan, longArrow) = planned("A very long region label")
+        val shortGeometry = shortPlan.source.arrowRenderGeometry(shortArrow,
+            pixelsPerDp = shortPlan.typography.pixelsPerDp,
+            renderedBounds = shortPlan.resolvedGeometry.boundsById)
+        val longGeometry = longPlan.source.arrowRenderGeometry(longArrow,
+            pixelsPerDp = longPlan.typography.pixelsPerDp,
+            renderedBounds = longPlan.resolvedGeometry.boundsById)
+
+        assertTrue(shortPlan.contentBounds.right < longPlan.contentBounds.right)
+        assertEquals(WorldBounds(39.25f, 59.25f, 140.75f, 140.75f),
+            shortPlan.resolvedGeometry.bounds("region"))
+        assertEquals(shortPlan.resolvedGeometry.bounds("region"),
+            longPlan.resolvedGeometry.bounds("region"))
+        assertEquals(shortGeometry?.start, longGeometry?.start)
     }
 
     @Test fun narrowRegionKeepsFullLabelInsideExportBounds() {

@@ -159,7 +159,8 @@ object BoardImageRenderer {
         }
         plan.source.arrows.filter { it.id in plan.includedIds }.forEach { arrow ->
             val geometry = plan.source.arrowRenderGeometry(arrow, scale = 1f,
-                pixelsPerDp = plan.typography.pixelsPerDp) ?: return@forEach
+                pixelsPerDp = plan.typography.pixelsPerDp,
+                renderedBounds = plan.resolvedGeometry.boundsById) ?: return@forEach
             val path = Path().apply {
                 moveTo(geometry.start.x, geometry.start.y)
                 quadTo(geometry.control.x, geometry.control.y,

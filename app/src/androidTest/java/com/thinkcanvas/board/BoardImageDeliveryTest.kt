@@ -1,6 +1,7 @@
 package com.thinkcanvas.board
 
 import android.os.Build
+import android.graphics.BitmapFactory
 import android.content.Intent
 import android.content.res.Configuration
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -16,6 +17,7 @@ import com.thinkcanvas.canvas.InkStroke
 import com.thinkcanvas.canvas.ShapeElement
 import com.thinkcanvas.canvas.ShapeKind
 import com.thinkcanvas.canvas.TextElement
+import com.thinkcanvas.canvas.arrowRenderGeometry
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -25,6 +27,103 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class BoardImageDeliveryTest {
+    @Test fun attachedAndFreeArrowEndpointsArePresentInRenderedBitmap() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val typography = ExportTypography.from(context.resources)
+        val leftText = TextElement(id = "left-text", text = "From", x = 20f, y = 50f)
+        val rightText = TextElement(id = "right-text", text = "To", x = 300f, y = 100f)
+        val leftShape = ShapeElement(id = "left-shape", kind = ShapeKind.RECTANGLE,
+            x = 20f, y = 50f, width = 100f, height = 70f)
+        val rightShape = ShapeElement(id = "right-shape", kind = ShapeKind.ELLIPSE,
+            x = 300f, y = 100f, width = 110f, height = 80f)
+        val cases = listOf(
+            ArrowElement(id = "free", from = ArrowEnd.Free(20f, 250f),
+                to = ArrowEnd.Free(220f, 260f)) to BoardSnapshot(),
+            ArrowElement(id = "shape-shape", from = ArrowEnd.Attached(leftShape.id, 1f, .5f),
+                to = ArrowEnd.Attached(rightShape.id, 0f, .5f)) to
+                BoardSnapshot(shapes = listOf(leftShape, rightShape)),
+            ArrowElement(id = "text-text", from = ArrowEnd.Attached(leftText.id, 1f, .5f),
+                to = ArrowEnd.Attached(rightText.id, 0f, .5f), bend = 26f) to
+                BoardSnapshot(texts = listOf(leftText, rightText)),
+            ArrowElement(id = "text-shape", from = ArrowEnd.Attached(leftText.id, 1f, .5f),
+                to = ArrowEnd.Attached(rightShape.id, 0f, .5f)) to
+                BoardSnapshot(texts = listOf(leftText), shapes = listOf(rightShape)),
+            ArrowElement(id = "shape-text", from = ArrowEnd.Attached(leftShape.id, 1f, .5f),
+                to = ArrowEnd.Attached(rightText.id, 0f, .5f)) to
+                BoardSnapshot(texts = listOf(rightText), shapes = listOf(leftShape)),
+        )
+
+        cases.forEach { (arrow, elements) ->
+            val source = elements.copy(arrows = listOf(arrow))
+            val renderedBounds = BoardImageRenderer.renderedBounds(source, typography)
+            val plan = planShare(source, renderedBounds = renderedBounds, typography = typography)
+            val geometry = source.arrowRenderGeometry(arrow,
+                pixelsPerDp = typography.pixelsPerDp,
+                renderedBounds = plan.resolvedGeometry.boundsById)
+            assertTrue("${arrow.id}: arrow geometry contributes to plan bounds", geometry != null &&
+                plan.contentBounds.left <= geometry.bounds.left &&
+                plan.contentBounds.top <= geometry.bounds.top &&
+                plan.contentBounds.right >= geometry.bounds.right &&
+                plan.contentBounds.bottom >= geometry.bounds.bottom)
+
+            val withArrow = BoardImageRenderer.render(plan)
+            val withoutArrow = BoardImageRenderer.render(
+                plan.copy(includedIds = plan.includedIds - arrow.id))
+            try {
+                var changedPixels = 0
+                for (y in 0 until withArrow.height) for (x in 0 until withArrow.width) {
+                    if (withArrow.getPixel(x, y) != withoutArrow.getPixel(x, y)) changedPixels++
+                }
+                assertTrue("${arrow.id}: arrow pixels are drawn", changedPixels > 0)
+                if (arrow.id == "text-text") {
+                    val png = runBlocking { ImageDelivery.png(withArrow) }
+                    val decoded = BitmapFactory.decodeByteArray(png, 0, png.size)
+                    try {
+                        var pngChangedPixels = 0
+                        for (y in 0 until decoded.height) for (x in 0 until decoded.width) {
+                            if (decoded.getPixel(x, y) != withoutArrow.getPixel(x, y))
+                                pngChangedPixels++
+                        }
+                        assertTrue("text-text: arrow pixels survive PNG export", pngChangedPixels > 0)
+                    } finally {
+                        decoded.recycle()
+                    }
+                }
+            } finally {
+                withArrow.recycle()
+                withoutArrow.recycle()
+            }
+        }
+    }
+
+    @Test fun selectedTextArrowUsesThePlanGeometryForDrawing() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val typography = ExportTypography.from(context.resources)
+        val from = TextElement(id = "from", text = "From", x = 20f, y = 50f)
+        val to = TextElement(id = "to", text = "To", x = 300f, y = 100f)
+        val arrow = ArrowElement(id = "selected-arrow",
+            from = ArrowEnd.Attached(from.id, 1f, .5f),
+            to = ArrowEnd.Attached(to.id, 0f, .5f))
+        val source = BoardSnapshot(texts = listOf(from, to), arrows = listOf(arrow))
+        val plan = planShare(source, selectedIds = setOf(arrow.id),
+            renderedBounds = BoardImageRenderer.renderedBounds(source, typography),
+            typography = typography)
+        assertEquals(setOf(arrow.id), plan.includedIds)
+        val withArrow = BoardImageRenderer.render(plan)
+        val withoutArrow = BoardImageRenderer.render(plan.copy(includedIds = emptySet()))
+        try {
+            var changedPixels = 0
+            for (y in 0 until withArrow.height) for (x in 0 until withArrow.width) {
+                if (withArrow.getPixel(x, y) != withoutArrow.getPixel(x, y)) changedPixels++
+            }
+            assertTrue("selected arrow is present although its target texts are not selected",
+                changedPixels > 0)
+        } finally {
+            withArrow.recycle()
+            withoutArrow.recycle()
+        }
+    }
+
     @Test fun regionLabelMasksArrowAndOutlineInExport() {
         val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
             x = 40f, y = 50f, width = 160f, height = 100f, name = "重なり")

@@ -4,6 +4,7 @@ import com.thinkcanvas.canvas.ArrowEnd
 import com.thinkcanvas.canvas.BoardSnapshot
 import com.thinkcanvas.canvas.ShapeKind
 import com.thinkcanvas.canvas.WorldBounds
+import com.thinkcanvas.canvas.ResolvedRenderedGeometry
 import com.thinkcanvas.canvas.arrowControl
 import com.thinkcanvas.canvas.arrowPoints
 import com.thinkcanvas.canvas.bounds
@@ -23,6 +24,7 @@ data class SharePlan(
     val height: Int,
     val pixelsPerWorldUnit: Float,
     val typography: ExportTypography,
+    val resolvedGeometry: ResolvedRenderedGeometry,
 )
 
 fun planShare(source: BoardSnapshot, selectedIds: Set<String>? = null,
@@ -103,5 +105,5 @@ fun planShare(source: BoardSnapshot, selectedIds: Set<String>? = null,
     return SharePlan(source, included.toSet(), content,
         WorldBounds((content.left - margin).toFloat(), (content.top - margin).toFloat(),
             (content.right + margin).toFloat(), (content.bottom + margin).toFloat()),
-        width, height, low.toFloat(), typography)
+        width, height, low.toFloat(), typography, sharedGeometry)
 }
