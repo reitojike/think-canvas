@@ -246,7 +246,18 @@ class MainActivity : ComponentActivity() {
                     is Page.Board -> key(current.id) {
                         CanvasScreen(current.state,
                             boardName = current.name.ifBlank { "無題のボード" },
-                            onOpenList = { perform { showList() } },
+                            onOpenList = {
+                                if (!operationPending.value) {
+                                    page.value = Page.Loading
+                                    perform {
+                                        try { showList() }
+                                        catch (error: Exception) {
+                                            page.value = current
+                                            throw error
+                                        }
+                                    }
+                                }
+                            },
                             onShareSelection = { ids -> perform {
                                 val stored = store.savedBoard(current.id)
                                     ?: error("ボードが見つかりません")

@@ -183,6 +183,49 @@ class BoardListScreenTest {
         try { waitFor("‹ 二つ目") } finally { reopened.finish() }
     }
 
+    @Test fun systemBackReturnsFromBoardToList() {
+        seed(listOf(BoardRow(1, "戻る対象", 10)))
+        assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+            .edit().putLong("lastOpenedBoardId", 1).commit())
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            waitFor("‹ 戻る対象")
+            assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                .GLOBAL_ACTION_BACK))
+            waitFor("戻る対象、", byDescription = true)
+            assertTrue(!activity.isFinishing)
+        } finally { activity.finish() }
+    }
+
+    @Test fun systemBackDoesNotLeaveAnUncommittedDraft() {
+        seed(listOf(BoardRow(1, "編集中", 10)))
+        assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+            .edit().putLong("lastOpenedBoardId", 1).commit())
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            waitFor("‹ 編集中")
+            val width = context.resources.displayMetrics.widthPixels.toFloat()
+            val height = context.resources.displayMetrics.heightPixels.toFloat()
+            val downTime = SystemClock.uptimeMillis()
+            for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action,
+                    width * .5f, height * .5f, 0)
+                assertTrue(automation.injectInputEvent(event, true))
+                event.recycle()
+            }
+            waitFor("新しいテキスト", byDescription = true)
+            repeat(2) {
+                assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                    .GLOBAL_ACTION_BACK))
+                instrumentation.waitForIdleSync()
+                waitFor("新しいテキスト", byDescription = true)
+            }
+            assertTrue(!activity.isFinishing)
+        } finally { activity.finish() }
+    }
+
     @Test fun listShareOffersPreviewAndCopyWithoutChangingSavedContent() {
         seed(listOf(BoardRow(1, "共有する案", 10), BoardRow(2, "別の案", 5)))
         val database = CanvasDatabase.open(context)

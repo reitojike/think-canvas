@@ -24,6 +24,22 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class BoardImageDeliveryTest {
+    @Test fun longRegionNameRemainsVisibleBeyondNarrowRegion() {
+        val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+            x = 40f, y = 60f, width = 32f, height = 40f, name = "Very long region name")
+        val plan = planShare(BoardSnapshot(shapes = listOf(region)))
+        val bitmap = BoardImageRenderer.render(plan)
+        fun px(value: Float) = ((value - plan.imageBounds.left) * plan.pixelsPerWorldUnit).toInt()
+        fun py(value: Float) = ((value - plan.imageBounds.top) * plan.pixelsPerWorldUnit).toInt()
+        val labelBeyondShape = (py(40f)..py(58f)).any { y ->
+            (px(75f)..px(170f)).any { x ->
+                bitmap.getPixel(x, y) != 0xFFFCFCFB.toInt()
+            }
+        }
+        assertTrue("狭い囲みの外へ続く名前も画像に含む", labelBeyondShape)
+        bitmap.recycle()
+    }
+
     @Test fun markerStaysBehindShapesAndPenInExport() {
         fun stroke(id: String, kind: InkKind) = InkElement(id = id, kind = kind,
             strokes = listOf(InkStroke(id = "$id-stroke", startedAt = 1, endedAt = 21,

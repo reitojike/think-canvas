@@ -12,6 +12,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SharePlanTest {
+    @Test fun narrowRegionKeepsFullLabelInsideExportBounds() {
+        val region = ShapeElement(id = "named-region", kind = ShapeKind.REGION,
+            x = 40f, y = 60f, width = 32f, height = 40f,
+            name = "Very long region name")
+        val plan = planShare(BoardSnapshot(shapes = listOf(region)))
+        assertTrue(plan.contentBounds.right > region.x + region.width)
+        assertTrue(plan.contentBounds.right >= region.x + 8f + region.name.length * 16f)
+        assertTrue(plan.contentBounds.top <= region.y - 24f)
+        assertTrue(plan.imageBounds.right > plan.contentBounds.right)
+    }
+
     @Test fun selectedRegionIncludesItsContentsButNotCrossingArrow() {
         val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
             x = 0f, y = 0f, width = 200f, height = 200f, name = "考え")

@@ -80,7 +80,7 @@ object BoardImageRenderer {
                             textSize = 12f
                             typeface = Typeface.DEFAULT_BOLD
                         }
-                        canvas.drawText(shape.name, shape.x + 12f, shape.y + 18f, label)
+                        canvas.drawText(shape.name, shape.x + 8f, shape.y - 8f, label)
                     }
                 }
             }

@@ -57,7 +57,15 @@ fun planShare(source: BoardSnapshot, selectedIds: Set<String>? = null): SharePla
     }
 
     val bounds = included.mapNotNull { id ->
-        source.boundsOf(id) ?: source.arrows.firstOrNull { it.id == id }?.let { arrow ->
+        val shape = source.shapes.firstOrNull { it.id == id }
+        val shapeBounds = source.boundsOf(id)
+        if (shape != null && shape.kind == ShapeKind.REGION && shape.name.isNotBlank() &&
+            shapeBounds != null) {
+            // 共有画像の囲み名は上辺の外に描く。文字幅を保守的に見積もり切り抜きを防ぐ。
+            WorldBounds(shapeBounds.left, min(shapeBounds.top, shape.y - 24f),
+                max(shapeBounds.right, shape.x + 8f + shape.name.length * 16f),
+                shapeBounds.bottom)
+        } else shapeBounds ?: source.arrows.firstOrNull { it.id == id }?.let { arrow ->
             val ends = source.arrowPoints(arrow) ?: return@let null
             val control = source.arrowControl(arrow) ?: return@let null
             WorldBounds(min(ends.first.x, min(ends.second.x, control.x)),

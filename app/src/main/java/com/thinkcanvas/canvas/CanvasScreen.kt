@@ -1,6 +1,7 @@
 package com.thinkcanvas.canvas
 
 import android.os.SystemClock
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -149,6 +150,13 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
     val elementSizes = remember { mutableStateMapOf<String, IntSize>() }
     val chromeBounds = remember { mutableStateMapOf<String, Rect>() }
     val uiScope = rememberCoroutineScope()
+    val canLeaveBoard = !saving && !saveFailed && draft == null &&
+        regionNameId == null && attachmentEditor == null && inkPreview == null &&
+        spatialPreview == null && movePreview == null && handlePreview == null &&
+        gapPreview == null && lassoPoints.isEmpty() && !pendingInkSave
+    BackHandler {
+        if (canLeaveBoard) onOpenList()
+    }
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -1288,12 +1296,7 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = 8.dp)
                     .height(44.dp).background(Color.White, RoundedCornerShape(24.dp))
                     .pillBorder(24f).padding(horizontal = 14.dp)
-                    .clickable(enabled = !saving && !saveFailed && draft == null &&
-                        regionNameId == null && attachmentEditor == null &&
-                        inkPreview == null && spatialPreview == null &&
-                        movePreview == null && handlePreview == null &&
-                        gapPreview == null && lassoPoints.isEmpty() &&
-                        !pendingInkSave) { onOpenList() }
+                    .clickable(enabled = canLeaveBoard) { onOpenList() }
                     .semantics { contentDescription = "ボード一覧を開く" }
                     .onGloballyPositioned { chromeBounds["board"] = it.boundsInParent() },
                 contentAlignment = Alignment.Center,
