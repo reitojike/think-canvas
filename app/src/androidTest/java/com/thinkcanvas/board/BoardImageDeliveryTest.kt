@@ -24,6 +24,25 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class BoardImageDeliveryTest {
+    @Test fun detailedRegionAndArrowStylingRemainsInExport() {
+        val source = BoardSnapshot(shapes = listOf(ShapeElement(id = "region",
+            kind = ShapeKind.REGION, x = 40f, y = 40f, width = 120f, height = 80f)),
+            arrows = listOf(ArrowElement(id = "arrow", from = ArrowEnd.Free(40f, 170f),
+                to = ArrowEnd.Free(140f, 170f))))
+        val plan = planShare(source)
+        val bitmap = BoardImageRenderer.render(plan)
+        fun pixel(x: Float, y: Float) = bitmap.getPixel(
+            ((x - plan.imageBounds.left) * plan.pixelsPerWorldUnit).toInt(),
+            ((y - plan.imageBounds.top) * plan.pixelsPerWorldUnit).toInt())
+        val background = 0xFFFCFCFB.toInt()
+        assertEquals("囲みの内側は塗らない", background, pixel(100f, 80f))
+        val topEdge = (60..140).map { x -> pixel(x.toFloat(), 40f) }
+        assertTrue("囲みの上辺には破線の線分がある", topEdge.count { it != background } > 10)
+        assertTrue("囲みの上辺には破線の間隔がある", topEdge.count { it == background } > 5)
+        assertNotEquals("矢印先端は塗られた三角形", background, pixel(133f, 172f))
+        bitmap.recycle()
+    }
+
     @Test fun longRegionNameRemainsVisibleBeyondNarrowRegion() {
         val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
             x = 40f, y = 60f, width = 32f, height = 40f, name = "Very long region name")

@@ -2,6 +2,7 @@ package com.thinkcanvas.board
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.DashPathEffect
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
@@ -59,26 +60,23 @@ object BoardImageRenderer {
             val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = color(shape.color)
                 style = Paint.Style.STROKE
-                strokeWidth = 1.5f
+                strokeWidth = if (shape.kind == ShapeKind.REGION) 1.5f else 2f
+                if (shape.kind == ShapeKind.REGION)
+                    pathEffect = DashPathEffect(floatArrayOf(8f, 5f), 0f)
             }
             val right = shape.x + shape.width
             val bottom = shape.y + shape.height
             when (shape.kind) {
                 ShapeKind.RECTANGLE -> canvas.drawRoundRect(shape.x, shape.y, right, bottom,
-                    6f, 6f, outline)
+                    3f, 3f, outline)
                 ShapeKind.ELLIPSE -> canvas.drawOval(shape.x, shape.y, right, bottom, outline)
                 ShapeKind.REGION -> {
-                    val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = 0x0F23211E
-                        style = Paint.Style.FILL
-                    }
-                    canvas.drawRoundRect(shape.x, shape.y, right, bottom, 12f, 12f, fill)
                     canvas.drawRoundRect(shape.x, shape.y, right, bottom, 12f, 12f, outline)
                     if (shape.name.isNotBlank()) {
                         val label = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                             color = 0xFF23211E.toInt()
                             textSize = 12f
-                            typeface = Typeface.DEFAULT_BOLD
+                            typeface = Typeface.DEFAULT
                         }
                         canvas.drawText(shape.name, shape.x + 8f, shape.y - 8f, label)
                     }
@@ -91,8 +89,12 @@ object BoardImageRenderer {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = 0xFF23211E.toInt()
             style = Paint.Style.STROKE
-            strokeWidth = 1.8f
+            strokeWidth = 2f
             strokeCap = Paint.Cap.ROUND
+        }
+        val headPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF23211E.toInt()
+            style = Paint.Style.FILL
         }
         plan.source.arrows.filter { it.id in plan.includedIds }.forEach { arrow ->
             val (from, to) = plan.source.arrowPoints(arrow) ?: return@forEach
@@ -104,11 +106,12 @@ object BoardImageRenderer {
             canvas.drawPath(path, paint)
             val angle = atan2(to.y - control.y, to.x - control.x)
             val head = Path().apply {
-                moveTo(to.x - 10f * cos(angle - .42f), to.y - 10f * sin(angle - .42f))
-                lineTo(to.x, to.y)
-                lineTo(to.x - 10f * cos(angle + .42f), to.y - 10f * sin(angle + .42f))
+                moveTo(to.x, to.y)
+                lineTo(to.x - 11f * cos(angle - .5f), to.y - 11f * sin(angle - .5f))
+                lineTo(to.x - 11f * cos(angle + .5f), to.y - 11f * sin(angle + .5f))
+                close()
             }
-            canvas.drawPath(head, paint)
+            canvas.drawPath(head, headPaint)
         }
     }
 
