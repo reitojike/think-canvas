@@ -181,8 +181,8 @@ class MainActivity : ComponentActivity() {
                             notice("画像を保存しました")
                         } else {
                             withContext(Dispatchers.IO) { pendingDocument.writeBytes(bytes) }
-                            waitingForDocument = true
                             createDocument.launch("think-canvas-${System.currentTimeMillis()}.png")
+                            waitingForDocument = true
                         }
                         1 -> {
                             val uri = ImageDelivery.cacheUri(this@MainActivity, bytes)
@@ -204,7 +204,10 @@ class MainActivity : ComponentActivity() {
                 } catch (error: Exception) {
                     errorMessage.value = error.message ?: "画像を渡せません"
                 } finally {
-                    if (!waitingForDocument) shareBusy.value = false
+                    if (!waitingForDocument) {
+                        if (kind == 0 && Build.VERSION.SDK_INT < 29) pendingDocument.delete()
+                        shareBusy.value = false
+                    }
                 }
             }
         }
