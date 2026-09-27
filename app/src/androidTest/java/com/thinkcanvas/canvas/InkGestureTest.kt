@@ -105,7 +105,7 @@ class InkGestureTest {
         }
 
         val database = CanvasDatabase.open(context)
-        assertEquals(0, runBlocking { database.canvasDao().inkStrokes().size })
+        assertEquals(0, runBlocking { database.canvasDao().inkStrokes(1).size })
         var zoomLabels = emptyList<String>()
         for (attempt in 1..20) {
             instrumentation.waitForIdleSync()
@@ -123,10 +123,10 @@ class InkGestureTest {
             send(MotionEvent.ACTION_UP, (width * .5f) to (bottom + 80f))
         }
         for (attempt in 1..30) {
-            if (runBlocking { database.canvasDao().inkStrokes().size } == 10) break
+            if (runBlocking { database.canvasDao().inkStrokes(1).size } == 10) break
             Thread.sleep(100)
         }
-        assertEquals(10, runBlocking { database.canvasDao().inkStrokes().size })
+        assertEquals(10, runBlocking { database.canvasDao().inkStrokes(1).size })
         instrumentation.waitForIdleSync()
         val screenshot = requireNotNull(automation.takeScreenshot())
         val centerX = (width * .35f).toInt()
@@ -147,10 +147,10 @@ class InkGestureTest {
             send(MotionEvent.ACTION_UP, (width * .5f) to (bottom + 260f))
         }
         for (attempt in 1..30) {
-            if (runBlocking { database.canvasDao().inkStrokes().size } == 20) break
+            if (runBlocking { database.canvasDao().inkStrokes(1).size } == 20) break
             Thread.sleep(100)
         }
-        assertEquals(20, runBlocking { database.canvasDao().inkStrokes().size })
+        assertEquals(20, runBlocking { database.canvasDao().inkStrokes(1).size })
         database.close()
         activity.finish()
     }

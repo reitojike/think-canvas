@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import com.thinkcanvas.board.fittedViewport
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -112,8 +113,10 @@ private data class Draft(
 )
 
 @Composable
-fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
+fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
+                 onCommittedChange: () -> Deferred<Unit>) {
     var viewport by remember { mutableStateOf(Viewport()) }
+    var initialFitApplied by remember(board) { mutableStateOf(false) }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var tool by remember { mutableStateOf(SpatialTool.NONE) }
@@ -158,6 +161,13 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val longPressMillis = viewConfiguration.longPressTimeoutMillis
     val doubleTapTimeoutMillis = viewConfiguration.doubleTapTimeoutMillis
     val doubleTapSlop = android.view.ViewConfiguration.get(context).scaledDoubleTapSlop.toFloat()
+    LaunchedEffect(board, canvasSize) {
+        if (!initialFitApplied && canvasSize != IntSize.Zero) {
+            viewport = board.snapshot().fittedViewport(
+                canvasSize.width.toFloat(), canvasSize.height.toFloat())
+            initialFitApplied = true
+        }
+    }
     val imeBottom = WindowInsets.ime.getBottom(density)
     val latestViewport = rememberUpdatedState(viewport)
     val latestElements = rememberUpdatedState(board.elements)
@@ -1218,6 +1228,12 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 }
             })
 
+        if (board.elements.isEmpty() && board.shapes.isEmpty() && board.arrows.isEmpty() &&
+            board.ink.isEmpty() && draft == null) {
+            Text("どこでもタップして書く", color = muted.copy(alpha = .55f), fontSize = 13.sp,
+                modifier = Modifier.align(Alignment.Center))
+        }
+
         if (draft == null) {
             if (searchOpen) {
                 Row(Modifier.align(Alignment.TopCenter).fillMaxWidth()
@@ -1271,9 +1287,11 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = 8.dp)
                     .height(44.dp).background(Color.White, RoundedCornerShape(24.dp))
                     .pillBorder(24f).padding(horizontal = 14.dp)
+                    .clickable(enabled = !saving && !saveFailed) { onOpenList() }
+                    .semantics { contentDescription = "ボード一覧を開く" }
                     .onGloballyPositioned { chromeBounds["board"] = it.boundsInParent() },
                 contentAlignment = Alignment.Center,
-            ) { Text(stringResource(R.string.board_name), color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+            ) { Text("‹ $boardName", color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
 
             if (inkTool == null) IconButton(onClick = {
                 searchOpen = true; searchQuery = ""; searchPosition = 0
