@@ -165,7 +165,8 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
     val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
     val regionNameFocusRequester = remember { FocusRequester() }
-    val regionLabelStyle = LocalTextStyle.current.copy(fontSize = 12.sp)
+    val canvasTextStyle = LocalTextStyle.current
+    val regionLabelStyle = canvasTextStyle.copy(fontSize = 12.sp)
     val searchFocusRequester = remember { FocusRequester() }
     val viewConfiguration = LocalViewConfiguration.current
     val context = LocalContext.current
@@ -173,29 +174,6 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
     val longPressMillis = viewConfiguration.longPressTimeoutMillis
     val doubleTapTimeoutMillis = viewConfiguration.doubleTapTimeoutMillis
     val doubleTapSlop = android.view.ViewConfiguration.get(context).scaledDoubleTapSlop.toFloat()
-    LaunchedEffect(board, canvasSize) {
-        if (!initialFitApplied && canvasSize != IntSize.Zero) {
-            val labelWidth = (canvasSize.width - 40).coerceAtLeast(1)
-            val openingSnapshot = board.snapshot()
-            val geometricFit = openingSnapshot.fittedViewport(canvasSize.width.toFloat(),
-                canvasSize.height.toFloat())
-            val openingProjection = openingSnapshot.semanticProjection(geometricFit.scale,
-                with(density) { 14.sp.toDp().value }, pixelsPerDp = density.density)
-            val labelSizes = board.shapes.filter { it.kind == ShapeKind.REGION &&
-                it.name.isNotBlank() && openingProjection.visible(it.id) &&
-                !openingProjection.farLikeRegion(it.id) }
-                .associate { shape ->
-                    val size = textMeasurer.measure(AnnotatedString(shape.name),
-                        style = regionLabelStyle, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        constraints = Constraints(maxWidth = labelWidth)).size
-                    shape.id to RegionLabelSize(size.width.toFloat(), size.height.toFloat())
-                }
-            viewport = openingSnapshot.fittedViewport(canvasSize.width.toFloat(),
-                canvasSize.height.toFloat(), labelSizes)
-            initialFitApplied = true
-        }
-    }
     val imeBottom = WindowInsets.ime.getBottom(density)
     val latestViewport = rememberUpdatedState(viewport)
     val latestElements = rememberUpdatedState(board.elements)
@@ -233,7 +211,7 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
         else 166.dp
         val measured = textMeasurer.measure(
             text = AnnotatedString(element.text),
-            style = TextStyle(fontSize = size, lineHeight = size * 1.5f,
+            style = canvasTextStyle.copy(fontSize = size, lineHeight = size * 1.5f,
                 fontWeight = if (title) FontWeight.Bold else FontWeight.Normal),
             maxLines = if (tier == SemanticTier.NEAR) Int.MAX_VALUE else 1,
             overflow = TextOverflow.Ellipsis,
@@ -242,7 +220,45 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
         ).size
         return TextExtent(measured.width.toFloat(), measured.height.toFloat())
     }
+    LaunchedEffect(board, canvasSize, density, canvasTextStyle) {
+        if (!initialFitApplied && canvasSize.width > 0 && canvasSize.height > 0) {
+            val labelWidth = (canvasSize.width - 40).coerceAtLeast(1)
+            val labelSizes = snapshot.shapes.filter { it.kind == ShapeKind.REGION && it.name.isNotBlank() }
+                .associate { shape ->
+                    val size = textMeasurer.measure(AnnotatedString(shape.name),
+                        style = regionLabelStyle, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        constraints = Constraints(maxWidth = labelWidth)).size
+                    shape.id to RegionLabelSize(size.width.toFloat(), size.height.toFloat())
+                }
+            var fitted = snapshot.fittedViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat())
+            for (pass in 0 until 8) {
+                val approximateProjection = snapshot.semanticProjection(fitted.scale, bodyDp,
+                    pixelsPerDp = density.density, titleDp = titleDp)
+                val visibleShapes = snapshot.shapes.filter { approximateProjection.visible(it.id) }
+                val textSizes = snapshot.texts.filter { approximateProjection.visible(it.id) }
+                    .associate { element ->
+                    element.id to measureTextExtent(element, fitted.scale, emptySet(), visibleShapes)
+                }
+                val displayProjection = snapshot.semanticProjection(fitted.scale, bodyDp,
+                    pixelsPerDp = density.density, titleDp = titleDp,
+                    measuredTextExtents = textSizes)
+                val visibleLabels = labelSizes.filterKeys { id ->
+                    displayProjection.visible(id) && !displayProjection.farLikeRegion(id)
+                }
+                val next = snapshot.fittedViewport(canvasSize.width.toFloat(),
+                    canvasSize.height.toFloat(), visibleLabels, textSizes,
+                    maximumScale = fitted.scale)
+                val settled = next.scale >= fitted.scale - .001f
+                fitted = next
+                if (settled) break
+            }
+            viewport = fitted
+            initialFitApplied = true
+        }
+    }
     val measuredTextExtents = remember(board.elements, board.shapes, viewport.scale, density,
+        canvasTextStyle,
         selectedIds, matchIds) {
         board.elements.associate { element ->
             element.id to measureTextExtent(element, viewport.scale, keptIds, boundaryShapes)

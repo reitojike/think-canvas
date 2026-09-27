@@ -3,6 +3,8 @@ package com.thinkcanvas.board
 import com.thinkcanvas.canvas.BoardSnapshot
 import com.thinkcanvas.canvas.ShapeElement
 import com.thinkcanvas.canvas.ShapeKind
+import com.thinkcanvas.canvas.TextElement
+import com.thinkcanvas.canvas.TextExtent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -32,5 +34,20 @@ class BoardGeometryTest {
         assertTrue(labelLeft + 900f <= 980f)
         assertTrue(labelTop >= 20f)
         assertTrue(viewport.scale in .15f..3f)
+    }
+
+    @Test fun openingFitUsesMeasuredWrappedTextExtent() {
+        val text = TextElement(id = "text", text = "長い文章\n次の行", x = 100f, y = 120f)
+        val board = BoardSnapshot(texts = listOf(text))
+        val measured = mapOf(text.id to TextExtent(1200f, 700f))
+
+        val viewport = board.fittedViewport(1000f, 800f, textExtents = measured)
+        val (left, top) = viewport.worldToScreen(text.x, text.y)
+        val (right, bottom) = viewport.worldToScreen(text.x + 1200f, text.y + 700f)
+
+        assertTrue(viewport.scale < .9f)
+        assertTrue(left >= 20f && right <= 980f)
+        assertTrue(top >= 90f && bottom <= 710f)
+        assertEquals(1200f, board.contentBounds(measured)!!.right - text.x, .001f)
     }
 }

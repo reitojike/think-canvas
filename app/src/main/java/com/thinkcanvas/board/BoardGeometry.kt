@@ -1,6 +1,7 @@
 package com.thinkcanvas.board
 
 import com.thinkcanvas.canvas.BoardSnapshot
+import com.thinkcanvas.canvas.TextExtent
 import com.thinkcanvas.canvas.Viewport
 import com.thinkcanvas.canvas.WorldBounds
 import com.thinkcanvas.canvas.boundsOf
@@ -12,8 +13,14 @@ import kotlin.math.min
 /** 詳細表示の囲み名が画面上で占める寸法。世界座標の倍率では拡大縮小しない。 */
 data class RegionLabelSize(val width: Float, val height: Float)
 
-fun BoardSnapshot.contentBounds(): WorldBounds? {
-    val bounds = (texts.mapNotNull { boundsOf(it.id) } +
+fun BoardSnapshot.contentBounds(textExtents: Map<String, TextExtent> = emptyMap()): WorldBounds? {
+    val bounds = (texts.mapNotNull { text ->
+        val measured = textExtents[text.id]
+        if (measured != null && measured.width.isFinite() && measured.height.isFinite() &&
+            measured.width >= 0f && measured.height >= 0f)
+            WorldBounds(text.x, text.y, text.x + measured.width, text.y + measured.height)
+        else boundsOf(text.id)
+    } +
         shapes.mapNotNull { boundsOf(it.id) } +
         ink.mapNotNull { boundsOf(it.id) } +
         arrows.mapNotNull { arrow ->
@@ -28,8 +35,10 @@ fun BoardSnapshot.contentBounds(): WorldBounds? {
 }
 
 fun BoardSnapshot.fittedViewport(width: Float, height: Float,
-                                 regionLabels: Map<String, RegionLabelSize> = emptyMap()): Viewport {
-    val bounds = contentBounds() ?: return Viewport()
+                                 regionLabels: Map<String, RegionLabelSize> = emptyMap(),
+                                 textExtents: Map<String, TextExtent> = emptyMap(),
+                                 maximumScale: Float = .9f): Viewport {
+    val bounds = contentBounds(textExtents) ?: return Viewport()
     val availableWidth = (width - 40f).coerceAtLeast(1f).toDouble()
     val availableHeight = (height - 180f).coerceAtLeast(1f).toDouble()
     val labels = shapes.mapNotNull { shape ->
@@ -59,7 +68,7 @@ fun BoardSnapshot.fittedViewport(width: Float, height: Float,
     }
     val contentWidth = (bounds.right.toDouble() - bounds.left).coerceAtLeast(1.0)
     val contentHeight = (bounds.bottom.toDouble() - bounds.top).coerceAtLeast(1.0)
-    val upper = min(.9, min(availableWidth / contentWidth,
+    val upper = min(maximumScale.toDouble().coerceIn(.15, .9), min(availableWidth / contentWidth,
         availableHeight / contentHeight)).coerceAtLeast(.15)
     val scale = if (fits(upper)) upper else if (!fits(.15)) .15 else {
         var low = .15
