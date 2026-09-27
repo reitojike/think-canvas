@@ -9,6 +9,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
@@ -73,6 +74,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(transparent, transparent),
         )
         val store = CanvasStore.get(this)
+        val boardSessions = ViewModelProvider(this)[BoardSessionViewModel::class.java]
         val page = mutableStateOf<Page>(Page.Loading)
         val cards = mutableStateOf<List<StoredBoard>>(emptyList())
         val guideVisible = mutableStateOf(false)
@@ -119,8 +121,7 @@ class MainActivity : ComponentActivity() {
         fun openBoard(stored: StoredBoard) {
             navigationTargetIsList = false
             page.value = Page.Board(stored.details.id, stored.details.name,
-                BoardState(stored.snapshot.texts, stored.snapshot.shapes,
-                    stored.snapshot.arrows, stored.snapshot.ink))
+                boardSessions.stateFor(stored.details.id, stored.snapshot))
             guideVisible.value = store.shouldShowGuide(stored.details.id, stored.snapshot)
         }
 
@@ -253,6 +254,7 @@ class MainActivity : ComponentActivity() {
                         } },
                         onDelete = { id -> perform {
                             check(store.delete(id)) { "ボードが見つかりません" }
+                            boardSessions.discard(id)
                             showList()
                         } },
                         onShare = { id -> perform {

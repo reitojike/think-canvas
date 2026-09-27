@@ -9,14 +9,23 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
+import androidx.lifecycle.ViewModelProvider
+import com.thinkcanvas.BoardSessionViewModel
 import com.thinkcanvas.MainActivity
+import com.thinkcanvas.canvas.BoardSnapshot
+import com.thinkcanvas.canvas.BoardState
+import com.thinkcanvas.canvas.TextColor
+import com.thinkcanvas.canvas.TextKind
 import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.CanvasDatabase
+import com.thinkcanvas.data.CanvasStore
 import com.thinkcanvas.data.TextElementRow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -213,6 +222,53 @@ class BoardListScreenTest {
             waitFor("再作成対象、", byDescription = true)
             instrumentation.runOnMainSync { activity.recreate() }
             waitFor("再作成対象、", byDescription = true)
+        } finally {
+            instrumentation.runOnMainSync {
+                ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(Stage.RESUMED).filterIsInstance<MainActivity>()
+                    .forEach { it.finish() }
+            }
+        }
+    }
+
+    @Test fun boardUndoHistorySurvivesReopenAndActivityRecreation() {
+        seed(listOf(BoardRow(1, "セッション履歴", 10)))
+        assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+            .edit().putLong("lastOpenedBoardId", 1).commit())
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            waitFor("‹ セッション履歴")
+            val session = ViewModelProvider(activity as MainActivity)[BoardSessionViewModel::class.java]
+            val state = session.stateFor(1L, BoardSnapshot())
+            instrumentation.runOnMainSync {
+                state.create("同一セッションの編集", TextKind.BODY, TextColor.INK, 24f, 32f)
+            }
+            runBlocking { CanvasStore.get(context).save(1L, state.snapshot()).await() }
+            waitFor("同一セッションの編集", byDescription = true)
+
+            act(waitFor("ボード一覧を開く", byDescription = true),
+                AccessibilityNodeInfo.ACTION_CLICK)
+            act(waitFor("セッション履歴、", byDescription = true),
+                AccessibilityNodeInfo.ACTION_CLICK)
+            waitFor("同一セッションの編集", byDescription = true)
+            assertTrue(session.stateFor(1L, BoardSnapshot()).canUndo)
+
+            instrumentation.runOnMainSync { activity.recreate() }
+            waitFor("同一セッションの編集", byDescription = true)
+            val restoredStates = mutableListOf<BoardState>()
+            instrumentation.runOnMainSync {
+                val recreated = ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(Stage.RESUMED).filterIsInstance<MainActivity>().single()
+                val restoredSession = ViewModelProvider(recreated)[BoardSessionViewModel::class.java]
+                restoredStates += restoredSession.stateFor(1L, BoardSnapshot())
+            }
+            val restoredState = restoredStates.single()
+            assertSame(state, restoredState)
+            assertTrue(restoredState.canUndo)
+            assertTrue(restoredState.undo())
+            assertFalse(restoredState.canUndo)
+            assertTrue(restoredState.canRedo)
         } finally {
             instrumentation.runOnMainSync {
                 ActivityLifecycleMonitorRegistry.getInstance()
