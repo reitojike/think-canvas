@@ -12,18 +12,41 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import androidx.ink.rendering.android.canvas.CanvasStrokeRenderer
 import com.thinkcanvas.canvas.InkKind
+import com.thinkcanvas.canvas.BoardSnapshot
+import com.thinkcanvas.canvas.ShapeElement
 import com.thinkcanvas.canvas.ShapeKind
 import com.thinkcanvas.canvas.TextColor
+import com.thinkcanvas.canvas.TextElement
 import com.thinkcanvas.canvas.TextKind
+import com.thinkcanvas.canvas.WorldBounds
 import com.thinkcanvas.canvas.arrowControl
 import com.thinkcanvas.canvas.arrowPoints
 import com.thinkcanvas.canvas.makeStroke
 import kotlin.math.atan2
+import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.sin
 
 /** 共有プレビューと PNG に共通の描画面。画面 chrome と選択表示は描かない。 */
 object BoardImageRenderer {
+    /** 計画と描画に同じ組版を使い、文字や囲み名を PNG の外接範囲から落とさない。 */
+    fun renderedBounds(source: BoardSnapshot, typography: ExportTypography): Map<String, WorldBounds> =
+        buildMap {
+            source.texts.forEach { element ->
+                val layout = textLayout(element, typography)
+                val width = (0 until layout.lineCount).maxOfOrNull { layout.getLineWidth(it) }
+                    ?.let(::ceil) ?: 0f
+                val lineHeight = if (element.kind == TextKind.TITLE)
+                    typography.titleLineHeight else typography.bodyLineHeight
+                val height = max(layout.height.toFloat(), lineHeight * layout.lineCount)
+                put(element.id, WorldBounds(element.x, element.y,
+                    element.x + width, element.y + height))
+            }
+            source.shapes.filter { it.kind == ShapeKind.REGION && it.name.isNotBlank() }
+                .forEach { region -> put(region.id, regionBounds(region, typography)) }
+        }
+
     fun render(plan: SharePlan): Bitmap {
         val bitmap = Bitmap.createBitmap(plan.width, plan.height, Bitmap.Config.ARGB_8888)
         try {
@@ -55,6 +78,23 @@ object BoardImageRenderer {
         TextColor.VERMILION -> 0xFFC54B32.toInt()
     }
 
+    private fun regionPaint(typography: ExportTypography) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF23211E.toInt()
+        textSize = typography.regionSize
+        typeface = Typeface.DEFAULT
+        letterSpacing = typography.regionLetterSpacingEm
+    }
+
+    private fun regionBounds(region: ShapeElement, typography: ExportTypography): WorldBounds {
+        val paint = regionPaint(typography)
+        val labelLeft = region.x + 8f
+        val labelTop = region.y - 22f
+        return WorldBounds(region.x, minOf(region.y, labelTop),
+            max(region.x + region.width, labelLeft + paint.measureText(region.name)),
+            max(region.y + region.height,
+                labelTop + paint.fontMetrics.bottom - paint.fontMetrics.top))
+    }
+
     private fun drawShapes(canvas: Canvas, plan: SharePlan) {
         plan.source.shapes.filter { it.id in plan.includedIds }.forEach { shape ->
             val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -73,12 +113,9 @@ object BoardImageRenderer {
                 ShapeKind.REGION -> {
                     canvas.drawRoundRect(shape.x, shape.y, right, bottom, 12f, 12f, outline)
                     if (shape.name.isNotBlank()) {
-                        val label = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                            color = 0xFF23211E.toInt()
-                            textSize = 12f
-                            typeface = Typeface.DEFAULT
-                        }
-                        canvas.drawText(shape.name, shape.x + 8f, shape.y - 8f, label)
+                        val label = regionPaint(plan.typography)
+                        canvas.drawText(shape.name, shape.x + 8f,
+                            shape.y - 22f - label.fontMetrics.top, label)
                     }
                 }
             }
@@ -115,17 +152,30 @@ object BoardImageRenderer {
         }
     }
 
+    private fun textLayout(element: TextElement, typography: ExportTypography): StaticLayout {
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = color(element.color)
+            textSize = if (element.kind == TextKind.TITLE) typography.titleSize
+                else typography.bodySize
+            typeface = if (element.kind == TextKind.TITLE) Typeface.DEFAULT_BOLD
+                else Typeface.DEFAULT
+            letterSpacing = if (element.kind == TextKind.TITLE)
+                typography.titleLetterSpacingEm else typography.bodyLetterSpacingEm
+        }
+        val desiredHeight = if (element.kind == TextKind.TITLE)
+            typography.titleLineHeight else typography.bodyLineHeight
+        val naturalHeight = paint.fontMetrics.descent - paint.fontMetrics.ascent
+        return StaticLayout.Builder.obtain(element.text, 0, element.text.length,
+            paint, typography.textWidth.coerceAtLeast(1))
+            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+            .setIncludePad(false)
+            .setLineSpacing((desiredHeight - naturalHeight).coerceAtLeast(0f), 1f)
+            .build()
+    }
+
     private fun drawTexts(canvas: Canvas, plan: SharePlan) {
         plan.source.texts.filter { it.id in plan.includedIds }.forEach { element ->
-            val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = color(element.color)
-                textSize = if (element.kind == TextKind.TITLE) 15f else 14f
-                typeface = if (element.kind == TextKind.TITLE) Typeface.DEFAULT_BOLD
-                    else Typeface.DEFAULT
-            }
-            val layout = StaticLayout.Builder.obtain(element.text, 0, element.text.length,
-                paint, 166).setAlignment(Layout.Alignment.ALIGN_NORMAL)
-                .setIncludePad(false).build()
+            val layout = textLayout(element, plan.typography)
             canvas.save()
             canvas.translate(element.x, element.y)
             layout.draw(canvas)

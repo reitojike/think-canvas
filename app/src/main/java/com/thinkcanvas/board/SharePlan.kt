@@ -22,9 +22,12 @@ data class SharePlan(
     val width: Int,
     val height: Int,
     val pixelsPerWorldUnit: Float,
+    val typography: ExportTypography,
 )
 
-fun planShare(source: BoardSnapshot, selectedIds: Set<String>? = null): SharePlan {
+fun planShare(source: BoardSnapshot, selectedIds: Set<String>? = null,
+              renderedBounds: Map<String, WorldBounds> = emptyMap(),
+              typography: ExportTypography = ExportTypography()): SharePlan {
     val allIds = (source.texts.map { it.id } + source.shapes.map { it.id } +
         source.arrows.map { it.id } + source.ink.map { it.id }).toSet()
     val included = if (selectedIds == null) allIds.toMutableSet()
@@ -58,8 +61,9 @@ fun planShare(source: BoardSnapshot, selectedIds: Set<String>? = null): SharePla
 
     val bounds = included.mapNotNull { id ->
         val shape = source.shapes.firstOrNull { it.id == id }
-        val shapeBounds = source.boundsOf(id)
-        if (shape != null && shape.kind == ShapeKind.REGION && shape.name.isNotBlank() &&
+        val shapeBounds = renderedBounds[id] ?: source.boundsOf(id)
+        if (id in renderedBounds) shapeBounds
+        else if (shape != null && shape.kind == ShapeKind.REGION && shape.name.isNotBlank() &&
             shapeBounds != null) {
             // 共有画像の囲み名は上辺の外に描く。文字幅を保守的に見積もり切り抜きを防ぐ。
             WorldBounds(shapeBounds.left, min(shapeBounds.top, shape.y - 24f),
@@ -105,5 +109,5 @@ fun planShare(source: BoardSnapshot, selectedIds: Set<String>? = null): SharePla
     return SharePlan(source, included.toSet(), content,
         WorldBounds((content.left - margin).toFloat(), (content.top - margin).toFloat(),
             (content.right + margin).toFloat(), (content.bottom + margin).toFloat()),
-        width, height, low.toFloat())
+        width, height, low.toFloat(), typography)
 }

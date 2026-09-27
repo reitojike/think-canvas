@@ -6,12 +6,27 @@ import com.thinkcanvas.canvas.BoardSnapshot
 import com.thinkcanvas.canvas.ShapeElement
 import com.thinkcanvas.canvas.ShapeKind
 import com.thinkcanvas.canvas.TextElement
+import com.thinkcanvas.canvas.WorldBounds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SharePlanTest {
+    @Test fun measuredExportTextBoundsAreUsedByPlan() {
+        val text = TextElement(id = "text", text = "複数行の本文", x = 40f, y = 60f)
+        val source = BoardSnapshot(texts = listOf(text))
+        val measured = WorldBounds(40f, 60f, 540f, 260f)
+        val typography = ExportTypography(textWidth = 500)
+
+        val plan = planShare(source, renderedBounds = mapOf(text.id to measured),
+            typography = typography)
+
+        assertEquals(measured, plan.contentBounds)
+        assertEquals(typography, plan.typography)
+        assertTrue(plan.imageBounds.right >= measured.right + 24f)
+    }
+
     @Test fun narrowRegionKeepsFullLabelInsideExportBounds() {
         val region = ShapeElement(id = "named-region", kind = ShapeKind.REGION,
             x = 40f, y = 60f, width = 32f, height = 40f,

@@ -2,6 +2,7 @@ package com.thinkcanvas.board
 
 import android.os.Build
 import android.content.Intent
+import android.content.res.Configuration
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.canvas.BoardSnapshot
@@ -24,6 +25,35 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class BoardImageDeliveryTest {
+    @Test fun exportUsesDeviceTextMetricsForPlanAndBitmap() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val typography = ExportTypography.from(context.resources)
+        val enlargedConfig = Configuration(context.resources.configuration).apply { fontScale = 1.5f }
+        val enlarged = ExportTypography.from(
+            context.createConfigurationContext(enlargedConfig).resources)
+        val text = TextElement(id = "multiline", text = "一行目の本文\n二行目の本文",
+            x = 40f, y = 60f)
+        val source = BoardSnapshot(texts = listOf(text))
+        val measured = BoardImageRenderer.renderedBounds(source, typography)
+        val textBounds = measured.getValue(text.id)
+        val plan = planShare(source, renderedBounds = measured, typography = typography)
+        val bitmap = BoardImageRenderer.render(plan)
+
+        try {
+            assertTrue(typography.textWidth >= 166)
+            assertTrue(enlarged.bodySize > typography.bodySize)
+            assertTrue(enlarged.bodyLineHeight > typography.bodyLineHeight)
+            assertTrue(textBounds.bottom - textBounds.top >= typography.bodyLineHeight * 2f)
+            assertTrue(plan.contentBounds.right >= textBounds.right)
+            assertTrue(plan.contentBounds.bottom >= textBounds.bottom)
+            assertTrue(plan.imageBounds.right > textBounds.right)
+            assertEquals(typography, plan.typography)
+            assertTrue(bitmap.width > 0 && bitmap.height > 0)
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
     @Test fun detailedRegionAndArrowStylingRemainsInExport() {
         val source = BoardSnapshot(shapes = listOf(ShapeElement(id = "region",
             kind = ShapeKind.REGION, x = 40f, y = 40f, width = 120f, height = 80f)),

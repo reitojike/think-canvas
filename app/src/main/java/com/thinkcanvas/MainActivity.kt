@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
@@ -21,10 +22,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.lifecycleScope
 import com.thinkcanvas.board.BoardImageRenderer
 import com.thinkcanvas.board.BoardListScreen
+import com.thinkcanvas.board.ExportTypography
 import com.thinkcanvas.board.GuideSheet
 import com.thinkcanvas.board.ImageDelivery
 import com.thinkcanvas.board.ShareSheet
@@ -144,19 +147,15 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        fun showShare(title: String, snapshot: BoardSnapshot, selectedIds: Set<String>? = null) {
+        fun showShare(title: String, snapshot: BoardSnapshot, typography: ExportTypography,
+                      selectedIds: Set<String>? = null) {
             val request = ++shareRequestId
-            val plan = try {
-                planShare(snapshot, selectedIds)
-            } catch (error: IllegalArgumentException) {
-                shareDialog.value = ShareDialogState(request, title,
-                    message = error.message ?: "画像を作成できません")
-                return
-            }
             shareDialog.value = ShareDialogState(request, title)
             lifecycleScope.launch {
                 try {
                     val bitmap = withContext(Dispatchers.Default) {
+                        val bounds = BoardImageRenderer.renderedBounds(snapshot, typography)
+                        val plan = planShare(snapshot, selectedIds, bounds, typography)
                         BoardImageRenderer.render(plan)
                     }
                     if (shareDialog.value?.requestId == request)
@@ -164,6 +163,10 @@ class MainActivity : ComponentActivity() {
                     else bitmap.recycle()
                 } catch (cancelled: CancellationException) {
                     throw cancelled
+                } catch (error: IllegalArgumentException) {
+                    if (shareDialog.value?.requestId == request)
+                        shareDialog.value = ShareDialogState(request, title,
+                            message = error.message ?: "画像を作成できません")
                 } catch (_: OutOfMemoryError) {
                     if (shareDialog.value?.requestId == request)
                         shareDialog.value = ShareDialogState(request, title,
@@ -229,6 +232,8 @@ class MainActivity : ComponentActivity() {
                 background = Color(0xFFFCFCFB),
                 surface = Color(0xFFFCFCFB),
             )) {
+                val shareTypography = ExportTypography.from(LocalDensity.current,
+                    LocalTextStyle.current)
                 when (val current = page.value) {
                     Page.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(stringResource(R.string.loading_board))
@@ -252,7 +257,7 @@ class MainActivity : ComponentActivity() {
                         } },
                         onShare = { id -> perform {
                             val stored = store.savedBoard(id) ?: error("ボードが見つかりません")
-                            showShare(stored.details.name, stored.snapshot)
+                            showShare(stored.details.name, stored.snapshot, shareTypography)
                         } },
                         onHelp = { guideVisible.value = true },
                     )
@@ -276,7 +281,7 @@ class MainActivity : ComponentActivity() {
                             onShareSelection = { ids -> perform {
                                 val stored = store.savedBoard(current.id)
                                     ?: error("ボードが見つかりません")
-                                showShare(stored.details.name, stored.snapshot, ids)
+                                showShare(stored.details.name, stored.snapshot, shareTypography, ids)
                             } },
                             onCommittedChange = {
                                 store.save(current.id, current.state.snapshot())
