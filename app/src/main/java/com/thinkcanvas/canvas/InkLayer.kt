@@ -35,7 +35,7 @@ private fun inkBrush(kind: InkKind): Brush = if (kind == InkKind.PEN)
     Brush.createWithColorIntArgb(StockBrushes.marker(), 0xFF23211E.toInt(), PEN_WIDTH_WORLD, 0.1f)
 else Brush.createWithColorIntArgb(StockBrushes.marker(), 0x76C54B32, MARKER_WIDTH_WORLD, 0.1f)
 
-private fun makeStroke(kind: InkKind, inputType: InkInputType, points: List<InkPoint>): Stroke {
+internal fun makeStroke(kind: InkKind, inputType: InkInputType, points: List<InkPoint>): Stroke {
     val batch = MutableStrokeInputBatch()
     val tool = if (inputType == InkInputType.STYLUS) InputToolType.STYLUS else InputToolType.TOUCH
     points.forEach { point ->

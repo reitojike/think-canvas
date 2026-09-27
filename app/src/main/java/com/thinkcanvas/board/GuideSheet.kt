@@ -20,8 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GuideSheet(onClose: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = Color.White,
+fun GuideSheet(onStart: () -> Unit, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White,
         shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)) {
         Column(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, bottom = 22.dp)) {
             Text("基本の操作", fontSize = 18.sp, fontWeight = FontWeight.Bold,
@@ -36,7 +36,7 @@ fun GuideSheet(onClose: () -> Unit) {
             Text("ペン・図形・囲みは右下の＋から、検索は右上から。この案内はボード一覧の「使い方」でまた見られます",
                 fontSize = 12.sp, color = Color(0xFF8D8882))
             Spacer(Modifier.height(18.dp))
-            Button(onClick = onClose, modifier = Modifier.fillMaxWidth().height(48.dp),
+            Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF23211E))) {
                 Text("はじめる")
             }

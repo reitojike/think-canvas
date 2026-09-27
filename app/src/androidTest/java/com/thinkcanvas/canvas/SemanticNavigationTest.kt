@@ -11,6 +11,7 @@ import com.thinkcanvas.data.CanvasDatabase
 import com.thinkcanvas.data.TextElementRow
 import com.thinkcanvas.data.SpatialElementRow
 import com.thinkcanvas.data.BoardRow
+import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -29,6 +30,7 @@ class SemanticNavigationTest {
             cleanDatabase.canvasDao().replaceAll(1, emptyList(), emptyList(), emptyList())
         }
         cleanDatabase.close()
+        showBoardOneAtStartup(context)
         val activity = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val automation = instrumentation.uiAutomation
@@ -117,6 +119,7 @@ class SemanticNavigationTest {
                 listOf(SpatialElementRow.fromModel(1, region)), emptyList())
         }
         database.close()
+        showBoardOneAtStartup(context)
         val activity = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val automation = instrumentation.uiAutomation

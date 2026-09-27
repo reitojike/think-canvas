@@ -114,7 +114,8 @@ private data class Draft(
 
 @Composable
 fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
-                 onCommittedChange: () -> Deferred<Unit>) {
+                 onCommittedChange: () -> Deferred<Unit>,
+                 onShareSelection: (Set<String>) -> Unit) {
     var viewport by remember { mutableStateOf(Viewport()) }
     var initialFitApplied by remember(board) { mutableStateOf(false) }
     var selectedId by remember { mutableStateOf<String?>(null) }
@@ -1287,7 +1288,12 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = 8.dp)
                     .height(44.dp).background(Color.White, RoundedCornerShape(24.dp))
                     .pillBorder(24f).padding(horizontal = 14.dp)
-                    .clickable(enabled = !saving && !saveFailed) { onOpenList() }
+                    .clickable(enabled = !saving && !saveFailed && draft == null &&
+                        regionNameId == null && attachmentEditor == null &&
+                        inkPreview == null && spatialPreview == null &&
+                        movePreview == null && handlePreview == null &&
+                        gapPreview == null && lassoPoints.isEmpty() &&
+                        !pendingInkSave) { onOpenList() }
                     .semantics { contentDescription = "ボード一覧を開く" }
                     .onGloballyPositioned { chromeBounds["board"] = it.boundsInParent() },
                 contentAlignment = Alignment.Center,
@@ -1432,6 +1438,25 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
                 Box(Modifier.align(Alignment.TopCenter).padding(top = 62.dp)
                     .onGloballyPositioned { chromeBounds["guidance"] = it.boundsInParent() }) {
                     Guidance(message)
+                }
+            }
+
+            if (selectedIds.isNotEmpty() && draft == null && regionNameId == null) {
+                Row(Modifier.align(Alignment.TopCenter)
+                    .padding(top = if (message == null) 62.dp else 100.dp)
+                    .background(Color.White, RoundedCornerShape(10.dp))
+                    .pillBorder(10f).padding(6.dp)
+                    .onGloballyPositioned { chromeBounds["shareSelection"] = it.boundsInParent() }) {
+                    val enabled = !saving && !saveFailed && !pendingInkSave
+                    Box(Modifier.height(48.dp).clip(RoundedCornerShape(8.dp))
+                        .clickable(enabled = enabled) { onShareSelection(selectedIds.toSet()) }
+                        .semantics {
+                            contentDescription = "選択範囲を画像で共有"
+                            if (!enabled) disabled()
+                        }.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+                        Text("選択範囲を画像で共有", color = if (enabled) ink else muted,
+                            fontSize = 13.sp)
+                    }
                 }
             }
 

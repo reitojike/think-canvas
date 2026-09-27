@@ -135,9 +135,6 @@ interface CanvasDao {
     @Query("SELECT * FROM boards WHERE id = :boardId")
     suspend fun board(boardId: Long): BoardRow?
 
-    @Query("SELECT COALESCE(MAX(id), 0) + 1 FROM boards")
-    suspend fun nextBoardId(): Long
-
     @Query("SELECT * FROM text_elements WHERE boardId = :boardId ORDER BY rowid")
     suspend fun elements(boardId: Long): List<TextElementRow>
 
@@ -177,18 +174,33 @@ interface CanvasDao {
     @Query("DELETE FROM ink_strokes WHERE boardId = :boardId")
     suspend fun clearInkStrokes(boardId: Long)
 
+    @Query("SELECT MAX(updatedAt) FROM boards")
+    suspend fun latestUpdateTime(): Long?
+
     @Query("UPDATE boards SET updatedAt = :updatedAt WHERE id = :boardId")
-    suspend fun touchBoard(boardId: Long, updatedAt: Long): Int
+    suspend fun setUpdatedAt(boardId: Long, updatedAt: Long): Int
 
     @Query("UPDATE boards SET name = :name, updatedAt = :updatedAt WHERE id = :boardId")
-    suspend fun renameBoard(boardId: Long, name: String, updatedAt: Long): Int
+    suspend fun setName(boardId: Long, name: String, updatedAt: Long): Int
 
     @Query("DELETE FROM boards WHERE id = :boardId")
     suspend fun removeBoard(boardId: Long): Int
 
+    suspend fun nextUpdateTime(requested: Long = System.currentTimeMillis()): Long =
+        maxOf(requested, (latestUpdateTime() ?: 0L) + 1L)
+
+    @Transaction
+    suspend fun renameBoard(boardId: Long, name: String, updatedAt: Long): Int =
+        if (board(boardId) == null) 0 else setName(boardId, name, nextUpdateTime(updatedAt))
+
     @Transaction
     suspend fun createBoard(name: String = "無題のボード", updatedAt: Long = System.currentTimeMillis()): BoardRow {
-        val row = BoardRow(nextBoardId(), name, updatedAt)
+        // 最大 ID を再利用すると、削除前の遅延保存が新しいボードへ書き込める。
+        var id: Long
+        do {
+            id = java.util.concurrent.ThreadLocalRandom.current().nextLong(2, Long.MAX_VALUE)
+        } while (board(id) != null)
+        val row = BoardRow(id, name, nextUpdateTime(updatedAt))
         putBoard(row)
         return row
     }
@@ -224,7 +236,7 @@ interface CanvasDao {
         putSpatialElements(spatialElements)
         putArrows(arrows)
         putInkStrokes(inkStrokes)
-        touchBoard(boardId, System.currentTimeMillis())
+        setUpdatedAt(boardId, nextUpdateTime())
     }
 
     @Transaction

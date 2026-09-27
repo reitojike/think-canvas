@@ -44,13 +44,18 @@ class CanvasStore private constructor(context: Context) {
     suspend fun restore(): StoredBoard? = submit {
         val initial = dao.boards()
         if (!preferences.getBoolean("initialized", false)) {
-            if (initial.isEmpty()) dao.putBoard(BoardRow())
-            preferences.edit().putBoolean("initialized", true).commit()
+            val first = if (initial.isEmpty()) {
+                BoardRow().also { dao.putBoard(it) }
+            } else initial.firstOrNull { it.id == 1L } ?: initial.first()
+            val settings = preferences.edit().putBoolean("initialized", true)
+                .putLong("lastOpenedBoardId", first.id)
+            if (initial.isEmpty()) settings.putLong("guideEligibleBoardId", first.id)
+            check(settings.commit()) { "利用状態を保存できません" }
         }
-        val boards = dao.boards()
         val wantedId = preferences.getLong("lastOpenedBoardId", -1)
-        val selected = boards.firstOrNull { it.id == wantedId }
-            ?: boards.firstOrNull { it.id == 1L } ?: boards.firstOrNull()
+        val selected = dao.board(wantedId)
+        if (selected == null && wantedId != -1L)
+            preferences.edit().remove("lastOpenedBoardId").commit()
         selected?.let { read(it) }
     }.await()
 
@@ -60,16 +65,24 @@ class CanvasStore private constructor(context: Context) {
         dao.boards().map { read(it) }
     }.await()
 
+    suspend fun savedBoard(boardId: Long): StoredBoard? = submit {
+        dao.board(boardId)?.let { read(it) }
+    }.await()
+
     suspend fun open(boardId: Long): StoredBoard? = submit {
         dao.board(boardId)?.let { board ->
-            preferences.edit().putLong("lastOpenedBoardId", boardId).commit()
+            check(preferences.edit().putLong("lastOpenedBoardId", boardId).commit()) {
+                "利用状態を保存できません"
+            }
             read(board)
         }
     }.await()
 
     suspend fun create(name: String = "無題のボード"): StoredBoard = submit {
         val board = dao.createBoard(name)
-        preferences.edit().putLong("lastOpenedBoardId", board.id).commit()
+        check(preferences.edit().putLong("lastOpenedBoardId", board.id).commit()) {
+            "利用状態を保存できません"
+        }
         read(board)
     }.await()
 
@@ -88,8 +101,14 @@ class CanvasStore private constructor(context: Context) {
 
     suspend fun delete(boardId: Long): Boolean = submit {
         val removed = dao.deleteBoard(boardId)
-        if (removed && preferences.getLong("lastOpenedBoardId", -1) == boardId)
-            preferences.edit().remove("lastOpenedBoardId").commit()
+        if (removed) {
+            val settings = preferences.edit()
+            if (preferences.getLong("lastOpenedBoardId", -1) == boardId)
+                settings.remove("lastOpenedBoardId")
+            if (preferences.getLong("guideEligibleBoardId", -1) == boardId)
+                settings.remove("guideEligibleBoardId")
+            check(settings.commit()) { "利用状態を保存できません" }
+        }
         removed
     }.await()
 
@@ -111,8 +130,16 @@ class CanvasStore private constructor(context: Context) {
     suspend fun load(): BoardSnapshot = restore()?.snapshot ?: BoardSnapshot()
     fun save(snapshot: BoardSnapshot): Deferred<Unit> = save(1L, snapshot)
 
-    fun guideDismissed(): Boolean = preferences.getBoolean("guideDismissed", false)
-    fun dismissGuide() { preferences.edit().putBoolean("guideDismissed", true).apply() }
+    fun shouldShowGuide(boardId: Long, snapshot: BoardSnapshot): Boolean =
+        !preferences.getBoolean("guideDismissed", false) &&
+            preferences.getLong("guideEligibleBoardId", -1) == boardId &&
+            snapshot.texts.isEmpty() && snapshot.shapes.isEmpty() &&
+            snapshot.arrows.isEmpty() && snapshot.ink.isEmpty()
+
+    fun dismissGuide() {
+        check(preferences.edit().putBoolean("guideDismissed", true)
+            .remove("guideEligibleBoardId").commit()) { "利用状態を保存できません" }
+    }
 
     companion object {
         @Volatile private var instance: CanvasStore? = null

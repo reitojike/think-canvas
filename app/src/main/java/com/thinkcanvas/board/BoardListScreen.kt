@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -81,7 +82,7 @@ fun BoardListScreen(
     var deleteId by remember { mutableStateOf<Long?>(null) }
     val selected = boards.firstOrNull { it.details.id == selectedId }
 
-    Box(Modifier.fillMaxSize().background(paper)) {
+    Box(Modifier.fillMaxSize().background(paper).safeDrawingPadding()) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 10.dp, top = 14.dp,
                 bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {

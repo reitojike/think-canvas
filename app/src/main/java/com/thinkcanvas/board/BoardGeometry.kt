@@ -29,7 +29,7 @@ fun BoardSnapshot.fittedViewport(width: Float, height: Float): Viewport {
     val contentWidth = (bounds.right - bounds.left).coerceAtLeast(1f)
     val contentHeight = (bounds.bottom - bounds.top).coerceAtLeast(1f)
     val scale = min(.9f, min((width - 40f).coerceAtLeast(1f) / contentWidth,
-        (height - 180f).coerceAtLeast(1f) / contentHeight)).coerceAtLeast(.15f)
+        (height - 180f).coerceAtLeast(1f) / contentHeight)).coerceAtLeast(.0001f)
     return Viewport(scale, width / 2f - bounds.center.x * scale,
         height / 2f - bounds.center.y * scale)
 }

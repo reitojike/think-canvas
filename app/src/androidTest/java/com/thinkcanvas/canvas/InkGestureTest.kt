@@ -10,6 +10,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.MainActivity
 import com.thinkcanvas.data.CanvasDatabase
+import com.thinkcanvas.data.BoardRow
+import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -22,7 +24,14 @@ class InkGestureTest {
     fun secondFingerCancelsWetInkAndSingleFingerStillDraws() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
-        context.deleteDatabase("thinkcanvas.db")
+        val cleanDatabase = CanvasDatabase.open(context)
+        runBlocking {
+            if (cleanDatabase.canvasDao().board(1) == null)
+                cleanDatabase.canvasDao().putBoard(BoardRow())
+            cleanDatabase.canvasDao().replaceAll(1, emptyList(), emptyList(), emptyList())
+        }
+        cleanDatabase.close()
+        showBoardOneAtStartup(context)
         val activity = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )

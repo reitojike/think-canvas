@@ -19,6 +19,23 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 
 class CanvasDatabaseTest {
+    @Test fun editsAlwaysMoveTheBoardToTheTopEvenWithinOneMillisecond() { runBlocking {
+        val file = Files.createTempFile("think-canvas-order-", ".db").toFile()
+        file.delete()
+        val database = Room.databaseBuilder<CanvasDatabase>(file.absolutePath)
+            .setDriver(BundledSQLiteDriver()).build()
+        val dao = database.canvasDao()
+        val first = dao.createBoard("一", updatedAt = 100)
+        val second = dao.createBoard("二", updatedAt = 100)
+        assertEquals(second.id, dao.boards().first().id)
+        assertEquals(1, dao.renameBoard(first.id, "更新", updatedAt = 100))
+        assertEquals(first.id, dao.boards().first().id)
+        dao.replaceAll(second.id, emptyList(), emptyList(), emptyList())
+        assertEquals(second.id, dao.boards().first().id)
+        database.close()
+        file.delete()
+    } }
+
     @Test
     fun versionOneMigrationPreservesExistingBoardAndElements() { runBlocking {
         val file = Files.createTempFile("think-canvas-migration-", ".db").toFile()
@@ -130,11 +147,18 @@ class CanvasDatabaseTest {
         assertFalse(dao.deleteBoard(copied.id))
         val staleSave = runCatching { dao.replaceAll(copied.id, emptyList(), emptyList(), emptyList()) }
         assertTrue(staleSave.isFailure)
+        val replacement = dao.createBoard("新規")
+        assertNotEquals("削除済み ID を再利用しない", copied.id, replacement.id)
+        assertTrue(runCatching {
+            dao.replaceAll(copied.id, listOf(TextElementRow.fromModel(copied.id,
+                TextElement(id = "late", text = "遅延保存", x = 0f, y = 0f))), emptyList(), emptyList())
+        }.isFailure)
+        assertTrue(dao.elements(replacement.id).isEmpty())
         assertEquals("残す内容", dao.elements(1).single().text)
         first.close()
 
         val reopened = open()
-        assertEquals(listOf("元"), reopened.canvasDao().boards().map { it.name })
+        assertEquals(setOf("元", "新規"), reopened.canvasDao().boards().map { it.name }.toSet())
         assertEquals("残す内容", reopened.canvasDao().elements(1).single().text)
         assertEquals("source-shape", reopened.canvasDao().spatialElements(1).single().id)
         assertEquals("source-arrow", reopened.canvasDao().arrows(1).single().id)
