@@ -19,7 +19,7 @@ import java.io.ByteArrayOutputStream
 @Entity(tableName = "ink_strokes")
 data class InkStrokeRow(
     @PrimaryKey val id: String,
-    val boardId: Long = 1,
+    val boardId: Long,
     val groupId: String,
     val sequence: Int,
     val kind: String,
@@ -38,7 +38,7 @@ data class InkStrokeRow(
     }
 
     companion object {
-        fun fromModel(element: InkElement): List<InkStrokeRow> = element.strokes.mapIndexed { index, stroke ->
+        fun fromModel(boardId: Long, element: InkElement): List<InkStrokeRow> = element.strokes.mapIndexed { index, stroke ->
             val batch = MutableStrokeInputBatch()
             val toolType = if (stroke.inputType == InkInputType.STYLUS) InputToolType.STYLUS else InputToolType.TOUCH
             stroke.points.forEach { point ->
@@ -52,7 +52,7 @@ data class InkStrokeRow(
                 batch.encode(output)
                 output.toByteArray()
             }
-            InkStrokeRow(stroke.id, groupId = element.id, sequence = index,
+            InkStrokeRow(stroke.id, boardId = boardId, groupId = element.id, sequence = index,
                 kind = element.kind.name, startedAt = stroke.startedAt, endedAt = stroke.endedAt,
                 inputType = stroke.inputType.name, inputs = encoded)
         }

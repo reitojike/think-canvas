@@ -21,6 +21,7 @@ import com.thinkcanvas.canvas.ArrowElement
 import com.thinkcanvas.canvas.ArrowEnd
 import com.thinkcanvas.canvas.ShapeElement
 import com.thinkcanvas.canvas.ShapeKind
+import com.thinkcanvas.canvas.BoardSnapshot
 
 @Entity(tableName = "boards")
 data class BoardRow(
@@ -32,7 +33,7 @@ data class BoardRow(
 @Entity(tableName = "text_elements")
 data class TextElementRow(
     @PrimaryKey val id: String,
-    val boardId: Long = 1,
+    val boardId: Long,
     val text: String,
     val kind: String,
     val color: String,
@@ -42,8 +43,9 @@ data class TextElementRow(
     fun toModel() = TextElement(id, text, TextKind.valueOf(kind), TextColor.valueOf(color), x, y)
 
     companion object {
-        fun fromModel(element: TextElement) = TextElementRow(
+        fun fromModel(boardId: Long, element: TextElement) = TextElementRow(
             id = element.id,
+            boardId = boardId,
             text = element.text,
             kind = element.kind.name,
             color = element.color.name,
@@ -56,7 +58,7 @@ data class TextElementRow(
 @Entity(tableName = "spatial_elements")
 data class SpatialElementRow(
     @PrimaryKey val id: String,
-    val boardId: Long = 1,
+    val boardId: Long,
     val kind: String,
     val x: Float,
     val y: Float,
@@ -68,8 +70,8 @@ data class SpatialElementRow(
     fun toModel() = ShapeElement(id, ShapeKind.valueOf(kind), x, y, width, height, TextColor.valueOf(color), name)
 
     companion object {
-        fun fromModel(element: ShapeElement) = SpatialElementRow(
-            id = element.id, kind = element.kind.name, x = element.x, y = element.y,
+        fun fromModel(boardId: Long, element: ShapeElement) = SpatialElementRow(
+            id = element.id, boardId = boardId, kind = element.kind.name, x = element.x, y = element.y,
             width = element.width, height = element.height, color = element.color.name, name = element.name,
         )
     }
@@ -78,7 +80,7 @@ data class SpatialElementRow(
 @Entity(tableName = "arrow_elements")
 data class ArrowElementRow(
     @PrimaryKey val id: String,
-    val boardId: Long = 1,
+    val boardId: Long,
     val fromTargetId: String?,
     val fromU: Float?,
     val fromV: Float?,
@@ -103,11 +105,12 @@ data class ArrowElementRow(
     )
 
     companion object {
-        fun fromModel(arrow: ArrowElement): ArrowElementRow {
+        fun fromModel(boardId: Long, arrow: ArrowElement): ArrowElementRow {
             val from = arrow.from
             val to = arrow.to
             return ArrowElementRow(
                 id = arrow.id,
+                boardId = boardId,
                 fromTargetId = (from as? ArrowEnd.Attached)?.targetId,
                 fromU = (from as? ArrowEnd.Attached)?.u,
                 fromV = (from as? ArrowEnd.Attached)?.v,
@@ -126,22 +129,25 @@ data class ArrowElementRow(
 
 @Dao
 interface CanvasDao {
-    @Query("SELECT * FROM boards WHERE id = 1")
-    suspend fun firstBoard(): BoardRow?
+    @Query("SELECT * FROM boards ORDER BY updatedAt DESC, id DESC")
+    suspend fun boards(): List<BoardRow>
 
-    @Query("SELECT * FROM text_elements WHERE boardId = 1 ORDER BY rowid")
-    suspend fun elements(): List<TextElementRow>
+    @Query("SELECT * FROM boards WHERE id = :boardId")
+    suspend fun board(boardId: Long): BoardRow?
 
-    @Query("SELECT * FROM spatial_elements WHERE boardId = 1 ORDER BY rowid")
-    suspend fun spatialElements(): List<SpatialElementRow>
+    @Query("SELECT * FROM text_elements WHERE boardId = :boardId ORDER BY rowid")
+    suspend fun elements(boardId: Long): List<TextElementRow>
 
-    @Query("SELECT * FROM arrow_elements WHERE boardId = 1 ORDER BY rowid")
-    suspend fun arrows(): List<ArrowElementRow>
+    @Query("SELECT * FROM spatial_elements WHERE boardId = :boardId ORDER BY rowid")
+    suspend fun spatialElements(boardId: Long): List<SpatialElementRow>
 
-    @Query("SELECT * FROM ink_strokes WHERE boardId = 1 ORDER BY rowid")
-    suspend fun inkStrokes(): List<InkStrokeRow>
+    @Query("SELECT * FROM arrow_elements WHERE boardId = :boardId ORDER BY rowid")
+    suspend fun arrows(boardId: Long): List<ArrowElementRow>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Query("SELECT * FROM ink_strokes WHERE boardId = :boardId ORDER BY rowid")
+    suspend fun inkStrokes(boardId: Long): List<InkStrokeRow>
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun putBoard(board: BoardRow)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -156,43 +162,91 @@ interface CanvasDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putInkStrokes(strokes: List<InkStrokeRow>)
 
-    @Query("DELETE FROM text_elements WHERE boardId = 1")
-    suspend fun clearElements()
+    @Query("DELETE FROM text_elements WHERE boardId = :boardId")
+    suspend fun clearElements(boardId: Long)
 
-    @Query("DELETE FROM spatial_elements WHERE boardId = 1")
-    suspend fun clearSpatialElements()
+    @Query("DELETE FROM spatial_elements WHERE boardId = :boardId")
+    suspend fun clearSpatialElements(boardId: Long)
 
-    @Query("DELETE FROM arrow_elements WHERE boardId = 1")
-    suspend fun clearArrows()
+    @Query("DELETE FROM arrow_elements WHERE boardId = :boardId")
+    suspend fun clearArrows(boardId: Long)
 
-    @Query("DELETE FROM ink_strokes WHERE boardId = 1")
-    suspend fun clearInkStrokes()
+    @Query("DELETE FROM ink_strokes WHERE boardId = :boardId")
+    suspend fun clearInkStrokes(boardId: Long)
 
-    @Query("UPDATE boards SET updatedAt = :updatedAt WHERE id = 1")
-    suspend fun touchBoard(updatedAt: Long)
+    @Query("SELECT MAX(updatedAt) FROM boards")
+    suspend fun latestUpdateTime(): Long?
+
+    @Query("UPDATE boards SET updatedAt = :updatedAt WHERE id = :boardId")
+    suspend fun setUpdatedAt(boardId: Long, updatedAt: Long): Int
+
+    @Query("UPDATE boards SET name = :name, updatedAt = :updatedAt WHERE id = :boardId")
+    suspend fun setName(boardId: Long, name: String, updatedAt: Long): Int
+
+    @Query("DELETE FROM boards WHERE id = :boardId")
+    suspend fun removeBoard(boardId: Long): Int
+
+    suspend fun nextUpdateTime(requested: Long = System.currentTimeMillis()): Long =
+        maxOf(requested, (latestUpdateTime() ?: 0L) + 1L)
 
     @Transaction
-    suspend fun replaceAll(elements: List<TextElementRow>) {
-        replaceAll(elements, emptyList(), emptyList(), emptyList())
+    suspend fun renameBoard(boardId: Long, name: String, updatedAt: Long): Int =
+        if (board(boardId) == null) 0 else setName(boardId, name, nextUpdateTime(updatedAt))
+
+    @Transaction
+    suspend fun createBoard(name: String = "無題のボード", updatedAt: Long = System.currentTimeMillis()): BoardRow {
+        // 最大 ID を再利用すると、削除前の遅延保存が新しいボードへ書き込める。
+        var id: Long
+        do {
+            id = java.util.concurrent.ThreadLocalRandom.current().nextLong(2, Long.MAX_VALUE)
+        } while (board(id) != null)
+        val row = BoardRow(id, name, nextUpdateTime(updatedAt))
+        putBoard(row)
+        return row
+    }
+
+    @Transaction
+    suspend fun createBoardWithSnapshot(name: String, snapshot: BoardSnapshot): BoardRow {
+        val row = createBoard(name)
+        replaceAll(row.id, snapshot.texts.map { TextElementRow.fromModel(row.id, it) },
+            snapshot.shapes.map { SpatialElementRow.fromModel(row.id, it) },
+            snapshot.arrows.map { ArrowElementRow.fromModel(row.id, it) },
+            snapshot.ink.flatMap { InkStrokeRow.fromModel(row.id, it) })
+        return row
     }
 
     @Transaction
     suspend fun replaceAll(
+        boardId: Long,
         elements: List<TextElementRow>,
         spatialElements: List<SpatialElementRow>,
         arrows: List<ArrowElementRow>,
         inkStrokes: List<InkStrokeRow> = emptyList(),
     ) {
-        if (firstBoard() == null) putBoard(BoardRow())
-        clearElements()
-        clearSpatialElements()
-        clearArrows()
-        clearInkStrokes()
+        require(board(boardId) != null) { "保存先のボードが見つかりません" }
+        require((elements.map { it.boardId } + spatialElements.map { it.boardId } +
+            arrows.map { it.boardId } + inkStrokes.map { it.boardId }).all { it == boardId }) {
+            "別ボードの要素が含まれています"
+        }
+        clearElements(boardId)
+        clearSpatialElements(boardId)
+        clearArrows(boardId)
+        clearInkStrokes(boardId)
         putElements(elements)
         putSpatialElements(spatialElements)
         putArrows(arrows)
         putInkStrokes(inkStrokes)
-        touchBoard(System.currentTimeMillis())
+        setUpdatedAt(boardId, nextUpdateTime())
+    }
+
+    @Transaction
+    suspend fun deleteBoard(boardId: Long): Boolean {
+        if (board(boardId) == null) return false
+        clearElements(boardId)
+        clearSpatialElements(boardId)
+        clearArrows(boardId)
+        clearInkStrokes(boardId)
+        return removeBoard(boardId) == 1
     }
 }
 

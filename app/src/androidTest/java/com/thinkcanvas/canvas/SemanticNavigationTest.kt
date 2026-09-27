@@ -10,6 +10,8 @@ import com.thinkcanvas.MainActivity
 import com.thinkcanvas.data.CanvasDatabase
 import com.thinkcanvas.data.TextElementRow
 import com.thinkcanvas.data.SpatialElementRow
+import com.thinkcanvas.data.BoardRow
+import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -23,8 +25,12 @@ class SemanticNavigationTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val cleanDatabase = CanvasDatabase.open(context)
-        runBlocking { cleanDatabase.canvasDao().replaceAll(emptyList(), emptyList(), emptyList()) }
+        runBlocking {
+            if (cleanDatabase.canvasDao().board(1) == null) cleanDatabase.canvasDao().putBoard(BoardRow())
+            cleanDatabase.canvasDao().replaceAll(1, emptyList(), emptyList(), emptyList())
+        }
         cleanDatabase.close()
+        showBoardOneAtStartup(context)
         val activity = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val automation = instrumentation.uiAutomation
@@ -90,8 +96,8 @@ class SemanticNavigationTest {
         waitForZoom("50%  中")
 
         val database = CanvasDatabase.open(context)
-        assertEquals(0, runBlocking { database.canvasDao().elements().size })
-        assertEquals(0, runBlocking { database.canvasDao().spatialElements().size })
+        assertEquals(0, runBlocking { database.canvasDao().elements(1).size })
+        assertEquals(0, runBlocking { database.canvasDao().spatialElements(1).size })
         database.close()
         activity.finish()
         instrumentation.waitForIdleSync()
@@ -107,8 +113,10 @@ class SemanticNavigationTest {
             x = 400f, y = 1000f, width = 450f, height = 400f, name = "Cluster")
         val database = CanvasDatabase.open(context)
         runBlocking {
-            database.canvasDao().replaceAll(listOf(body, secondBody).map(TextElementRow::fromModel),
-                listOf(SpatialElementRow.fromModel(region)), emptyList())
+            if (database.canvasDao().board(1) == null) database.canvasDao().putBoard(BoardRow())
+            database.canvasDao().replaceAll(1,
+                listOf(body, secondBody).map { TextElementRow.fromModel(1, it) },
+                listOf(SpatialElementRow.fromModel(1, region)), emptyList())
         }
         database.close()
         val activity = instrumentation.startActivitySync(
@@ -178,8 +186,8 @@ class SemanticNavigationTest {
         click("囲み: Cluster")
         waitFor("Idea note")
         val persisted = CanvasDatabase.open(context)
-        assertEquals(2, runBlocking { persisted.canvasDao().elements().size })
-        assertEquals(1, runBlocking { persisted.canvasDao().spatialElements().size })
+        assertEquals(2, runBlocking { persisted.canvasDao().elements(1).size })
+        assertEquals(1, runBlocking { persisted.canvasDao().spatialElements(1).size })
         persisted.close()
         activity.finish()
         instrumentation.waitForIdleSync()
