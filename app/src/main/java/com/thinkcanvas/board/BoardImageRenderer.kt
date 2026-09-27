@@ -63,6 +63,7 @@ object BoardImageRenderer {
             drawInk(canvas, plan, transform, InkKind.MARKER, inkRenderer)
             drawShapes(canvas, plan)
             drawArrows(canvas, plan)
+            drawRegionLabels(canvas, plan)
             drawTexts(canvas, plan)
             drawInk(canvas, plan, transform, InkKind.PEN, inkRenderer)
             canvas.restore()
@@ -112,13 +113,21 @@ object BoardImageRenderer {
                 ShapeKind.ELLIPSE -> canvas.drawOval(shape.x, shape.y, right, bottom, outline)
                 ShapeKind.REGION -> {
                     canvas.drawRoundRect(shape.x, shape.y, right, bottom, 12f, 12f, outline)
-                    if (shape.name.isNotBlank()) {
-                        val label = regionPaint(plan.typography)
-                        canvas.drawText(shape.name, shape.x + 8f,
-                            shape.y - 22f - label.fontMetrics.top, label)
-                    }
                 }
             }
+        }
+    }
+
+    private fun drawRegionLabels(canvas: Canvas, plan: SharePlan) {
+        val paper = Paint().apply { color = 0xFFFCFCFB.toInt() }
+        plan.source.shapes.filter { it.id in plan.includedIds &&
+            it.kind == ShapeKind.REGION && it.name.isNotBlank() }.forEach { region ->
+            val label = regionPaint(plan.typography)
+            val left = region.x + 8f
+            val top = region.y - 22f
+            canvas.drawRect(left, top, left + label.measureText(region.name),
+                top + label.fontMetrics.bottom - label.fontMetrics.top, paper)
+            canvas.drawText(region.name, left, top - label.fontMetrics.top, label)
         }
     }
 

@@ -25,6 +25,31 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class BoardImageDeliveryTest {
+    @Test fun regionLabelMasksArrowAndOutlineInExport() {
+        val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+            x = 40f, y = 50f, width = 160f, height = 100f, name = "重なり")
+        val arrow = ArrowElement(id = "arrow", from = ArrowEnd.Free(20f, 50f),
+            to = ArrowEnd.Free(240f, 50f))
+        val source = BoardSnapshot(shapes = listOf(region), arrows = listOf(arrow))
+        val typography = ExportTypography(regionSize = 36f)
+        val plan = planShare(source, renderedBounds =
+            BoardImageRenderer.renderedBounds(source, typography), typography = typography)
+        val withArrow = BoardImageRenderer.render(plan)
+        val withoutArrow = BoardImageRenderer.render(plan.copy(includedIds = setOf(region.id)))
+
+        try {
+            fun pixel(bitmap: android.graphics.Bitmap, x: Float, y: Float): Int = bitmap.getPixel(
+                ((x - plan.imageBounds.left) * plan.pixelsPerWorldUnit).toInt(),
+                ((y - plan.imageBounds.top) * plan.pixelsPerWorldUnit).toInt())
+            assertTrue(pixel(withArrow, 25f, 50f) != pixel(withoutArrow, 25f, 50f))
+            for (x in 50..115) assertEquals(pixel(withoutArrow, x.toFloat(), 50f),
+                pixel(withArrow, x.toFloat(), 50f))
+        } finally {
+            withArrow.recycle()
+            withoutArrow.recycle()
+        }
+    }
+
     @Test fun exportUsesDeviceTextMetricsForPlanAndBitmap() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val typography = ExportTypography.from(context.resources)
