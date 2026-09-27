@@ -42,9 +42,19 @@ data class ThumbnailProjectionContract(val pixelsPerWorldUnit: Float, val pixels
         get() = pixelsPerWorldUnit / pixelsPerDp
 }
 
-private fun thumbnailGeometry(snapshot: BoardSnapshot,
-                              titleBounds: Map<String, WorldBounds>,
-                              scale: Float): ThumbnailGeometry {
+internal fun thumbnailTitleBounds(snapshot: BoardSnapshot, title: Paint,
+                                 scale: Float): Map<String, WorldBounds> =
+    snapshot.texts.filter { it.kind == TextKind.TITLE }.associate { element ->
+        val line = element.text.lineSequence().first().take(22)
+        val widthWorld = title.measureText(line) / scale
+        val heightWorld = title.textSize / scale
+        element.id to WorldBounds(element.x, element.y,
+            element.x + widthWorld, element.y + heightWorld)
+    }
+
+internal fun thumbnailGeometry(snapshot: BoardSnapshot,
+                               titleBounds: Map<String, WorldBounds>,
+                               scale: Float): ThumbnailGeometry {
     val bounds = LinkedHashMap<String, WorldBounds>()
     titleBounds.forEach { (id, value) -> bounds[id] = value }
     snapshot.shapes.forEach { shape ->
@@ -80,7 +90,7 @@ private fun thumbnailGeometry(snapshot: BoardSnapshot,
     return ThumbnailGeometry(bounds, arrowGeometry)
 }
 
-private data class ThumbnailGeometry(
+internal data class ThumbnailGeometry(
     val boundsById: Map<String, WorldBounds>,
     val arrowsById: Map<String, ArrowRenderGeometry>,
 ) {
@@ -100,13 +110,8 @@ internal fun drawBoardThumbnail(canvas: AndroidCanvas, snapshot: BoardSnapshot,
         val title = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = 0x8C23211E.toInt(); textSize = 8f; typeface = Typeface.DEFAULT_BOLD
         }
-        val titleBounds = snapshot.texts.filter { it.kind == TextKind.TITLE }.associate { element ->
-            val line = element.text.lineSequence().first().take(22)
-            element.id to com.thinkcanvas.canvas.WorldBounds(element.x, element.y,
-                element.x + title.measureText(line), element.y + title.textSize)
-        }
         var scale = 1f
-        var geometry = thumbnailGeometry(snapshot, titleBounds, scale)
+        var geometry = thumbnailGeometry(snapshot, thumbnailTitleBounds(snapshot, title, scale), scale)
         var bounds = geometry.union() ?: return
         fun fit(bounds: com.thinkcanvas.canvas.WorldBounds) = min(.5f, min((width - 28f).coerceAtLeast(1f) /
             (bounds.right - bounds.left).coerceAtLeast(1f),
@@ -114,7 +119,7 @@ internal fun drawBoardThumbnail(canvas: AndroidCanvas, snapshot: BoardSnapshot,
             (bounds.bottom - bounds.top).coerceAtLeast(1f)))
         repeat(8) {
             scale = fit(bounds)
-            geometry = thumbnailGeometry(snapshot, titleBounds, scale)
+            geometry = thumbnailGeometry(snapshot, thumbnailTitleBounds(snapshot, title, scale), scale)
             bounds = geometry.union() ?: bounds
         }
         val left = (width - (bounds.right - bounds.left) * scale) / 2f - bounds.left * scale

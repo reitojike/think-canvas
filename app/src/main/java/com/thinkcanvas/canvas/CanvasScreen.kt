@@ -241,8 +241,9 @@ fun CanvasScreen(board: BoardState, boardName: String, onOpenList: () -> Unit,
                 val approximateProjection = snapshot.semanticProjection(fitted.scale, bodyDp,
                     pixelsPerDp = density.density, titleDp = titleDp)
                 val visibleShapes = snapshot.shapes.filter { approximateProjection.visible(it.id) }
-                val textSizes = snapshot.texts.filter { approximateProjection.visible(it.id) }
-                    .associate { element ->
+                // Semantic visibility controls what is drawn, not which persisted content
+                // contributes to the opening viewport's board extent.
+                val textSizes = snapshot.texts.associate { element ->
                     element.id to measureTextExtent(element, fitted.scale, emptySet(), visibleShapes)
                 }
                 val resolvedTextBounds = textSizes.mapValues { (id, extent) ->
