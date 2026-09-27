@@ -7,6 +7,8 @@ import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import com.thinkcanvas.MainActivity
 import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.CanvasDatabase
@@ -196,6 +198,28 @@ class BoardListScreenTest {
             waitFor("戻る対象、", byDescription = true)
             assertTrue(!activity.isFinishing)
         } finally { activity.finish() }
+    }
+
+    @Test fun listPageSurvivesActivityRecreation() {
+        seed(listOf(BoardRow(1, "再作成対象", 10)))
+        assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+            .edit().putLong("lastOpenedBoardId", 1).commit())
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            waitFor("‹ 再作成対象")
+            assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                .GLOBAL_ACTION_BACK))
+            waitFor("再作成対象、", byDescription = true)
+            instrumentation.runOnMainSync { activity.recreate() }
+            waitFor("再作成対象、", byDescription = true)
+        } finally {
+            instrumentation.runOnMainSync {
+                ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(Stage.RESUMED).filterIsInstance<MainActivity>()
+                    .forEach { it.finish() }
+            }
+        }
     }
 
     @Test fun systemBackDoesNotLeaveAnUncommittedDraft() {

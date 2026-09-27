@@ -54,8 +54,16 @@ private data class ShareDialogState(
 )
 
 class MainActivity : ComponentActivity() {
+    private var navigationTargetIsList = false
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("navigationTargetIsList", navigationTargetIsList)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        navigationTargetIsList = savedInstanceState?.getBoolean("navigationTargetIsList") == true
         val transparent = android.graphics.Color.TRANSPARENT
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(transparent, transparent),
@@ -106,6 +114,7 @@ class MainActivity : ComponentActivity() {
         }
 
         fun openBoard(stored: StoredBoard) {
+            navigationTargetIsList = false
             page.value = Page.Board(stored.details.id, stored.details.name,
                 BoardState(stored.snapshot.texts, stored.snapshot.shapes,
                     stored.snapshot.arrows, stored.snapshot.ink))
@@ -114,6 +123,7 @@ class MainActivity : ComponentActivity() {
 
         suspend fun showList() {
             cards.value = store.boardsWithContent()
+            navigationTargetIsList = true
             guideVisible.value = false
             page.value = Page.List
         }
@@ -251,10 +261,12 @@ class MainActivity : ComponentActivity() {
                             boardName = current.name.ifBlank { "無題のボード" },
                             onOpenList = {
                                 if (!operationPending.value) {
+                                    navigationTargetIsList = true
                                     page.value = Page.Loading
                                     perform {
                                         try { showList() }
                                         catch (error: Exception) {
+                                            navigationTargetIsList = false
                                             page.value = current
                                             throw error
                                         }
@@ -301,8 +313,11 @@ class MainActivity : ComponentActivity() {
         }
 
         perform {
-            val restored = store.restore()
-            if (restored == null) showList() else openBoard(restored)
+            if (navigationTargetIsList) showList()
+            else {
+                val restored = store.restore()
+                if (restored == null) showList() else openBoard(restored)
+            }
         }
     }
 }
