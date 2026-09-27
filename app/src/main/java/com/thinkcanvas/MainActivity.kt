@@ -9,7 +9,9 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.withStateAtLeast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
@@ -150,6 +152,46 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        fun admitListOperation(start: () -> Unit) {
+            if (transientPending.value || boardListActions.state.value != BoardListActionState.Idle)
+                return
+            start()
+        }
+
+        fun dismissListActionFailure() {
+            val failed = boardListActions.state.value as? BoardListActionState.Failed
+            if (failed == null) {
+                errorMessage.value = null
+                return
+            }
+            if (transientPending.value) {
+                errorMessage.value = failed.message
+                return
+            }
+            transientPending.value = true
+            lifecycleScope.launch {
+                try {
+                    val restoredCards = store.boardsWithContent()
+                    lifecycle.withStateAtLeast(Lifecycle.State.STARTED) {
+                        if (boardListActions.state.value == failed) {
+                            cards.value = restoredCards
+                            navigationTargetIsList = true
+                            guideVisible.value = false
+                            page.value = Page.List
+                            boardListActions.acknowledgeFailure(failed)
+                            errorMessage.value = null
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    errorMessage.value = error.message ?: "一覧を読み込めません"
+                } finally {
+                    transientPending.value = false
+                }
+            }
+        }
+
         fun showShare(title: String, snapshot: BoardSnapshot, typography: ExportTypography,
                       selectedIds: Set<String>? = null) {
             val request = ++shareRequestId
@@ -235,17 +277,38 @@ class MainActivity : ComponentActivity() {
                     is BoardListActionState.Running -> page.value = Page.Loading
                     is BoardListActionState.Completed -> when (val outcome = current.outcome) {
                         is BoardListActionOutcome.OpenBoard -> {
-                            openBoard(outcome.board)
-                            boardListActions.consume(current)
+                            lifecycle.withStateAtLeast(Lifecycle.State.STARTED) {
+                                if (boardListActions.state.value == current) {
+                                    openBoard(outcome.board)
+                                    boardListActions.consume(current)
+                                }
+                            }
                         }
-                        BoardListActionOutcome.ReloadList -> try {
-                            if (current.action is BoardListAction.Delete)
-                                boardSessions.discard(current.action.boardId)
-                            showList()
-                            boardListActions.consume(current)
-                        } catch (error: Exception) {
-                            boardListActions.failContinuation(current,
-                                error.message ?: "一覧を読み込めません")
+                        BoardListActionOutcome.ReloadList -> {
+                            val restoredCards = try {
+                                store.boardsWithContent()
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (error: Exception) {
+                                lifecycle.withStateAtLeast(Lifecycle.State.STARTED) {
+                                    if (boardListActions.state.value == current) {
+                                        boardListActions.failContinuation(current,
+                                            error.message ?: "一覧を読み込めません")
+                                    }
+                                }
+                                return@LaunchedEffect
+                            }
+                            lifecycle.withStateAtLeast(Lifecycle.State.STARTED) {
+                                if (boardListActions.state.value == current) {
+                                    cards.value = restoredCards
+                                    navigationTargetIsList = true
+                                    guideVisible.value = false
+                                    page.value = Page.List
+                                    if (current.action is BoardListAction.Delete)
+                                        boardSessions.discard(current.action.boardId)
+                                    boardListActions.consume(current)
+                                }
+                            }
                         }
                     }
                     is BoardListActionState.Failed -> errorMessage.value = current.message
@@ -265,18 +328,30 @@ class MainActivity : ComponentActivity() {
                         Text(stringResource(R.string.loading_board))
                     }
                     Page.List -> BoardListScreen(cards.value,
-                        onOpen = { id -> boardListActions.start(BoardListAction.Open(id)) },
-                        onCreate = { boardListActions.start(BoardListAction.Create) },
+                        onOpen = { id -> admitListOperation {
+                            boardListActions.start(BoardListAction.Open(id))
+                        } },
+                        onCreate = { admitListOperation {
+                            boardListActions.start(BoardListAction.Create)
+                        } },
                         onRename = { id, name ->
-                            boardListActions.start(BoardListAction.Rename(id, name))
+                            admitListOperation {
+                                boardListActions.start(BoardListAction.Rename(id, name))
+                            }
                         },
                         onDuplicate = { id ->
-                            boardListActions.start(BoardListAction.Duplicate(id))
+                            admitListOperation {
+                                boardListActions.start(BoardListAction.Duplicate(id))
+                            }
                         },
-                        onDelete = { id -> boardListActions.start(BoardListAction.Delete(id)) },
-                        onShare = { id -> performTransient {
-                            val stored = store.savedBoard(id) ?: error("ボードが見つかりません")
-                            showShare(stored.details.name, stored.snapshot, shareTypography)
+                        onDelete = { id -> admitListOperation {
+                            boardListActions.start(BoardListAction.Delete(id))
+                        } },
+                        onShare = { id -> admitListOperation {
+                            performTransient {
+                                val stored = store.savedBoard(id) ?: error("ボードが見つかりません")
+                                showShare(stored.details.name, stored.snapshot, shareTypography)
+                            }
                         } },
                         onHelp = { guideVisible.value = true },
                     )
@@ -326,16 +401,10 @@ class MainActivity : ComponentActivity() {
                         onDismiss = { shareDialog.value = null })
                 }
                 errorMessage.value?.let { message ->
-                    AlertDialog(onDismissRequest = { errorMessage.value = null },
+                    AlertDialog(onDismissRequest = { dismissListActionFailure() },
                         title = { Text("操作を完了できません") },
                         text = { Text(message) },
-                        confirmButton = { TextButton(onClick = {
-                            errorMessage.value = null
-                            (listActionState as? BoardListActionState.Failed)?.let { failed ->
-                                boardListActions.acknowledgeFailure(failed)
-                                performTransient { showList() }
-                            }
-                        }) {
+                        confirmButton = { TextButton(onClick = { dismissListActionFailure() }) {
                             Text("閉じる")
                         } })
                 }

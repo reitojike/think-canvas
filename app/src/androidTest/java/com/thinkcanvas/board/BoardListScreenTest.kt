@@ -10,6 +10,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleRegistry
 import com.thinkcanvas.BoardSessionViewModel
 import com.thinkcanvas.BoardListAction
 import com.thinkcanvas.BoardListActionOutcome
@@ -97,6 +99,21 @@ class BoardListScreenTest {
         assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
             .edit().putBoolean("initialized", true).putBoolean("guideDismissed", true)
             .remove("lastOpenedBoardId").commit())
+    }
+
+    private fun blockCanvasStoreQueue(): Pair<CompletableDeferred<Unit>, CompletableDeferred<Unit>> {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val field = CanvasStore::class.java.getDeclaredField("operations").apply {
+            isAccessible = true
+        }
+        @Suppress("UNCHECKED_CAST")
+        val queue = field.get(CanvasStore.get(context)) as kotlinx.coroutines.channels.Channel<suspend () -> Unit>
+        assertTrue(queue.trySend {
+            started.complete(Unit)
+            release.await()
+        }.isSuccess)
+        return started to release
     }
 
     private fun find(node: AccessibilityNodeInfo?, match: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
@@ -493,6 +510,192 @@ class BoardListScreenTest {
             release.complete(Unit)
             waitFor("再作成後も残る失敗")
             assertTrue(vm.state.value is BoardListActionState.Failed)
+        } finally { finishResumedActivities() }
+    }
+
+    @Test fun failedActionSystemBackRecoversListAndAllowsAnotherAction() {
+        seed(listOf(BoardRow(14, "失敗する操作", 10)))
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val vm = listActions(activity as MainActivity)
+        vm.execute = { error("一覧復旧後に再試行") }
+        try {
+            act(waitFor("失敗する操作、", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            waitFor("一覧復旧後に再試行")
+            assertTrue(vm.state.value is BoardListActionState.Failed)
+            assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                .GLOBAL_ACTION_BACK))
+            waitFor("失敗する操作、", byDescription = true)
+            assertEquals(BoardListActionState.Idle, vm.state.value)
+
+            val started = CompletableDeferred<BoardListAction>()
+            val release = CompletableDeferred<Unit>()
+            vm.execute = { action -> started.complete(action); release.await(); commitListAction(action) }
+            act(waitFor("失敗する操作、", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            runBlocking { withTimeout(5_000) {
+                assertEquals(BoardListAction.Open(14), started.await())
+            } }
+            release.complete(Unit)
+            waitFor("‹ 失敗する操作")
+            assertEquals(BoardListActionState.Idle, vm.state.value)
+        } finally { activity.finish() }
+    }
+
+    @Test fun failedActionExplicitCloseRestoresListBeforeAcknowledgement() {
+        seed(listOf(BoardRow(17, "閉じて復旧", 10)))
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val vm = listActions(activity as MainActivity)
+        vm.execute = { error("明示閉じるの確認") }
+        try {
+            act(waitFor("閉じて復旧、", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            waitFor("明示閉じるの確認")
+            assertTrue(vm.state.value is BoardListActionState.Failed)
+            act(waitForExact("閉じる"), AccessibilityNodeInfo.ACTION_CLICK)
+            waitFor("閉じて復旧、", byDescription = true)
+            assertEquals(BoardListActionState.Idle, vm.state.value)
+        } finally { activity.finish() }
+    }
+
+    @Test fun failedActionRecoveryReadFailureKeepsFailureRetryable() {
+        seed(listOf(BoardRow(18, "一覧読込を再試行", 10)))
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val vm = listActions(activity as MainActivity)
+        vm.execute = { error("一覧復旧前の失敗") }
+        val database = CanvasDatabase.open(context)
+        try {
+            act(waitFor("一覧読込を再試行、", byDescription = true),
+                AccessibilityNodeInfo.ACTION_CLICK)
+            waitFor("一覧復旧前の失敗")
+            runBlocking {
+                database.canvasDao().putElements(listOf(TextElementRow(
+                    id = "invalid-recovery-row", boardId = 18, text = "invalid",
+                    kind = "INVALID_KIND", color = "INK", x = 0f, y = 0f,
+                )))
+            }
+            assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                .GLOBAL_ACTION_BACK))
+            waitFor("No enum constant")
+            assertTrue(vm.state.value is BoardListActionState.Failed)
+
+            runBlocking { database.canvasDao().clearElements(18) }
+            act(waitForExact("閉じる"), AccessibilityNodeInfo.ACTION_CLICK)
+            waitFor("一覧読込を再試行、", byDescription = true)
+            assertEquals(BoardListActionState.Idle, vm.state.value)
+        } finally {
+            runCatching { runBlocking { database.canvasDao().clearElements(18) } }
+            activity.finish()
+            database.close()
+        }
+    }
+
+    @Test fun failureOutsideDismissalAndRecreationKeepFailureUntilRecovery() {
+        seed(listOf(BoardRow(15, "外側で閉じる", 10)))
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val vm = listActions(activity as MainActivity)
+        vm.execute = { error("再作成しても消えない失敗") }
+        try {
+            act(waitFor("外側で閉じる、", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            waitFor("再作成しても消えない失敗")
+            instrumentation.runOnMainSync { activity.recreate() }
+            waitFor("再作成しても消えない失敗")
+            assertTrue(vm.state.value is BoardListActionState.Failed)
+
+            val width = context.resources.displayMetrics.widthPixels.toFloat()
+            val height = context.resources.displayMetrics.heightPixels.toFloat()
+            val downTime = SystemClock.uptimeMillis()
+            for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action,
+                    width * .98f, height * .5f, 0)
+                assertTrue(automation.injectInputEvent(event, true))
+                event.recycle()
+            }
+            waitFor("外側で閉じる、", byDescription = true)
+            assertEquals(BoardListActionState.Idle, vm.state.value)
+        } finally { finishResumedActivities() }
+    }
+
+    @Test fun listShareLoadingRejectsOpenCreateMutationAndSecondShare() {
+        seed(listOf(BoardRow(1, "共有元", 10), BoardRow(2, "開けない別案", 5)))
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val vm = listActions(activity as MainActivity)
+        val (queueStarted, releaseQueue) = blockCanvasStoreQueue()
+        val database = CanvasDatabase.open(context)
+        try {
+            runBlocking { withTimeout(5_000) { queueStarted.await() } }
+            act(waitFor("共有元、", byDescription = true), AccessibilityNodeInfo.ACTION_LONG_CLICK)
+            val shareButton = waitFor("画像で共有")
+            instrumentation.runOnMainSync {
+                assertTrue(shareButton.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                assertTrue(shareButton.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            }
+            Thread.sleep(200)
+            assertEquals(BoardListActionState.Idle, vm.state.value)
+
+            act(waitFor("開けない別案、", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            act(waitFor("新しいボード", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            act(waitFor("共有元、", byDescription = true), AccessibilityNodeInfo.ACTION_LONG_CLICK)
+            act(waitForExact("複製"), AccessibilityNodeInfo.ACTION_CLICK)
+            assertEquals(BoardListActionState.Idle, vm.state.value)
+            assertEquals(2, runBlocking { database.canvasDao().boards().size })
+            assertEquals(-1L, context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+                .getLong("lastOpenedBoardId", -1))
+
+            releaseQueue.complete(Unit)
+            waitFor("共有元 の共有画像プレビュー", byDescription = true)
+            assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                .GLOBAL_ACTION_BACK))
+            act(waitFor("開けない別案、", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            waitFor("‹ 開けない別案")
+        } finally {
+            releaseQueue.complete(Unit)
+            activity.finish()
+            database.close()
+        }
+    }
+
+    @Test fun completedOpenWaitsForStartedSurvivingActivityBeforeConsume() {
+        seed(listOf(BoardRow(16, "保存境界の結果", 10)))
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val vm = listActions(activity as MainActivity)
+        val started = CompletableDeferred<BoardListAction>()
+        val release = CompletableDeferred<Unit>()
+        vm.execute = { action ->
+            started.complete(action)
+            release.await()
+            commitListAction(action)
+        }
+        try {
+            assertTrue(vm.start(BoardListAction.Open(16)))
+            runBlocking { withTimeout(5_000) { assertEquals(BoardListAction.Open(16), started.await()) } }
+            instrumentation.runOnMainSync {
+                var owner: Class<*>? = activity.javaClass
+                var saveState: java.lang.reflect.Method? = null
+                while (owner != null && saveState == null) {
+                    saveState = owner.declaredMethods.firstOrNull {
+                        it.name == "onSaveInstanceState" &&
+                            it.parameterTypes.contentEquals(arrayOf(android.os.Bundle::class.java))
+                    }
+                    owner = owner.superclass
+                }
+                requireNotNull(saveState).apply { isAccessible = true }
+                    .invoke(activity, android.os.Bundle())
+                (activity.lifecycle as LifecycleRegistry).handleLifecycleEvent(
+                    Lifecycle.Event.ON_STOP)
+            }
+            release.complete(Unit)
+            repeat(40) {
+                if (vm.state.value is BoardListActionState.Completed) return@repeat
+                Thread.sleep(50)
+            }
+            assertTrue(vm.state.value is BoardListActionState.Completed)
+            instrumentation.runOnMainSync { activity.recreate() }
+            waitFor("‹ 保存境界の結果")
+            assertEquals(BoardListActionState.Idle, vm.state.value)
         } finally { finishResumedActivities() }
     }
 
