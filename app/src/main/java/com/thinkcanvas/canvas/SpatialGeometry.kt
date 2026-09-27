@@ -18,21 +18,15 @@ data class WorldBounds(val left: Float, val top: Float, val right: Float, val bo
 
 fun ShapeElement.bounds() = WorldBounds(x, y, x + width, y + height)
 
-fun BoardSnapshot.boundsOf(id: String): WorldBounds? =
-    shapes.firstOrNull { it.id == id }?.bounds()
-        ?: ink.firstOrNull { it.id == id }?.bounds()
-        ?: texts.firstOrNull { it.id == id }?.let { element ->
-            val fontSize = if (element.kind == TextKind.TITLE) 15f else 14f
-            val width = (element.text.lines().maxOfOrNull { it.length } ?: 1).toFloat()
-                .times(fontSize).coerceIn(24f, 166f)
-            val lines = element.text.lines().sumOf { line ->
-                maxOf(1, kotlin.math.ceil(line.length * fontSize / 166f).toInt())
-            }
-            WorldBounds(element.x, element.y, element.x + width,
-                element.y + maxOf(1, lines) * 21f + 12f)
-        }
+fun BoardSnapshot.boundsOf(id: String,
+                           resolvedRenderedBounds: Map<String, WorldBounds> = emptyMap()): WorldBounds? =
+    resolvedRenderedBounds[id]
+        ?: shapes.firstOrNull { it.id == id }?.bounds()
+        ?: ink.firstOrNull { it.id == id }?.renderedBounds()
 
+/** Model-only operations without a display context use the saved anchor, never a text estimate. */
 fun BoardSnapshot.centerOf(id: String): WorldPoint? = boundsOf(id)?.center
+    ?: texts.firstOrNull { it.id == id }?.let { WorldPoint(it.x, it.y) }
     ?: arrows.firstOrNull { it.id == id }?.let { arrow ->
         arrowPoints(arrow)?.let { (from, to) ->
             WorldPoint((from.x + to.x) / 2f, (from.y + to.y) / 2f)
@@ -95,11 +89,12 @@ fun ShapeElement.containsInterior(point: WorldPoint): Boolean {
     return dx * dx + dy * dy <= 1f
 }
 
-fun BoardSnapshot.resolve(end: ArrowEnd, toward: WorldPoint? = null, offset: Float = 6f): WorldPoint? {
+fun BoardSnapshot.resolve(end: ArrowEnd, toward: WorldPoint? = null, offset: Float = 6f,
+                          renderedBounds: Map<String, WorldBounds> = emptyMap()): WorldPoint? {
     return when (end) {
     is ArrowEnd.Free -> WorldPoint(end.x, end.y)
     is ArrowEnd.Attached -> {
-        val bounds = boundsOf(end.targetId) ?: return null
+        val bounds = renderedBounds[end.targetId] ?: boundsOf(end.targetId) ?: return null
         val center = bounds.center
         val anchor = WorldPoint(bounds.left + end.u * (bounds.right - bounds.left),
             bounds.top + end.v * (bounds.bottom - bounds.top))
@@ -121,27 +116,30 @@ fun BoardSnapshot.resolve(end: ArrowEnd, toward: WorldPoint? = null, offset: Flo
     }
 }
 
-fun BoardSnapshot.arrowPoints(arrow: ArrowElement, offset: Float = 6f): Pair<WorldPoint, WorldPoint>? {
+fun BoardSnapshot.arrowPoints(arrow: ArrowElement, offset: Float = 6f,
+                              renderedBounds: Map<String, WorldBounds> = emptyMap()): Pair<WorldPoint, WorldPoint>? {
     val fromCenter = when (val end = arrow.from) {
         is ArrowEnd.Free -> WorldPoint(end.x, end.y)
-        is ArrowEnd.Attached -> centerOf(end.targetId) ?: return null
+        is ArrowEnd.Attached -> (renderedBounds[end.targetId]?.center ?: centerOf(end.targetId)) ?: return null
     }
     val toCenter = when (val end = arrow.to) {
         is ArrowEnd.Free -> WorldPoint(end.x, end.y)
-        is ArrowEnd.Attached -> centerOf(end.targetId) ?: return null
+        is ArrowEnd.Attached -> (renderedBounds[end.targetId]?.center ?: centerOf(end.targetId)) ?: return null
     }
-    return (resolve(arrow.from, toCenter, offset) ?: return null) to
-        (resolve(arrow.to, fromCenter, offset) ?: return null)
+    return (resolve(arrow.from, toCenter, offset, renderedBounds) ?: return null) to
+        (resolve(arrow.to, fromCenter, offset, renderedBounds) ?: return null)
 }
 
-fun BoardSnapshot.detachedEnd(arrow: ArrowElement, from: Boolean, offset: Float = 6f): ArrowEnd.Free? {
-    val points = arrowPoints(arrow, offset) ?: return null
+fun BoardSnapshot.detachedEnd(arrow: ArrowElement, from: Boolean, offset: Float = 6f,
+                              renderedBounds: Map<String, WorldBounds> = emptyMap()): ArrowEnd.Free? {
+    val points = arrowPoints(arrow, offset, renderedBounds) ?: return null
     val point = if (from) points.first else points.second
     return ArrowEnd.Free(point.x, point.y)
 }
 
-fun BoardSnapshot.arrowControl(arrow: ArrowElement, offset: Float = 6f): WorldPoint? {
-    val (from, to) = arrowPoints(arrow, offset) ?: return null
+fun BoardSnapshot.arrowControl(arrow: ArrowElement, offset: Float = 6f,
+                               renderedBounds: Map<String, WorldBounds> = emptyMap()): WorldPoint? {
+    val (from, to) = arrowPoints(arrow, offset, renderedBounds) ?: return null
     val dx = to.x - from.x
     val dy = to.y - from.y
     val length = max(1f, sqrt(dx * dx + dy * dy))
@@ -149,9 +147,10 @@ fun BoardSnapshot.arrowControl(arrow: ArrowElement, offset: Float = 6f): WorldPo
         (from.y + to.y) / 2f + dx / length * arrow.bend)
 }
 
-fun BoardSnapshot.distanceToArrow(point: WorldPoint, arrow: ArrowElement, offset: Float = 6f): Float {
-    val (from, to) = arrowPoints(arrow, offset) ?: return Float.POSITIVE_INFINITY
-    val control = arrowControl(arrow, offset) ?: return Float.POSITIVE_INFINITY
+fun BoardSnapshot.distanceToArrow(point: WorldPoint, arrow: ArrowElement, offset: Float = 6f,
+                                  renderedBounds: Map<String, WorldBounds> = emptyMap()): Float {
+    val (from, to) = arrowPoints(arrow, offset, renderedBounds) ?: return Float.POSITIVE_INFINITY
+    val control = arrowControl(arrow, offset, renderedBounds) ?: return Float.POSITIVE_INFINITY
     var minimum = Float.POSITIVE_INFINITY
     var previous = from
     for (index in 1..24) {
@@ -167,24 +166,28 @@ fun BoardSnapshot.distanceToArrow(point: WorldPoint, arrow: ArrowElement, offset
     return minimum
 }
 
-fun BoardSnapshot.lassoSelection(vertices: List<WorldPoint>): Set<String> {
+fun BoardSnapshot.lassoSelection(vertices: List<WorldPoint>,
+                                 renderedBounds: Map<String, WorldBounds> = emptyMap()): Set<String> {
     val selected = (texts.map { it.id } + shapes.map { it.id } + ink.map { it.id })
-        .filter { id -> centerOf(id)?.let { pointInPolygon(it, vertices) } == true }.toMutableSet()
+        .filter { id -> (renderedBounds[id]?.center ?: centerOf(id))
+            ?.let { pointInPolygon(it, vertices) } == true }.toMutableSet()
     arrows.forEach { arrow ->
-        val points = arrowPoints(arrow)
+        val points = arrowPoints(arrow, renderedBounds = renderedBounds)
         if (points != null && pointInPolygon(points.first, vertices) &&
             pointInPolygon(points.second, vertices)) selected += arrow.id
     }
     return selected
 }
 
-fun BoardSnapshot.translatedSelection(ids: Set<String>, dx: Float, dy: Float): BoardSnapshot {
+fun BoardSnapshot.translatedSelection(ids: Set<String>, dx: Float, dy: Float,
+                                      renderedBounds: Map<String, WorldBounds> = emptyMap()): BoardSnapshot {
     val moved = ids.toMutableSet()
     var expanded: Boolean
     do {
         val previousSize = moved.size
         shapes.filter { it.id in moved && it.kind == ShapeKind.REGION }.forEach { region ->
-            texts.forEach { if (region.bounds().contains(centerOf(it.id)!!)) moved += it.id }
+            texts.forEach { if (region.bounds().contains(renderedBounds[it.id]?.center
+                ?: centerOf(it.id)!!)) moved += it.id }
             shapes.filter { it.id != region.id }.forEach {
                 if (region.bounds().contains(it.bounds().center)) moved += it.id
             }
@@ -202,7 +205,8 @@ fun BoardSnapshot.translatedSelection(ids: Set<String>, dx: Float, dy: Float): B
     )
 }
 
-fun BoardSnapshot.withGap(origin: WorldPoint, horizontal: Boolean, amount: Float): BoardSnapshot {
+fun BoardSnapshot.withGap(origin: WorldPoint, horizontal: Boolean, amount: Float,
+                          renderedBounds: Map<String, WorldBounds> = emptyMap()): BoardSnapshot {
     if (amount == 0f || !amount.isFinite()) return this
     val source = this
     val scope = smallestRegionAt(origin)
@@ -213,12 +217,12 @@ fun BoardSnapshot.withGap(origin: WorldPoint, horizontal: Boolean, amount: Float
         val shape = shapes.firstOrNull { it.id == id }
         if (shape != null && shape.kind == ShapeKind.REGION &&
             shape.bounds().area >= scope.bounds().area) return false
-        return centerOf(id)?.let { scope.bounds().contains(it) } == true
+        return (renderedBounds[id]?.center ?: centerOf(id))?.let { scope.bounds().contains(it) } == true
     }
     fun shift(value: Float) = if ((value >= boundary) == movePositive) amount else 0f
     val updatedTexts = texts.map {
         if (inScope(it.id)) {
-            val center = source.centerOf(it.id)!!
+            val center = renderedBounds[it.id]?.center ?: source.centerOf(it.id)!!
             val delta = shift(if (horizontal) center.x else center.y)
             if (horizontal) it.copy(x = it.x + delta) else it.copy(y = it.y + delta)
         } else it
@@ -251,7 +255,7 @@ fun BoardSnapshot.withGap(origin: WorldPoint, horizontal: Boolean, amount: Float
     // 余白挿入は矢印の選択ではない。自由端は固定し、接続端は移動した接続先に描画時に追従する。
     val updatedInk = ink.map { element ->
         if (!inScope(element.id)) element else {
-            val center = source.centerOf(element.id)!!
+            val center = renderedBounds[element.id]?.center ?: source.centerOf(element.id)!!
             val delta = shift(if (horizontal) center.x else center.y)
             if (horizontal) element.translated(delta, 0f) else element.translated(0f, delta)
         }

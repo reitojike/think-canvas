@@ -9,36 +9,30 @@ import com.thinkcanvas.canvas.arrowPoints
 import com.thinkcanvas.canvas.arrowControl
 import kotlin.math.max
 import kotlin.math.min
+import com.thinkcanvas.canvas.ResolvedRenderedGeometry
+import com.thinkcanvas.canvas.resolveRenderedGeometry
+import com.thinkcanvas.canvas.DetailedRenderFacts
 
 /** 詳細表示の囲み名が画面上で占める寸法。世界座標の倍率では拡大縮小しない。 */
 data class RegionLabelSize(val width: Float, val height: Float)
 
 fun BoardSnapshot.contentBounds(textExtents: Map<String, TextExtent> = emptyMap()): WorldBounds? {
-    val bounds = (texts.mapNotNull { text ->
-        val measured = textExtents[text.id]
-        if (measured != null && measured.width.isFinite() && measured.height.isFinite() &&
-            measured.width >= 0f && measured.height >= 0f)
-            WorldBounds(text.x, text.y, text.x + measured.width, text.y + measured.height)
-        else boundsOf(text.id)
-    } +
-        shapes.mapNotNull { boundsOf(it.id) } +
-        ink.mapNotNull { boundsOf(it.id) } +
-        arrows.mapNotNull { arrow ->
-            val (from, to) = arrowPoints(arrow) ?: return@mapNotNull null
-            val control = arrowControl(arrow) ?: return@mapNotNull null
-            WorldBounds(min(from.x, min(to.x, control.x)), min(from.y, min(to.y, control.y)),
-                max(from.x, max(to.x, control.x)), max(from.y, max(to.y, control.y)))
-        }).filter { listOf(it.left, it.top, it.right, it.bottom).all(Float::isFinite) }
-    if (bounds.isEmpty()) return null
-    return WorldBounds(bounds.minOf { it.left }, bounds.minOf { it.top },
-        bounds.maxOf { it.right }, bounds.maxOf { it.bottom })
+    val exactTextBounds = texts.mapNotNull { text ->
+        val measured = textExtents[text.id]?.takeIf { it.width.isFinite() && it.height.isFinite() &&
+            it.width >= 0f && it.height >= 0f } ?: return@mapNotNull null
+        text.id to WorldBounds(text.x, text.y, text.x + measured.width, text.y + measured.height)
+    }.toMap()
+    return resolveRenderedGeometry(exactTextBounds).union()
 }
+
+fun BoardSnapshot.contentBounds(geometry: ResolvedRenderedGeometry): WorldBounds? = geometry.union()
 
 fun BoardSnapshot.fittedViewport(width: Float, height: Float,
                                  regionLabels: Map<String, RegionLabelSize> = emptyMap(),
                                  textExtents: Map<String, TextExtent> = emptyMap(),
-                                 maximumScale: Float = .9f): Viewport {
-    val bounds = contentBounds(textExtents) ?: return Viewport()
+                                 maximumScale: Float = .9f,
+                                 renderedGeometry: ResolvedRenderedGeometry? = null): Viewport {
+    val bounds = renderedGeometry?.union() ?: contentBounds(textExtents) ?: return Viewport()
     val availableWidth = (width - 40f).coerceAtLeast(1f).toDouble()
     val availableHeight = (height - 180f).coerceAtLeast(1f).toDouble()
     val labels = shapes.mapNotNull { shape ->
@@ -53,8 +47,8 @@ fun BoardSnapshot.fittedViewport(width: Float, height: Float,
         var right = bounds.right.toDouble() * scale
         var bottom = bounds.bottom.toDouble() * scale
         labels.forEach { (shape, label) ->
-            val labelLeft = (shape.x + 8f).toDouble() * scale
-            val labelTop = (shape.y - 22f).toDouble() * scale
+            val labelLeft = (shape.x + DetailedRenderFacts.REGION_LABEL_LEFT_WORLD).toDouble() * scale
+            val labelTop = (shape.y - DetailedRenderFacts.REGION_LABEL_TOP_WORLD).toDouble() * scale
             left = min(left, labelLeft)
             top = min(top, labelTop)
             right = max(right, labelLeft + label.width)

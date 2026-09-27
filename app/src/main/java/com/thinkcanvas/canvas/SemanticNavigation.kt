@@ -30,26 +30,13 @@ fun BoardSnapshot.semanticProjection(
     pixelsPerDp: Float = 1f,
     titleDp: Float = 15f,
     titleLineHeightWorld: Float = 22.5f,
-    measuredTextExtents: Map<String, TextExtent> = emptyMap(),
+    resolvedRenderedBounds: Map<String, WorldBounds> = resolveRenderedGeometry(
+        emptyMap(), scale, pixelsPerDp).boundsById,
 ): SemanticProjection {
     val tier = semanticTier(bodyDp, scale)
     fun apparentDp(worldLength: Float) = worldLength * scale / pixelsPerDp
     fun textCenter(element: TextElement): WorldPoint {
-        val extent = measuredTextExtents[element.id] ?: run {
-            val title = element.kind == TextKind.TITLE
-            val minimumDp = when (tier) {
-                SemanticTier.NEAR -> if (title) 11f else 10f
-                SemanticTier.MID -> if (title) 11f else 9.5f
-                SemanticTier.FAR -> if (title) 9f else 10f
-            }
-            val fontDp = max(if (title) titleDp else bodyDp, minimumDp / scale)
-            val lineWidths = element.text.lines().map { it.length * fontDp }
-            val widthDp = min(lineWidths.maxOrNull() ?: fontDp, 166f)
-            val lineCount = if (tier == SemanticTier.NEAR)
-                lineWidths.sumOf { max(1, kotlin.math.ceil(it / 166f).toInt()) } else 1
-            TextExtent(widthDp * pixelsPerDp, lineCount * fontDp * 1.5f * pixelsPerDp)
-        }
-        return WorldPoint(element.x + extent.width / 2f, element.y + extent.height / 2f)
+        return resolvedRenderedBounds[element.id]?.center ?: WorldPoint(element.x, element.y)
     }
     fun center(id: String): WorldPoint? = texts.firstOrNull { it.id == id }
         ?.let(::textCenter) ?: centerOf(id)
@@ -89,27 +76,19 @@ fun BoardSnapshot.semanticProjection(
     }
     ink.filter { it.id !in keep &&
         (covered(it.id) || tier == SemanticTier.FAR &&
-            apparentDp(max(it.bounds().right - it.bounds().left,
-                it.bounds().bottom - it.bounds().top) +
-                if (it.kind == InkKind.MARKER) MARKER_WIDTH_WORLD else PEN_WIDTH_WORLD) < 16f) }
+            resolvedRenderedBounds[it.id]?.let { bounds ->
+                apparentDp(max(bounds.right - bounds.left, bounds.bottom - bounds.top)) < 16f
+            } == true) }
         .forEach { hidden += it.id }
     arrows.filter { arrow ->
         if (arrow.id in keep) return@filter false
         val attachedHidden = listOf(arrow.from, arrow.to).any {
             it is ArrowEnd.Attached && it.targetId in hidden
         }
-        val renderOffset = 6f / scale
-        var renderedCenter: WorldPoint? = null
-        val length = arrowPoints(arrow, renderOffset)?.let { (a, b) ->
-            val control = arrowControl(arrow, renderOffset) ?: return@let 0f
-            renderedCenter = WorldPoint((a.x + 2f * control.x + b.x) / 4f,
-                (a.y + 2f * control.y + b.y) / 4f)
-            val midpoint = WorldPoint((a.x + b.x) / 2f, (a.y + b.y) / 2f)
-            val bendExtent = kotlin.math.hypot(control.x - midpoint.x,
-                control.y - midpoint.y) / 2f
-            apparentDp(max(kotlin.math.hypot(b.x - a.x, b.y - a.y), bendExtent))
-        } ?: 0f
-        attachedHidden || renderedCenter?.let { coveredPoint(arrow.id, it) } == true ||
+        val bounds = resolvedRenderedBounds[arrow.id]
+        val center = bounds?.center ?: centerOf(arrow.id)
+        val length = bounds?.let { apparentDp(max(it.right - it.left, it.bottom - it.top)) } ?: 0f
+        attachedHidden || center?.let { coveredPoint(arrow.id, it) } == true ||
             tier == SemanticTier.FAR && length < 20f
     }.forEach { hidden += it.id }
     hidden.removeAll(keep)
@@ -123,7 +102,7 @@ fun BoardSnapshot.searchCanvas(query: String): List<CanvasMatch> {
     val term = query.trim()
     if (term.isEmpty()) return emptyList()
     return (texts.asSequence().filter { it.text.contains(term, ignoreCase = true) }
-        .mapNotNull { boundsOf(it.id)?.let { bounds -> CanvasMatch(it.id, bounds, false) } } +
+        .map { CanvasMatch(it.id, WorldBounds(it.x, it.y, it.x, it.y), false) } +
         shapes.asSequence().filter { it.kind == ShapeKind.REGION &&
             it.name.contains(term, ignoreCase = true) }
             .map { CanvasMatch(it.id, it.bounds(), true) })
@@ -151,7 +130,10 @@ fun searchIndex(current: Int, change: Int, count: Int): Int =
 fun BoardSnapshot.visibleLassoSelection(
     vertices: List<WorldPoint>,
     projection: SemanticProjection,
-): Set<String> = lassoSelection(vertices).filterTo(mutableSetOf()) { projection.visible(it) }
+    resolvedRenderedBounds: Map<String, WorldBounds> = resolveRenderedGeometry(
+        emptyMap()).boundsById,
+): Set<String> = lassoSelection(vertices, resolvedRenderedBounds)
+    .filterTo(mutableSetOf()) { projection.visible(it) }
 
 fun Viewport.centerOn(point: WorldPoint, width: Float, height: Float, targetScale: Float,
                       verticalFraction: Float = .5f): Viewport {

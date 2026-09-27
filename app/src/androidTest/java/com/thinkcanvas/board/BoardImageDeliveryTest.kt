@@ -101,7 +101,11 @@ class BoardImageDeliveryTest {
     @Test fun longRegionNameRemainsVisibleBeyondNarrowRegion() {
         val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
             x = 40f, y = 60f, width = 32f, height = 40f, name = "Very long region name")
-        val plan = planShare(BoardSnapshot(shapes = listOf(region)))
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val source = BoardSnapshot(shapes = listOf(region))
+        val typography = ExportTypography.from(context.resources)
+        val plan = planShare(source, renderedBounds =
+            BoardImageRenderer.renderedBounds(source, typography), typography = typography)
         val bitmap = BoardImageRenderer.render(plan)
         fun px(value: Float) = ((value - plan.imageBounds.left) * plan.pixelsPerWorldUnit).toInt()
         fun py(value: Float) = ((value - plan.imageBounds.top) * plan.pixelsPerWorldUnit).toInt()
@@ -153,7 +157,10 @@ class BoardImageDeliveryTest {
                 )),
             ),
         )
-        val plan = planShare(source)
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val typography = ExportTypography.from(context.resources)
+        val measured = BoardImageRenderer.renderedBounds(source, typography)
+        val plan = planShare(source, renderedBounds = measured, typography = typography)
         assertEquals(setOf("text", "shape", "arrow", "ink"), plan.includedIds)
         val bitmap = BoardImageRenderer.render(plan)
         fun hasMark(left: Int, top: Int, right: Int, bottom: Int): Boolean {
@@ -181,8 +188,8 @@ class BoardImageDeliveryTest {
             kind = ShapeKind.RECTANGLE, x = 0f, y = 0f, width = 100f, height = 50f)))
         val plan = planShare(source)
         val preview = BoardImageRenderer.render(plan)
-        assertEquals(296, preview.width)
-        assertEquals(196, preview.height)
+        assertEquals(300, preview.width)
+        assertEquals(200, preview.height)
         assertEquals(0xFFFCFCFB.toInt(), preview.getPixel(0, 0))
         assertNotEquals(0xFFFCFCFB.toInt(), preview.getPixel(48, 90))
 

@@ -6,6 +6,35 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SpatialGeometryTest {
+    @Test fun storedTextHasNoAuthoritativeBoundsUntilRendererResolvesIt() {
+        val text = TextElement(id = "text", text = "a long line", x = 10f, y = 20f)
+        val snapshot = BoardSnapshot(texts = listOf(text))
+        assertEquals(null, snapshot.boundsOf(text.id))
+        val resolved = WorldBounds(10f, 20f, 210f, 62f)
+        assertEquals(resolved, snapshot.boundsOf(text.id, mapOf(text.id to resolved)))
+        assertEquals(text, snapshot.texts.single())
+    }
+
+    @Test fun resolvedArrowGeometryIncludesEndpointOffsetHeadAndStroke() {
+        val arrow = ArrowElement(id = "arrow", from = ArrowEnd.Free(0f, 0f),
+            to = ArrowEnd.Free(40f, 0f))
+        val snapshot = BoardSnapshot(arrows = listOf(arrow))
+        val geometry = snapshot.arrowRenderGeometry(arrow, scale = 2f, pixelsPerDp = 3f)!!
+        assertEquals(0f, geometry.start.x, .001f)
+        assertEquals(40f, geometry.end.x, .001f)
+        assertTrue(geometry.headLeft.x < geometry.end.x)
+        assertTrue(geometry.bounds.right > geometry.end.x)
+        assertTrue(geometry.bounds.left < geometry.start.x)
+    }
+
+    @Test fun renderedInkBoundsIncludeBrushRadiusWithoutChangingStoredPointBounds() {
+        val stroke = InkStroke(startedAt = 0, endedAt = 1, inputType = InkInputType.TOUCH,
+            points = listOf(InkPoint(10f, 20f, 0)))
+        val marker = InkElement(id = "marker", kind = InkKind.MARKER, strokes = listOf(stroke))
+        assertEquals(WorldBounds(10f, 20f, 10f, 20f), marker.bounds())
+        assertEquals(WorldBounds(2.5f, 12.5f, 17.5f, 27.5f), marker.renderedBounds())
+    }
+
     @Test
     fun overlappingRegionsChooseSmallestAndNestedMoveOnlyOnce() {
         val board = BoardState(listOf(TextElement(id = "text", text = "内側", x = 42f, y = 42f)))

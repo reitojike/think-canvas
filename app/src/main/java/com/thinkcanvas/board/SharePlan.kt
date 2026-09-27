@@ -7,7 +7,7 @@ import com.thinkcanvas.canvas.WorldBounds
 import com.thinkcanvas.canvas.arrowControl
 import com.thinkcanvas.canvas.arrowPoints
 import com.thinkcanvas.canvas.bounds
-import com.thinkcanvas.canvas.boundsOf
+import com.thinkcanvas.canvas.resolveRenderedGeometry
 import com.thinkcanvas.canvas.centerOf
 import kotlin.math.ceil
 import kotlin.math.max
@@ -33,6 +33,10 @@ fun planShare(source: BoardSnapshot, selectedIds: Set<String>? = null,
     val included = if (selectedIds == null) allIds.toMutableSet()
         else selectedIds.intersect(allIds).toMutableSet()
     require(included.isNotEmpty()) { "画像にする内容がありません" }
+    val textBounds = renderedBounds.filterKeys { id -> source.texts.any { it.id == id } }
+    val sharedGeometry = source.resolveRenderedGeometry(textBounds,
+        pixelsPerDp = typography.pixelsPerDp)
+    fun center(id: String) = sharedGeometry.bounds(id)?.center ?: source.centerOf(id)
 
     if (selectedIds != null) {
         val selectedRegions = source.shapes.filter {
@@ -40,17 +44,18 @@ fun planShare(source: BoardSnapshot, selectedIds: Set<String>? = null,
         }
         selectedRegions.forEach { region ->
             val area = region.bounds()
-            source.texts.filter { source.centerOf(it.id)?.let(area::contains) == true }
+            source.texts.filter { center(it.id)?.let(area::contains) == true }
                 .forEach { included += it.id }
             source.shapes.filter { it.id != region.id &&
-                source.centerOf(it.id)?.let(area::contains) == true }
+                center(it.id)?.let(area::contains) == true }
                 .forEach { included += it.id }
-            source.ink.filter { source.centerOf(it.id)?.let(area::contains) == true }
+            source.ink.filter { center(it.id)?.let(area::contains) == true }
                 .forEach { included += it.id }
         }
         source.arrows.filter { arrow ->
             selectedRegions.any { region ->
-                val ends = source.arrowPoints(arrow, offset = 0f) ?: return@any false
+                val ends = source.arrowPoints(arrow, offset = 0f,
+                    renderedBounds = sharedGeometry.boundsById) ?: return@any false
                 val targets = listOf(arrow.from, arrow.to)
                     .filterIsInstance<ArrowEnd.Attached>()
                 region.bounds().contains(ends.first) && region.bounds().contains(ends.second) &&
@@ -59,25 +64,14 @@ fun planShare(source: BoardSnapshot, selectedIds: Set<String>? = null,
         }.forEach { included += it.id }
     }
 
-    val bounds = included.mapNotNull { id ->
-        val shape = source.shapes.firstOrNull { it.id == id }
-        val shapeBounds = renderedBounds[id] ?: source.boundsOf(id)
-        if (id in renderedBounds) shapeBounds
-        else if (shape != null && shape.kind == ShapeKind.REGION && shape.name.isNotBlank() &&
-            shapeBounds != null) {
-            // 共有画像の囲み名は上辺の外に描く。文字幅を保守的に見積もり切り抜きを防ぐ。
-            WorldBounds(shapeBounds.left, min(shapeBounds.top, shape.y - 24f),
-                max(shapeBounds.right, shape.x + 8f + shape.name.length * 16f),
-                shapeBounds.bottom)
-        } else shapeBounds ?: source.arrows.firstOrNull { it.id == id }?.let { arrow ->
-            val ends = source.arrowPoints(arrow) ?: return@let null
-            val control = source.arrowControl(arrow) ?: return@let null
-            WorldBounds(min(ends.first.x, min(ends.second.x, control.x)),
-                min(ends.first.y, min(ends.second.y, control.y)),
-                max(ends.first.x, max(ends.second.x, control.x)),
-                max(ends.first.y, max(ends.second.y, control.y)))
-        }
+    val requiresMeasuredBounds = included.filter { id ->
+        source.texts.any { it.id == id } || source.shapes.any { it.id == id &&
+            it.kind == ShapeKind.REGION && it.name.isNotBlank() }
     }
+    require(requiresMeasuredBounds.all { it in renderedBounds }) {
+        "文字と囲み名の描画寸法が解決されていません"
+    }
+    val bounds = included.mapNotNull { id -> renderedBounds[id] ?: sharedGeometry.bounds(id) }
     require(bounds.size == included.size && bounds.all {
         listOf(it.left, it.top, it.right, it.bottom).all(Float::isFinite)
     }) { "画像化できない座標が含まれています" }

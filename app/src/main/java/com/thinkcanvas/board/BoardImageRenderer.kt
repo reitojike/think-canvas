@@ -21,7 +21,10 @@ import com.thinkcanvas.canvas.TextKind
 import com.thinkcanvas.canvas.WorldBounds
 import com.thinkcanvas.canvas.arrowControl
 import com.thinkcanvas.canvas.arrowPoints
+import com.thinkcanvas.canvas.DetailedRenderFacts
 import com.thinkcanvas.canvas.makeStroke
+import com.thinkcanvas.canvas.arrowRenderGeometry
+import com.thinkcanvas.canvas.resolveRenderedGeometry
 import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.cos
@@ -31,8 +34,8 @@ import kotlin.math.sin
 /** 共有プレビューと PNG に共通の描画面。画面 chrome と選択表示は描かない。 */
 object BoardImageRenderer {
     /** 計画と描画に同じ組版を使い、文字や囲み名を PNG の外接範囲から落とさない。 */
-    fun renderedBounds(source: BoardSnapshot, typography: ExportTypography): Map<String, WorldBounds> =
-        buildMap {
+    fun renderedBounds(source: BoardSnapshot, typography: ExportTypography): Map<String, WorldBounds> {
+        val textBounds = buildMap {
             source.texts.forEach { element ->
                 val layout = textLayout(element, typography)
                 val width = (0 until layout.lineCount).maxOfOrNull { layout.getLineWidth(it) }
@@ -43,9 +46,13 @@ object BoardImageRenderer {
                 put(element.id, WorldBounds(element.x, element.y,
                     element.x + width, element.y + height))
             }
-            source.shapes.filter { it.kind == ShapeKind.REGION && it.name.isNotBlank() }
-                .forEach { region -> put(region.id, regionBounds(region, typography)) }
         }
+        val resolved = source.resolveRenderedGeometry(textBounds,
+            scale = 1f, pixelsPerDp = typography.pixelsPerDp).boundsById.toMutableMap()
+        source.shapes.filter { it.kind == ShapeKind.REGION && it.name.isNotBlank() }
+            .forEach { region -> resolved[region.id] = regionBounds(region, typography) }
+        return resolved
+    }
 
     fun render(plan: SharePlan): Bitmap {
         val bitmap = Bitmap.createBitmap(plan.width, plan.height, Bitmap.Config.ARGB_8888)
@@ -88,11 +95,13 @@ object BoardImageRenderer {
 
     private fun regionBounds(region: ShapeElement, typography: ExportTypography): WorldBounds {
         val paint = regionPaint(typography)
-        val labelLeft = region.x + 8f
-        val labelTop = region.y - 22f
-        return WorldBounds(region.x, minOf(region.y, labelTop),
-            max(region.x + region.width, labelLeft + paint.measureText(region.name)),
-            max(region.y + region.height,
+        val labelLeft = region.x + DetailedRenderFacts.REGION_LABEL_LEFT_WORLD
+        val labelTop = region.y - DetailedRenderFacts.REGION_LABEL_TOP_WORLD
+        val strokeRadius = DetailedRenderFacts.REGION_STROKE_DP * typography.pixelsPerDp / 2f
+        return WorldBounds(minOf(region.x - strokeRadius, labelLeft),
+            minOf(region.y - strokeRadius, labelTop),
+            max(region.x + region.width + strokeRadius, labelLeft + paint.measureText(region.name)),
+            max(region.y + region.height + strokeRadius,
                 labelTop + paint.fontMetrics.bottom - paint.fontMetrics.top))
     }
 
@@ -101,18 +110,24 @@ object BoardImageRenderer {
             val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = color(shape.color)
                 style = Paint.Style.STROKE
-                strokeWidth = if (shape.kind == ShapeKind.REGION) 1.5f else 2f
+                strokeWidth = (if (shape.kind == ShapeKind.REGION)
+                    DetailedRenderFacts.REGION_STROKE_DP else DetailedRenderFacts.SHAPE_STROKE_DP) *
+                    plan.typography.pixelsPerDp
                 if (shape.kind == ShapeKind.REGION)
-                    pathEffect = DashPathEffect(floatArrayOf(8f, 5f), 0f)
+                    pathEffect = DashPathEffect(floatArrayOf(
+                        DetailedRenderFacts.REGION_DASH_ON_DP * plan.typography.pixelsPerDp,
+                        DetailedRenderFacts.REGION_DASH_OFF_DP * plan.typography.pixelsPerDp), 0f)
             }
             val right = shape.x + shape.width
             val bottom = shape.y + shape.height
             when (shape.kind) {
                 ShapeKind.RECTANGLE -> canvas.drawRoundRect(shape.x, shape.y, right, bottom,
-                    3f, 3f, outline)
+                    DetailedRenderFacts.RECTANGLE_CORNER_RADIUS_DP * plan.typography.pixelsPerDp,
+                    DetailedRenderFacts.RECTANGLE_CORNER_RADIUS_DP * plan.typography.pixelsPerDp, outline)
                 ShapeKind.ELLIPSE -> canvas.drawOval(shape.x, shape.y, right, bottom, outline)
                 ShapeKind.REGION -> {
-                    canvas.drawRoundRect(shape.x, shape.y, right, bottom, 12f, 12f, outline)
+                    val radius = DetailedRenderFacts.REGION_CORNER_RADIUS_DP * plan.typography.pixelsPerDp
+                    canvas.drawRoundRect(shape.x, shape.y, right, bottom, radius, radius, outline)
                 }
             }
         }
@@ -123,8 +138,8 @@ object BoardImageRenderer {
         plan.source.shapes.filter { it.id in plan.includedIds &&
             it.kind == ShapeKind.REGION && it.name.isNotBlank() }.forEach { region ->
             val label = regionPaint(plan.typography)
-            val left = region.x + 8f
-            val top = region.y - 22f
+            val left = region.x + DetailedRenderFacts.REGION_LABEL_LEFT_WORLD
+            val top = region.y - DetailedRenderFacts.REGION_LABEL_TOP_WORLD
             canvas.drawRect(left, top, left + label.measureText(region.name),
                 top + label.fontMetrics.bottom - label.fontMetrics.top, paper)
             canvas.drawText(region.name, left, top - label.fontMetrics.top, label)
@@ -135,7 +150,7 @@ object BoardImageRenderer {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = 0xFF23211E.toInt()
             style = Paint.Style.STROKE
-            strokeWidth = 2f
+            strokeWidth = DetailedRenderFacts.ARROW_STROKE_DP * plan.typography.pixelsPerDp
             strokeCap = Paint.Cap.ROUND
         }
         val headPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -143,18 +158,18 @@ object BoardImageRenderer {
             style = Paint.Style.FILL
         }
         plan.source.arrows.filter { it.id in plan.includedIds }.forEach { arrow ->
-            val (from, to) = plan.source.arrowPoints(arrow) ?: return@forEach
-            val control = plan.source.arrowControl(arrow) ?: return@forEach
+            val geometry = plan.source.arrowRenderGeometry(arrow, scale = 1f,
+                pixelsPerDp = plan.typography.pixelsPerDp) ?: return@forEach
             val path = Path().apply {
-                moveTo(from.x, from.y)
-                quadTo(control.x, control.y, to.x, to.y)
+                moveTo(geometry.start.x, geometry.start.y)
+                quadTo(geometry.control.x, geometry.control.y,
+                    geometry.end.x, geometry.end.y)
             }
             canvas.drawPath(path, paint)
-            val angle = atan2(to.y - control.y, to.x - control.x)
             val head = Path().apply {
-                moveTo(to.x, to.y)
-                lineTo(to.x - 11f * cos(angle - .5f), to.y - 11f * sin(angle - .5f))
-                lineTo(to.x - 11f * cos(angle + .5f), to.y - 11f * sin(angle + .5f))
+                moveTo(geometry.end.x, geometry.end.y)
+                lineTo(geometry.headLeft.x, geometry.headLeft.y)
+                lineTo(geometry.headRight.x, geometry.headRight.y)
                 close()
             }
             canvas.drawPath(head, headPaint)

@@ -13,6 +13,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SharePlanTest {
+    private fun measured(source: BoardSnapshot): Map<String, WorldBounds> = buildMap {
+        source.texts.forEach { put(it.id, WorldBounds(it.x, it.y,
+            it.x + 80f, it.y + 42f)) }
+        source.shapes.filter { it.kind == ShapeKind.REGION && it.name.isNotBlank() }
+            .forEach { region -> put(region.id, WorldBounds(region.x - 1f, region.y - 22f,
+                maxOf(region.x + region.width + 1f, region.x + 8f + region.name.length * 16f),
+                region.y + region.height + 1f)) }
+    }
+
     @Test fun measuredExportTextBoundsAreUsedByPlan() {
         val text = TextElement(id = "text", text = "複数行の本文", x = 40f, y = 60f)
         val source = BoardSnapshot(texts = listOf(text))
@@ -31,10 +40,11 @@ class SharePlanTest {
         val region = ShapeElement(id = "named-region", kind = ShapeKind.REGION,
             x = 40f, y = 60f, width = 32f, height = 40f,
             name = "Very long region name")
-        val plan = planShare(BoardSnapshot(shapes = listOf(region)))
+        val source = BoardSnapshot(shapes = listOf(region))
+        val plan = planShare(source, renderedBounds = measured(source))
         assertTrue(plan.contentBounds.right > region.x + region.width)
         assertTrue(plan.contentBounds.right >= region.x + 8f + region.name.length * 16f)
-        assertTrue(plan.contentBounds.top <= region.y - 24f)
+        assertTrue(plan.contentBounds.top <= region.y - 22f)
         assertTrue(plan.imageBounds.right > plan.contentBounds.right)
     }
 
@@ -51,13 +61,14 @@ class SharePlanTest {
         val source = BoardSnapshot(listOf(inside, outside), listOf(region),
             listOf(innerArrow, crossingArrow))
 
-        val plan = planShare(source, setOf(region.id))
+        val bounds = measured(source)
+        val plan = planShare(source, setOf(region.id), bounds)
 
         assertEquals(setOf("region", "inside", "inner-arrow"), plan.includedIds)
         assertEquals(source, plan.source)
         assertFalse("outside" in plan.includedIds)
         assertFalse("crossing-arrow" in plan.includedIds)
-        assertTrue("crossing-arrow" in planShare(source, setOf("crossing-arrow")).includedIds)
+        assertTrue("crossing-arrow" in planShare(source, setOf("crossing-arrow"), bounds).includedIds)
     }
 
     @Test fun paddingAndResolutionAreBoundedWithoutMutatingSource() {
@@ -70,8 +81,8 @@ class SharePlanTest {
         assertEquals(24f, plan.contentBounds.top - plan.imageBounds.top, .001f)
         assertEquals(24f, plan.imageBounds.bottom - plan.contentBounds.bottom, .001f)
         assertEquals(2f, plan.pixelsPerWorldUnit, .001f)
-        assertEquals(296, plan.width)
-        assertEquals(196, plan.height)
+        assertEquals(300, plan.width)
+        assertEquals(200, plan.height)
         assertEquals(10f, source.shapes.single().x)
     }
 
@@ -81,5 +92,10 @@ class SharePlanTest {
         val huge = BoardSnapshot(shapes = listOf(ShapeElement(kind = ShapeKind.RECTANGLE,
             x = 0f, y = 0f, width = 3900f, height = 100f)))
         assertTrue(runCatching { planShare(huge) }.isFailure)
+    }
+
+    @Test fun exportPlanRequiresResolvedTextAndRegionLabelBounds() {
+        val text = TextElement(id = "text", text = "本文", x = 0f, y = 0f)
+        assertTrue(runCatching { planShare(BoardSnapshot(texts = listOf(text))) }.isFailure)
     }
 }
