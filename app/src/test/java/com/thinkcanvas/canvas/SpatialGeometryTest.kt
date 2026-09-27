@@ -125,6 +125,34 @@ class SpatialGeometryTest {
             display.boundsById, arrowEndpointOffset = 30f))
     }
 
+    @Test fun textAttachedArrowKeepsModelCenterAndUsesMeasuredDisplayBoundsWhenAvailable() {
+        val text = TextElement(id = "target-text", text = "anchor", x = 10f, y = 20f)
+        val arrow = ArrowElement(id = "attached-arrow",
+            from = ArrowEnd.Attached(text.id, .5f, .5f), to = ArrowEnd.Free(110f, 20f))
+        val source = BoardSnapshot(texts = listOf(text), arrows = listOf(arrow))
+
+        assertEquals(null, source.boundsOf(text.id))
+        assertTrue("model-only arrow center resolves from the saved text anchor",
+            source.centerOf(arrow.id) != null)
+        val display = source.resolveRenderedGeometry(mapOf(text.id to
+            WorldBounds(10f, 20f, 110f, 60f)), scale = .5f, pixelsPerDp = 2f)
+        assertTrue("resolved text bounds produce a display arrow extent",
+            display.bounds(arrow.id) != null)
+    }
+
+    @Test fun farSemanticVisibilityMeasuresDiagonalArrowPathInsteadOfAxisBounds() {
+        val arrow = ArrowElement(id = "diagonal", from = ArrowEnd.Free(0f, 0f),
+            to = ArrowEnd.Free(70.71068f, 70.71068f))
+        val snapshot = BoardSnapshot(arrows = listOf(arrow))
+        val geometry = snapshot.arrowRenderGeometry(arrow, scale = .25f, pixelsPerDp = 1f)!!
+        val projectedBounds = maxOf(geometry.bounds.right - geometry.bounds.left,
+            geometry.bounds.bottom - geometry.bounds.top) * .25f
+
+        assertTrue("axis-aligned rendered bounds under-project the diagonal", projectedBounds < 20f)
+        assertTrue("the 25dp rendered chord remains visible in FAR",
+            snapshot.semanticProjection(.25f, 14f).visible(arrow.id))
+    }
+
     @Test fun regionMembershipIsInvariantAcrossMeasuredTextExtents() {
         val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
             x = 0f, y = 0f, width = 100f, height = 100f)

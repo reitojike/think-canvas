@@ -94,7 +94,10 @@ fun BoardSnapshot.resolve(end: ArrowEnd, toward: WorldPoint? = null, offset: Flo
     return when (end) {
     is ArrowEnd.Free -> WorldPoint(end.x, end.y)
     is ArrowEnd.Attached -> {
-        val bounds = renderedBounds[end.targetId] ?: boundsOf(end.targetId) ?: return null
+        val bounds = renderedBounds[end.targetId] ?: boundsOf(end.targetId)
+            ?: texts.firstOrNull { it.id == end.targetId }?.let {
+                WorldBounds(it.x, it.y, it.x, it.y)
+            } ?: return null
         val center = bounds.center
         val anchor = WorldPoint(bounds.left + end.u * (bounds.right - bounds.left),
             bounds.top + end.v * (bounds.bottom - bounds.top))

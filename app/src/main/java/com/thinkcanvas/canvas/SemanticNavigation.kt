@@ -85,11 +85,22 @@ fun BoardSnapshot.semanticProjection(
         val attachedHidden = listOf(arrow.from, arrow.to).any {
             it is ArrowEnd.Attached && it.targetId in hidden
         }
-        val bounds = resolvedRenderedBounds[arrow.id]
-        val center = bounds?.center ?: centerOf(arrow.id)
-        val length = bounds?.let { apparentDp(max(it.right - it.left, it.bottom - it.top)) } ?: 0f
+        val geometry = arrowRenderGeometry(arrow, scale, pixelsPerDp, resolvedRenderedBounds)
+        val bounds = geometry?.bounds ?: resolvedRenderedBounds[arrow.id]
+        val center = geometry?.let {
+            WorldPoint((it.start.x + 2f * it.control.x + it.end.x) / 4f,
+                (it.start.y + 2f * it.control.y + it.end.y) / 4f)
+        } ?: bounds?.center ?: centerOf(arrow.id)
+        val pathLengthDp = geometry?.let {
+            val chordLength = kotlin.math.hypot(it.end.x - it.start.x, it.end.y - it.start.y)
+            val midpoint = WorldPoint((it.start.x + it.end.x) / 2f,
+                (it.start.y + it.end.y) / 2f)
+            val bendExtent = kotlin.math.hypot(it.control.x - midpoint.x,
+                it.control.y - midpoint.y) / 2f
+            apparentDp(max(chordLength, bendExtent))
+        } ?: 0f
         attachedHidden || center?.let { coveredPoint(arrow.id, it) } == true ||
-            tier == SemanticTier.FAR && length < 20f
+            tier == SemanticTier.FAR && pathLengthDp < 20f
     }.forEach { hidden += it.id }
     hidden.removeAll(keep)
     return SemanticProjection(tier, collapsed.map { it.id }.toSet(), hidden,

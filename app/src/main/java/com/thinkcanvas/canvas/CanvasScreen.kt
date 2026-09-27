@@ -1502,7 +1502,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             }
 
             menuTarget?.takeIf(projection::visible)?.let { id ->
-                val center = board.snapshot().centerOf(id) ?: WorldPoint(0f, 0f)
+                val center = renderedGeometry.bounds(id)?.center
+                    ?: board.snapshot().centerOf(id) ?: WorldPoint(0f, 0f)
                 val (anchorX, anchorY) = viewport.worldToScreen(center.x, center.y)
                 val menuX = anchorX.coerceIn(8f, maxOf(8f, canvasSize.width - with(density) { 320.dp.toPx() }))
                 val menuY = (anchorY + with(density) { 22.dp.toPx() })
