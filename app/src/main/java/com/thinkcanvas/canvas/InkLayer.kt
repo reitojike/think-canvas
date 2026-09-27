@@ -32,10 +32,10 @@ import kotlin.math.roundToInt
 data class InkPreview(val kind: InkKind, val inputType: InkInputType, val points: List<InkPoint>)
 
 private fun inkBrush(kind: InkKind): Brush = if (kind == InkKind.PEN)
-    Brush.createWithColorIntArgb(StockBrushes.marker(), 0xFF23211E.toInt(), PEN_WIDTH_WORLD, 0.1f)
-else Brush.createWithColorIntArgb(StockBrushes.marker(), 0x76C54B32, MARKER_WIDTH_WORLD, 0.1f)
+    Brush.createWithColorIntArgb(StockBrushes.marker(), 0xFF23211E.toInt(), kind.renderedWidthWorld(), 0.1f)
+else Brush.createWithColorIntArgb(StockBrushes.marker(), 0x76C54B32, kind.renderedWidthWorld(), 0.1f)
 
-private fun makeStroke(kind: InkKind, inputType: InkInputType, points: List<InkPoint>): Stroke {
+internal fun makeStroke(kind: InkKind, inputType: InkInputType, points: List<InkPoint>): Stroke {
     val batch = MutableStrokeInputBatch()
     val tool = if (inputType == InkInputType.STYLUS) InputToolType.STYLUS else InputToolType.TOUCH
     points.forEach { point ->
@@ -85,7 +85,7 @@ fun InkLayer(
         native.restore()
         if (dimmed) native.restore()
         elements.filter { it.kind == kind && (it.id in selected || it.id in moving) }.forEach { element ->
-            val bounds = element.bounds()
+            val bounds = element.renderedBounds()
             val (x, y) = viewport.worldToScreen(bounds.left, bounds.top)
             val width = (bounds.right - bounds.left) * viewport.scale
             val height = (bounds.bottom - bounds.top) * viewport.scale

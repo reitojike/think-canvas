@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
@@ -57,6 +58,7 @@ fun SpatialElements(
     searchMatches: Set<String>,
     currentMatchId: String?,
     searching: Boolean,
+    canvasWidthPx: Int,
     onHandle: (String, HandleKind) -> Boolean,
     onConnect: (String, HandleKind) -> Boolean,
     onSelect: (String) -> Unit,
@@ -67,7 +69,9 @@ fun SpatialElements(
     onMove: (String, Float, Float) -> Boolean,
     onDelete: (String) -> Boolean,
     onReverse: (String) -> Boolean,
+    renderedBounds: Map<String, WorldBounds> = emptyMap(),
 ) {
+    val density = LocalDensity.current
     Canvas(Modifier.fillMaxSize()) {
         fun screen(p: WorldPoint): Offset {
             val (x, y) = viewport.worldToScreen(p.x, p.y)
@@ -85,18 +89,24 @@ fun SpatialElements(
             val displayColor = if (searching && shape.id !in searchMatches && shape.id !in selected)
                 color.copy(alpha = .25f) else color
             val farLike = shape.kind == ShapeKind.REGION && projection.farLikeRegion(shape.id)
-            val style = Stroke(width = if (shape.kind == ShapeKind.REGION) 1.5.dp.toPx() else 2.dp.toPx(),
+            val style = Stroke(width = if (shape.kind == ShapeKind.REGION)
+                DetailedRenderFacts.REGION_STROKE_DP.dp.toPx()
+                else DetailedRenderFacts.SHAPE_STROKE_DP.dp.toPx(),
                 pathEffect = if (shape.kind == ShapeKind.REGION && !farLike)
-                    PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 5.dp.toPx())) else null)
+                    PathEffect.dashPathEffect(floatArrayOf(DetailedRenderFacts.REGION_DASH_ON_DP.dp.toPx(),
+                        DetailedRenderFacts.REGION_DASH_OFF_DP.dp.toPx())) else null)
             if (farLike) drawRoundRect(displayColor.copy(alpha = .055f), topLeft,
                 androidx.compose.ui.geometry.Size(width, height),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()))
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                    DetailedRenderFacts.REGION_CORNER_RADIUS_DP.dp.toPx()))
             if (shape.kind == ShapeKind.ELLIPSE) {
                 drawOval(displayColor, topLeft = topLeft, size = androidx.compose.ui.geometry.Size(width, height), style = style)
             } else {
                 drawRoundRect(displayColor, topLeft = topLeft,
                     size = androidx.compose.ui.geometry.Size(width, height),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(if (shape.kind == ShapeKind.REGION) 12.dp.toPx() else 3.dp.toPx()),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(if (shape.kind == ShapeKind.REGION)
+                        DetailedRenderFacts.REGION_CORNER_RADIUS_DP.dp.toPx()
+                        else DetailedRenderFacts.RECTANGLE_CORNER_RADIUS_DP.dp.toPx()),
                     style = style)
             }
             if (shape.id in selected || shape.id in moving) {
@@ -108,14 +118,15 @@ fun SpatialElements(
             }
         }
         snapshot.arrows.filter { projection.visible(it.id) }.forEach { arrow ->
-            val (worldStart, worldEnd) = snapshot.arrowPoints(arrow, 6f / viewport.scale) ?: return@forEach
-            val worldControl = snapshot.arrowControl(arrow, 6f / viewport.scale) ?: return@forEach
-            val start = screen(worldStart)
-            val end = screen(worldEnd)
-            val control = screen(worldControl)
+            val geometry = snapshot.arrowRenderGeometry(arrow, viewport.scale, density.density,
+                renderedBounds)
+                ?: return@forEach
+            val start = screen(geometry.start)
+            val end = screen(geometry.end)
+            val control = screen(geometry.control)
             val path = Path().apply {
                 moveTo(start.x, start.y)
-                quadraticBezierTo(control.x, control.y, end.x, end.y)
+                quadraticTo(control.x, control.y, end.x, end.y)
             }
             val arrowColor = inkColor.copy(alpha = when {
                 searching && arrow.id !in selected -> .25f
@@ -123,13 +134,13 @@ fun SpatialElements(
                 projection.tier == SemanticTier.MID -> 1f - .5f * projection.midProgress
                 else -> 1f
             })
-            drawPath(path, arrowColor, style = Stroke(2.dp.toPx()))
-            val angle = atan2(end.y - control.y, end.x - control.x)
-            val size = 11.dp.toPx()
+            drawPath(path, arrowColor, style = Stroke(DetailedRenderFacts.ARROW_STROKE_DP.dp.toPx()))
             val head = Path().apply {
                 moveTo(end.x, end.y)
-                lineTo(end.x - size * cos(angle - .5f), end.y - size * sin(angle - .5f))
-                lineTo(end.x - size * cos(angle + .5f), end.y - size * sin(angle + .5f))
+                val left = screen(geometry.headLeft)
+                val right = screen(geometry.headRight)
+                lineTo(left.x, left.y)
+                lineTo(right.x, right.y)
                 close()
             }
             drawPath(head, arrowColor)
@@ -138,7 +149,7 @@ fun SpatialElements(
                     drawCircle(redColor, 7.dp.toPx(), point)
                     if (endpoint is ArrowEnd.Free) drawCircle(Color.White, 4.dp.toPx(), point)
                 }
-                val middle = screen(worldControl)
+                val middle = screen(geometry.control)
                 val diamond = Path().apply {
                     moveTo(middle.x, middle.y - 7.dp.toPx())
                     lineTo(middle.x + 7.dp.toPx(), middle.y)
@@ -211,12 +222,12 @@ fun SpatialElements(
             }
         }
     }
-    val density = LocalDensity.current
     snapshot.shapes.filter { it.kind == ShapeKind.REGION && it.name.isNotBlank() && projection.visible(it.id) }
         .forEach { shape ->
         val farLike = projection.farLikeRegion(shape.id)
-        val (x, y) = viewport.worldToScreen(shape.x + if (farLike) 0f else 8f,
-            shape.y + if (farLike) 0f else -22f)
+        val (x, y) = viewport.worldToScreen(shape.x + if (farLike) 0f
+            else DetailedRenderFacts.REGION_LABEL_LEFT_WORLD,
+            shape.y + if (farLike) 0f else -DetailedRenderFacts.REGION_LABEL_TOP_WORLD)
         val labelColor = if (shape.id == currentMatchId) redColor else if (searching && shape.id !in searchMatches)
             inkColor.copy(alpha = .25f) else inkColor
         if (farLike) {
@@ -228,8 +239,11 @@ fun SpatialElements(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.semantics { contentDescription = "囲み: ${shape.name}" })
             }
-        } else Text(shape.name, color = labelColor, fontSize = 12.sp,
+        } else Text(shape.name, color = labelColor,
+            fontSize = DetailedRenderFacts.REGION_LABEL_SIZE_SP.sp, maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }
+                .widthIn(max = with(density) { (canvasWidthPx - 40).coerceAtLeast(1).toDp() })
                 .background(Color(0xFFFCFCFB)).semantics { contentDescription = "囲み: ${shape.name}" })
     }
     snapshot.shapes.filter { projection.visible(it.id) }.forEach { shape ->
@@ -260,7 +274,8 @@ fun SpatialElements(
         })
     }
     snapshot.arrows.filter { projection.visible(it.id) }.forEach { arrow ->
-        val point = snapshot.arrowControl(arrow, 6f / viewport.scale) ?: return@forEach
+        val point = snapshot.arrowRenderGeometry(arrow, viewport.scale, density.density,
+            renderedBounds)?.control ?: return@forEach
         val (x, y) = viewport.worldToScreen(point.x, point.y)
         Box(Modifier.offset { IntOffset(x.roundToInt() - 24.dp.roundToPx(),
             y.roundToInt() - 24.dp.roundToPx()) }.size(48.dp).semantics {
@@ -292,13 +307,18 @@ fun SpatialElements(
         Handle(moveX, moveY, "移動") { onHandle(shape.id, HandleKind.MOVE) }
     }
     snapshot.arrows.filter { it.id in selected }.forEach { arrow ->
-        snapshot.arrowPoints(arrow, 6f / viewport.scale)?.let { (a, b) ->
+        snapshot.arrowRenderGeometry(arrow, viewport.scale, density.density, renderedBounds)
+            ?.let { geometry ->
+            val a = geometry.start
+            val b = geometry.end
             val (ax, ay) = viewport.worldToScreen(a.x, a.y)
             val (bx, by) = viewport.worldToScreen(b.x, b.y)
             Handle(ax, ay, "始点を接続・付け替え") { onConnect(arrow.id, HandleKind.FROM) }
             Handle(bx, by, "終点を接続・付け替え") { onConnect(arrow.id, HandleKind.TO) }
         }
-        snapshot.arrowControl(arrow, 6f / viewport.scale)?.let { c ->
+        snapshot.arrowRenderGeometry(arrow, viewport.scale, density.density, renderedBounds)
+            ?.let { geometry ->
+            val c = geometry.control
             val (x, y) = viewport.worldToScreen(c.x, c.y)
             Handle(x, y, "曲がりを変更") { onHandle(arrow.id, HandleKind.BEND) }
         }

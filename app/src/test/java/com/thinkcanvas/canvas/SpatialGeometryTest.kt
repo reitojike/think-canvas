@@ -6,6 +6,122 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SpatialGeometryTest {
+    @Test fun storedTextHasNoAuthoritativeBoundsUntilRendererResolvesIt() {
+        val text = TextElement(id = "text", text = "a long line", x = 10f, y = 20f)
+        val snapshot = BoardSnapshot(texts = listOf(text))
+        assertEquals(null, snapshot.boundsOf(text.id))
+        val resolved = WorldBounds(10f, 20f, 210f, 62f)
+        assertEquals(resolved, snapshot.boundsOf(text.id, mapOf(text.id to resolved)))
+        assertEquals(text, snapshot.texts.single())
+    }
+
+    @Test fun resolvedArrowGeometryIncludesEndpointOffsetHeadAndStroke() {
+        val arrow = ArrowElement(id = "arrow", from = ArrowEnd.Free(0f, 0f),
+            to = ArrowEnd.Free(40f, 0f))
+        val snapshot = BoardSnapshot(arrows = listOf(arrow))
+        val geometry = snapshot.arrowRenderGeometry(arrow, scale = 2f, pixelsPerDp = 3f)!!
+        assertEquals(0f, geometry.start.x, .001f)
+        assertEquals(40f, geometry.end.x, .001f)
+        assertTrue(geometry.headLeft.x < geometry.end.x)
+        assertTrue(geometry.bounds.right > geometry.end.x)
+        assertTrue(geometry.bounds.left < geometry.start.x)
+    }
+
+    @Test fun renderedInkBoundsIncludeBrushRadiusWithoutChangingStoredPointBounds() {
+        val stroke = InkStroke(startedAt = 0, endedAt = 1, inputType = InkInputType.TOUCH,
+            points = listOf(InkPoint(10f, 20f, 0)))
+        val marker = InkElement(id = "marker", kind = InkKind.MARKER, strokes = listOf(stroke))
+        assertEquals(WorldBounds(10f, 20f, 10f, 20f), marker.bounds())
+        assertEquals(WorldBounds(2.5f, 12.5f, 17.5f, 27.5f), marker.renderedBounds())
+        val pen = marker.copy(id = "pen", kind = InkKind.PEN)
+        assertEquals(WorldBounds(8.75f, 18.75f, 11.25f, 21.25f), pen.renderedBounds())
+    }
+
+    @Test fun resolvedShapeAndRegionGeometryIncludesTheirDifferentStrokeExtents() {
+        val shape = ShapeElement(id = "shape", kind = ShapeKind.RECTANGLE,
+            x = 10f, y = 20f, width = 100f, height = 60f)
+        val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+            x = 200f, y = 300f, width = 100f, height = 60f)
+        val geometry = BoardSnapshot(shapes = listOf(shape, region))
+            .resolveRenderedGeometry(emptyMap(), scale = 2f, pixelsPerDp = 3f)
+
+        assertEquals(WorldBounds(8.5f, 18.5f, 111.5f, 81.5f), geometry.bounds(shape.id))
+        assertEquals(WorldBounds(198.875f, 298.875f, 301.125f, 361.125f), geometry.bounds(region.id))
+    }
+
+    @Test fun regionMovePreviewAndCommitUseStoredTextAnchor() {
+        val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+            x = 0f, y = 0f, width = 100f, height = 100f)
+        val text = TextElement(id = "text", text = "membership", x = 20f, y = 30f)
+        val source = BoardSnapshot(texts = listOf(text), shapes = listOf(region))
+        val rendered = source.resolveRenderedGeometry(mapOf(text.id to
+            WorldBounds(20f, 30f, 320f, 60f)), scale = .5f, pixelsPerDp = 3f)
+        assertFalse("display center is outside although stored anchor is inside",
+            region.bounds().contains(rendered.bounds(text.id)!!.center))
+
+        val preview = source.translatedSelection(setOf(region.id), 12f, 8f)
+        val committed = BoardState(source.texts, source.shapes).apply {
+            moveSelection(setOf(region.id), 12f, 8f)
+        }.snapshot()
+
+        assertEquals(preview, committed)
+        assertEquals(32f, preview.texts.single().x)
+    }
+
+    @Test fun gapPreviewAndCommitUseStoredTextAnchorOnEachSide() {
+        val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+            x = 0f, y = 0f, width = 200f, height = 100f)
+        val left = TextElement(id = "left", text = "left", x = 30f, y = 20f)
+        val right = TextElement(id = "right", text = "right", x = 70f, y = 20f)
+        val source = BoardSnapshot(texts = listOf(left, right), shapes = listOf(region))
+        val rendered = source.resolveRenderedGeometry(mapOf(
+            left.id to WorldBounds(30f, 20f, 180f, 50f),
+            right.id to WorldBounds(70f, 20f, 80f, 50f)), scale = 2f, pixelsPerDp = 3f)
+        assertTrue("rendered center puts the stored-left text across the gap",
+            rendered.bounds(left.id)!!.center.x > 50f)
+
+        val preview = source.withGap(WorldPoint(50f, 30f), horizontal = true, amount = 20f)
+        val committedBoard = BoardState(source.texts, source.shapes).apply {
+            insertGap(WorldPoint(50f, 30f), horizontal = true, amount = 20f)
+        }
+
+        assertEquals(preview, committedBoard.snapshot())
+        assertEquals(30f, preview.texts.first { it.id == left.id }.x)
+        assertEquals(90f, preview.texts.first { it.id == right.id }.x)
+    }
+
+    @Test fun regionMembershipIsInvariantAcrossViewportScales() {
+        val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+            x = 0f, y = 0f, width = 100f, height = 100f)
+        val text = TextElement(id = "text", text = "scale", x = 40f, y = 30f)
+        val source = BoardSnapshot(texts = listOf(text), shapes = listOf(region))
+        val previews = listOf(.25f to 100f, 3f to 100f).mapIndexed { index, (scale, measuredWidth) ->
+            val geometry = source.resolveRenderedGeometry(mapOf(text.id to WorldBounds(
+                text.x, text.y, text.x + measuredWidth / scale, text.y + 40f / scale)), scale)
+            assertEquals(index != 0, region.bounds().contains(geometry.bounds(text.id)!!.center))
+            source.translatedSelection(setOf(region.id), 5f, 0f)
+        }
+
+        assertEquals(previews.first(), previews.last())
+        assertEquals(45f, previews.first().texts.single().x)
+    }
+
+    @Test fun regionMembershipIsInvariantAcrossMeasuredTextExtents() {
+        val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+            x = 0f, y = 0f, width = 100f, height = 100f)
+        val text = TextElement(id = "text", text = "font", x = 40f, y = 30f)
+        val source = BoardSnapshot(texts = listOf(text), shapes = listOf(region))
+        val previews = listOf(10f, 500f).mapIndexed { index, measuredWidth ->
+            val geometry = source.resolveRenderedGeometry(mapOf(text.id to WorldBounds(
+                text.x, text.y, text.x + measuredWidth, text.y + 40f)), scale = 1f)
+            assertEquals(index == 0, region.bounds().contains(geometry.bounds(text.id)!!.center))
+            source.translatedSelection(setOf(region.id), 5f, 0f)
+        }
+
+        assertEquals(previews.first(), previews.last())
+        assertEquals(45f, previews.first().texts.single().x)
+    }
+
     @Test
     fun overlappingRegionsChooseSmallestAndNestedMoveOnlyOnce() {
         val board = BoardState(listOf(TextElement(id = "text", text = "内側", x = 42f, y = 42f)))

@@ -8,6 +8,12 @@ enum class InkInputType { TOUCH, STYLUS }
 internal const val PEN_WIDTH_WORLD = 2.5f
 internal const val MARKER_WIDTH_WORLD = 15f
 
+/** Widths used by the detailed canvas and export renderers, in world units. */
+fun InkKind.renderedWidthWorld(): Float = when (this) {
+    InkKind.PEN -> PEN_WIDTH_WORLD
+    InkKind.MARKER -> MARKER_WIDTH_WORLD
+}
+
 fun InkKind.hitTolerance(scale: Float): Float {
     val radius = if (this == InkKind.MARKER) MARKER_WIDTH_WORLD / 2f else PEN_WIDTH_WORLD / 2f
     val screenSlop = if (this == InkKind.MARKER) 12f else 7f
@@ -48,6 +54,14 @@ data class InkElement(
         val points = strokes.flatMap { it.points }
         return WorldBounds(points.minOf { it.x }, points.minOf { it.y },
             points.maxOf { it.x }, points.maxOf { it.y })
+    }
+
+    /** Display extent includes the brush radius; [bounds] remains the stored point extent. */
+    fun renderedBounds(): WorldBounds {
+        val bounds = bounds()
+        val radius = kind.renderedWidthWorld() / 2f
+        return WorldBounds(bounds.left - radius, bounds.top - radius,
+            bounds.right + radius, bounds.bottom + radius)
     }
 
     fun hitStroke(point: WorldPoint, tolerance: Float): Boolean = strokes.any { stroke ->

@@ -21,6 +21,70 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SemanticNavigationTest {
+    @Test fun openingFitKeepsFarBodyOnlyExtentAfterBodyBecomesHidden() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val activity = openBoardWithContent(
+            listOf(
+                TextElement(id = "far-body-a", text = "First body", x = 120f, y = 120f),
+                TextElement(id = "far-body-b", text = "Second body", x = 2_100f, y = 1_100f),
+                TextElement(id = "far-body-c", text = "Third body", x = 4_200f, y = 2_300f),
+            ), emptyList())
+        try {
+            val zoom = awaitStableOpeningZoom(instrumentation)
+            assertTrue("FAR-scale BODY-only content stays in the opening fit: $zoom",
+                zoom.startsWith("15%") || zoom.substringBefore('%').toInt() < 50)
+            assertTrue("FAR still hides ordinary BODY text",
+                findNode(instrumentation.uiAutomation.rootInActiveWindow, "First body") == null)
+        } finally {
+            activity.finish()
+            instrumentation.waitForIdleSync()
+        }
+    }
+
+    @Test fun openingFitIncludesHiddenBodiesAlongsideShapes() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val activity = openBoardWithContent(
+            listOf(
+                TextElement(id = "mixed-body-left", text = "Left body", x = 80f, y = 120f),
+                TextElement(id = "mixed-body-right", text = "Right body", x = 4_000f, y = 1_600f),
+            ), listOf(ShapeElement(id = "mixed-shape", kind = ShapeKind.RECTANGLE,
+                x = 1_900f, y = 900f, width = 180f, height = 120f)))
+        try {
+            val zoom = awaitStableOpeningZoom(instrumentation)
+            assertTrue("hidden BODY extents keep the mixed board fitted: $zoom",
+                zoom.substringBefore('%').toInt() < 50)
+            assertTrue("FAR still hides ordinary BODY text",
+                findNode(instrumentation.uiAutomation.rootInActiveWindow, "Left body") == null)
+        } finally {
+            activity.finish()
+            instrumentation.waitForIdleSync()
+        }
+    }
+
+    @Test fun openingFitViewportSettlesAfterSemanticTierChanges() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val activity = openBoardWithContent(
+            listOf(
+                TextElement(id = "settle-body-a", text = "Alpha", x = 100f, y = 200f),
+                TextElement(id = "settle-body-b", text = "Beta", x = 1_600f, y = 1_100f),
+                TextElement(id = "settle-body-c", text = "Gamma", x = 3_600f, y = 2_000f),
+            ), emptyList())
+        try {
+            val settled = awaitStableOpeningZoom(instrumentation)
+            repeat(8) {
+                Thread.sleep(100)
+                instrumentation.waitForIdleSync()
+                assertEquals("opening-fit does not bounce between semantic tiers", settled,
+                    currentOpeningZoom(instrumentation))
+            }
+            assertTrue("iteration converges to a FAR opening fit: $settled",
+                settled.substringBefore('%').toInt() < 50)
+        } finally {
+            activity.finish()
+            instrumentation.waitForIdleSync()
+        }
+    }
+
     @Test fun zoomCycleAndSearchControlsAreAccessibleWithoutSaving() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -103,6 +167,47 @@ class SemanticNavigationTest {
         instrumentation.waitForIdleSync()
     }
 
+    private fun openBoardWithContent(texts: List<TextElement>, shapes: List<ShapeElement>): MainActivity {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val database = CanvasDatabase.open(context)
+        runBlocking {
+            if (database.canvasDao().board(1) == null) database.canvasDao().putBoard(BoardRow())
+            database.canvasDao().replaceAll(1, texts.map { TextElementRow.fromModel(1, it) },
+                shapes.map { SpatialElementRow.fromModel(1, it) }, emptyList())
+        }
+        database.close()
+        showBoardOneAtStartup(context)
+        return instrumentation.startActivitySync(
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+    }
+
+    private fun findNode(node: AccessibilityNodeInfo?, prefix: String): AccessibilityNodeInfo? {
+        if (node == null) return null
+        if (node.contentDescription?.toString()?.startsWith(prefix) == true) return node
+        for (index in 0 until node.childCount)
+            findNode(node.getChild(index), prefix)?.let { return it }
+        return null
+    }
+
+    private fun currentOpeningZoom(instrumentation: android.app.Instrumentation): String? =
+        findNode(instrumentation.uiAutomation.rootInActiveWindow, "倍率を切り替える、")
+            ?.contentDescription?.toString()?.removePrefix("倍率を切り替える、")
+
+    private fun awaitStableOpeningZoom(instrumentation: android.app.Instrumentation): String {
+        var previous: String? = null
+        var stableSamples = 0
+        repeat(60) {
+            instrumentation.waitForIdleSync()
+            val current = currentOpeningZoom(instrumentation)
+            if (current != null && current == previous) stableSamples++ else stableSamples = 0
+            if (stableSamples >= 4) return current!!
+            previous = current
+            Thread.sleep(100)
+        }
+        error("初期表示倍率が安定しません: $previous")
+    }
+
     @Test fun farRegionFitsAndSearchFindsSavedText() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -119,6 +224,7 @@ class SemanticNavigationTest {
                 listOf(SpatialElementRow.fromModel(1, region)), emptyList())
         }
         database.close()
+        showBoardOneAtStartup(context)
         val activity = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val automation = instrumentation.uiAutomation
