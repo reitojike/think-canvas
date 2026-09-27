@@ -11,6 +11,10 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import androidx.lifecycle.ViewModelProvider
 import com.thinkcanvas.BoardSessionViewModel
+import com.thinkcanvas.BoardListAction
+import com.thinkcanvas.BoardListActionOutcome
+import com.thinkcanvas.BoardListActionState
+import com.thinkcanvas.BoardListActionViewModel
 import com.thinkcanvas.MainActivity
 import com.thinkcanvas.canvas.BoardSnapshot
 import com.thinkcanvas.canvas.BoardState
@@ -19,8 +23,11 @@ import com.thinkcanvas.canvas.TextKind
 import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.CanvasDatabase
 import com.thinkcanvas.data.CanvasStore
+import com.thinkcanvas.data.StoredBoard
 import com.thinkcanvas.data.TextElementRow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -35,6 +42,51 @@ class BoardListScreenTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val automation = instrumentation.uiAutomation
+
+    private fun listActions(activity: MainActivity) =
+        ViewModelProvider(activity)[BoardListActionViewModel::class.java]
+
+    private suspend fun commitListAction(action: BoardListAction): BoardListActionOutcome {
+        val database = CanvasDatabase.open(context)
+        val dao = database.canvasDao()
+        return try {
+            when (action) {
+                is BoardListAction.Open -> {
+                    val row = requireNotNull(dao.board(action.boardId))
+                    context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+                        .edit().putLong("lastOpenedBoardId", row.id).commit()
+                    BoardListActionOutcome.OpenBoard(StoredBoard(row, BoardSnapshot()))
+                }
+                BoardListAction.Create -> {
+                    val row = dao.createBoard()
+                    context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+                        .edit().putLong("lastOpenedBoardId", row.id).commit()
+                    BoardListActionOutcome.OpenBoard(StoredBoard(row, BoardSnapshot()))
+                }
+                is BoardListAction.Rename -> {
+                    check(dao.renameBoard(action.boardId, action.name, System.currentTimeMillis()) == 1)
+                    BoardListActionOutcome.ReloadList
+                }
+                is BoardListAction.Duplicate -> {
+                    val source = requireNotNull(dao.board(action.boardId))
+                    dao.createBoard("${source.name} のコピー")
+                    BoardListActionOutcome.ReloadList
+                }
+                is BoardListAction.Delete -> {
+                    check(dao.deleteBoard(action.boardId))
+                    BoardListActionOutcome.ReloadList
+                }
+            }
+        } finally { database.close() }
+    }
+
+    private fun finishResumedActivities() {
+        instrumentation.runOnMainSync {
+            ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(Stage.RESUMED).filterIsInstance<MainActivity>()
+                .forEach { it.finish() }
+        }
+    }
 
     private fun seed(boards: List<BoardRow>) = runBlocking {
         val database = CanvasDatabase.open(context)
@@ -63,6 +115,16 @@ class BoardListScreenTest {
                 val value = if (byDescription) node.contentDescription else node.text
                 value?.toString()?.startsWith(label) == true
             }?.let { return it }
+            Thread.sleep(100)
+        }
+        error("表示が見つかりません: $label")
+    }
+
+    private fun waitForExact(label: String): AccessibilityNodeInfo {
+        repeat(40) {
+            instrumentation.waitForIdleSync()
+            find(automation.rootInActiveWindow) { it.text?.toString() == label }
+                ?.let { return it }
             Thread.sleep(100)
         }
         error("表示が見つかりません: $label")
@@ -229,6 +291,209 @@ class BoardListScreenTest {
                     .forEach { it.finish() }
             }
         }
+    }
+
+    @Test fun openingBoardCompletesAfterActivityRecreationWithoutStartingTwice() {
+        seed(listOf(BoardRow(1, "開くA", 10), BoardRow(2, "開くB", 20)))
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val vm = listActions(activity as MainActivity)
+        val started = CompletableDeferred<BoardListAction>()
+        val release = CompletableDeferred<Unit>()
+        var calls = 0
+        vm.execute = { action ->
+            calls++
+            started.complete(action)
+            release.await()
+            commitListAction(action)
+        }
+        try {
+            act(waitFor("開くA、", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            runBlocking { withTimeout(5_000) { assertEquals(BoardListAction.Open(1), started.await()) } }
+            instrumentation.runOnMainSync { activity.recreate() }
+            assertFalse(vm.start(BoardListAction.Open(1)))
+            release.complete(Unit)
+            waitFor("‹ 開くA")
+            assertEquals(1, calls)
+            assertEquals(1L, context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+                .getLong("lastOpenedBoardId", -1))
+        } finally { finishResumedActivities() }
+    }
+
+    @Test fun createCompletesOnceAfterActivityRecreation() {
+        seed(listOf(BoardRow(1, "既存", 10)))
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val vm = listActions(activity as MainActivity)
+        val started = CompletableDeferred<BoardListAction>()
+        val release = CompletableDeferred<Unit>()
+        var calls = 0
+        var createdId = -1L
+        vm.execute = { action ->
+            calls++
+            started.complete(action)
+            release.await()
+            val result = commitListAction(action)
+            if (result is BoardListActionOutcome.OpenBoard) createdId = result.board.details.id
+            result
+        }
+        try {
+            act(waitFor("新しいボード", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            runBlocking { withTimeout(5_000) { assertEquals(BoardListAction.Create, started.await()) } }
+            instrumentation.runOnMainSync { activity.recreate() }
+            assertFalse(vm.start(BoardListAction.Create))
+            release.complete(Unit)
+            waitFor("‹ 無題のボード")
+            val database = CanvasDatabase.open(context)
+            assertEquals(2, runBlocking { database.canvasDao().boards().size })
+            database.close()
+            assertEquals(createdId, context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+                .getLong("lastOpenedBoardId", -1))
+            assertEquals(1, calls)
+        } finally { finishResumedActivities() }
+    }
+
+    @Test fun runningCreateRemainsTheOnlyAllowedListActionAfterRecreation() {
+        seed(emptyList())
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val vm = listActions(activity as MainActivity)
+        val started = CompletableDeferred<BoardListAction>()
+        val release = CompletableDeferred<Unit>()
+        vm.execute = { action ->
+            started.complete(action)
+            release.await()
+            commitListAction(action)
+        }
+        try {
+            act(waitFor("新しいボード", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            runBlocking { withTimeout(5_000) { started.await() } }
+            instrumentation.runOnMainSync { activity.recreate() }
+            assertTrue(vm.state.value is BoardListActionState.Running)
+            assertFalse(vm.start(BoardListAction.Create))
+            release.complete(Unit)
+            waitFor("‹ 無題のボード")
+            val database = CanvasDatabase.open(context)
+            assertEquals(1, runBlocking { database.canvasDao().boards().size })
+            database.close()
+        } finally { finishResumedActivities() }
+    }
+
+    @Test fun renameReloadsTheListAfterActivityRecreation() {
+        seed(listOf(BoardRow(11, "変更前", 10)))
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val vm = listActions(activity as MainActivity)
+        val started = CompletableDeferred<BoardListAction>()
+        val release = CompletableDeferred<Unit>()
+        var calls = 0
+        vm.execute = { action ->
+            calls++
+            started.complete(action)
+            release.await()
+            commitListAction(action)
+        }
+        try {
+            act(waitFor("変更前、", byDescription = true), AccessibilityNodeInfo.ACTION_LONG_CLICK)
+            act(waitFor("名前を変える"), AccessibilityNodeInfo.ACTION_CLICK)
+            val args = android.os.Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "変更後")
+            }
+            assertTrue(waitForEditable().performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args))
+            act(waitFor("保存"), AccessibilityNodeInfo.ACTION_CLICK)
+            runBlocking { withTimeout(5_000) {
+                assertEquals(BoardListAction.Rename(11, "変更後"), started.await())
+            } }
+            instrumentation.runOnMainSync { activity.recreate() }
+            assertFalse(vm.start(BoardListAction.Rename(11, "変更後")))
+            release.complete(Unit)
+            waitFor("変更後、", byDescription = true)
+            assertEquals(null, find(automation.rootInActiveWindow) {
+                it.contentDescription?.toString()?.startsWith("変更前、") == true
+            })
+            assertEquals(1, calls)
+        } finally { finishResumedActivities() }
+    }
+
+    @Test fun duplicateReloadsExactlyOneCopyAfterActivityRecreation() {
+        seed(listOf(BoardRow(12, "複製元", 10)))
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val vm = listActions(activity as MainActivity)
+        val started = CompletableDeferred<BoardListAction>()
+        val release = CompletableDeferred<Unit>()
+        var calls = 0
+        vm.execute = { action ->
+            calls++
+            started.complete(action)
+            release.await()
+            commitListAction(action)
+        }
+        try {
+            act(waitFor("複製元、", byDescription = true), AccessibilityNodeInfo.ACTION_LONG_CLICK)
+            act(waitForExact("複製"), AccessibilityNodeInfo.ACTION_CLICK)
+            runBlocking { withTimeout(5_000) { assertEquals(BoardListAction.Duplicate(12), started.await()) } }
+            instrumentation.runOnMainSync { activity.recreate() }
+            assertFalse(vm.start(BoardListAction.Duplicate(12)))
+            release.complete(Unit)
+            waitFor("複製元 のコピー、", byDescription = true)
+            val database = CanvasDatabase.open(context)
+            assertEquals(2, runBlocking { database.canvasDao().boards().size })
+            database.close()
+            assertEquals(1, calls)
+        } finally { finishResumedActivities() }
+    }
+
+    @Test fun deleteDoesNotRestoreTheDeletedBoardAfterActivityRecreation() {
+        seed(listOf(BoardRow(13, "削除対象", 10)))
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val vm = listActions(activity as MainActivity)
+        val started = CompletableDeferred<BoardListAction>()
+        val release = CompletableDeferred<Unit>()
+        var calls = 0
+        vm.execute = { action ->
+            calls++
+            started.complete(action)
+            release.await()
+            commitListAction(action)
+        }
+        try {
+            act(waitFor("削除対象、", byDescription = true), AccessibilityNodeInfo.ACTION_LONG_CLICK)
+            act(waitForExact("削除"), AccessibilityNodeInfo.ACTION_CLICK)
+            act(waitForExact("削除"), AccessibilityNodeInfo.ACTION_CLICK)
+            runBlocking { withTimeout(5_000) { assertEquals(BoardListAction.Delete(13), started.await()) } }
+            instrumentation.runOnMainSync { activity.recreate() }
+            assertFalse(vm.start(BoardListAction.Delete(13)))
+            release.complete(Unit)
+            waitFor("ボードはまだありません")
+            val database = CanvasDatabase.open(context)
+            assertEquals(null, runBlocking { database.canvasDao().board(13) })
+            database.close()
+            assertEquals(1, calls)
+        } finally { finishResumedActivities() }
+    }
+
+    @Test fun actionFailureIsShownAfterActivityRecreation() {
+        seed(listOf(BoardRow(14, "失敗する操作", 10)))
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val vm = listActions(activity as MainActivity)
+        val started = CompletableDeferred<BoardListAction>()
+        val release = CompletableDeferred<Unit>()
+        vm.execute = { action ->
+            started.complete(action)
+            release.await()
+            error("再作成後も残る失敗")
+        }
+        try {
+            act(waitFor("失敗する操作、", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            runBlocking { withTimeout(5_000) { started.await() } }
+            instrumentation.runOnMainSync { activity.recreate() }
+            release.complete(Unit)
+            waitFor("再作成後も残る失敗")
+            assertTrue(vm.state.value is BoardListActionState.Failed)
+        } finally { finishResumedActivities() }
     }
 
     @Test fun boardUndoHistorySurvivesReopenAndActivityRecreation() {

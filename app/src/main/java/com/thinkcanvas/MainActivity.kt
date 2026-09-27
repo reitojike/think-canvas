@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.key
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,12 +76,13 @@ class MainActivity : ComponentActivity() {
         )
         val store = CanvasStore.get(this)
         val boardSessions = ViewModelProvider(this)[BoardSessionViewModel::class.java]
+        val boardListActions = ViewModelProvider(this)[BoardListActionViewModel::class.java]
         val page = mutableStateOf<Page>(Page.Loading)
         val cards = mutableStateOf<List<StoredBoard>>(emptyList())
         val guideVisible = mutableStateOf(false)
         val shareDialog = mutableStateOf<ShareDialogState?>(null)
         val shareBusy = mutableStateOf(false)
-        val operationPending = mutableStateOf(false)
+        val transientPending = mutableStateOf(false)
         val errorMessage = mutableStateOf<String?>(null)
         var shareRequestId = 0L
         val pendingDocument = File(cacheDir, "pending-board-image.png")
@@ -132,9 +134,9 @@ class MainActivity : ComponentActivity() {
             page.value = Page.List
         }
 
-        fun perform(action: suspend () -> Unit) {
-            if (operationPending.value) return
-            operationPending.value = true
+        fun performTransient(action: suspend () -> Unit) {
+            if (transientPending.value) return
+            transientPending.value = true
             lifecycleScope.launch {
                 try {
                     action()
@@ -143,7 +145,7 @@ class MainActivity : ComponentActivity() {
                 } catch (error: Exception) {
                     errorMessage.value = error.message ?: "操作を完了できません"
                 } finally {
-                    operationPending.value = false
+                    transientPending.value = false
                 }
             }
         }
@@ -227,6 +229,29 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
+            val listActionState = boardListActions.state.value
+            LaunchedEffect(listActionState) {
+                when (val current = listActionState) {
+                    is BoardListActionState.Running -> page.value = Page.Loading
+                    is BoardListActionState.Completed -> when (val outcome = current.outcome) {
+                        is BoardListActionOutcome.OpenBoard -> {
+                            openBoard(outcome.board)
+                            boardListActions.consume(current)
+                        }
+                        BoardListActionOutcome.ReloadList -> try {
+                            if (current.action is BoardListAction.Delete)
+                                boardSessions.discard(current.action.boardId)
+                            showList()
+                            boardListActions.consume(current)
+                        } catch (error: Exception) {
+                            boardListActions.failContinuation(current,
+                                error.message ?: "一覧を読み込めません")
+                        }
+                    }
+                    is BoardListActionState.Failed -> errorMessage.value = current.message
+                    BoardListActionState.Idle -> Unit
+                }
+            }
             MaterialTheme(colorScheme = lightColorScheme(
                 primary = Color(0xFF23211E),
                 secondary = Color(0xFFC54B32),
@@ -240,24 +265,16 @@ class MainActivity : ComponentActivity() {
                         Text(stringResource(R.string.loading_board))
                     }
                     Page.List -> BoardListScreen(cards.value,
-                        onOpen = { id -> perform {
-                            openBoard(store.open(id) ?: error("ボードが見つかりません"))
-                        } },
-                        onCreate = { perform { openBoard(store.create()) } },
-                        onRename = { id, name -> perform {
-                            check(store.rename(id, name)) { "ボードが見つかりません" }
-                            showList()
-                        } },
-                        onDuplicate = { id -> perform {
-                            store.duplicate(id) ?: error("ボードが見つかりません")
-                            showList()
-                        } },
-                        onDelete = { id -> perform {
-                            check(store.delete(id)) { "ボードが見つかりません" }
-                            boardSessions.discard(id)
-                            showList()
-                        } },
-                        onShare = { id -> perform {
+                        onOpen = { id -> boardListActions.start(BoardListAction.Open(id)) },
+                        onCreate = { boardListActions.start(BoardListAction.Create) },
+                        onRename = { id, name ->
+                            boardListActions.start(BoardListAction.Rename(id, name))
+                        },
+                        onDuplicate = { id ->
+                            boardListActions.start(BoardListAction.Duplicate(id))
+                        },
+                        onDelete = { id -> boardListActions.start(BoardListAction.Delete(id)) },
+                        onShare = { id -> performTransient {
                             val stored = store.savedBoard(id) ?: error("ボードが見つかりません")
                             showShare(stored.details.name, stored.snapshot, shareTypography)
                         } },
@@ -267,10 +284,10 @@ class MainActivity : ComponentActivity() {
                         CanvasScreen(current.state,
                             boardName = current.name.ifBlank { "無題のボード" },
                             onOpenList = {
-                                if (!operationPending.value) {
+                                if (!transientPending.value && listActionState == BoardListActionState.Idle) {
                                     navigationTargetIsList = true
                                     page.value = Page.Loading
-                                    perform {
+                                    performTransient {
                                         try { showList() }
                                         catch (error: Exception) {
                                             navigationTargetIsList = false
@@ -280,7 +297,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             },
-                            onShareSelection = { ids -> perform {
+                            onShareSelection = { ids -> performTransient {
                                 val stored = store.savedBoard(current.id)
                                     ?: error("ボードが見つかりません")
                                 showShare(stored.details.name, stored.snapshot, shareTypography, ids)
@@ -312,18 +329,26 @@ class MainActivity : ComponentActivity() {
                     AlertDialog(onDismissRequest = { errorMessage.value = null },
                         title = { Text("操作を完了できません") },
                         text = { Text(message) },
-                        confirmButton = { TextButton(onClick = { errorMessage.value = null }) {
+                        confirmButton = { TextButton(onClick = {
+                            errorMessage.value = null
+                            (listActionState as? BoardListActionState.Failed)?.let { failed ->
+                                boardListActions.acknowledgeFailure(failed)
+                                performTransient { showList() }
+                            }
+                        }) {
                             Text("閉じる")
                         } })
                 }
             }
         }
 
-        perform {
-            if (navigationTargetIsList) showList()
-            else {
-                val restored = store.restore()
-                if (restored == null) showList() else openBoard(restored)
+        if (boardListActions.state.value == BoardListActionState.Idle) {
+            performTransient {
+                if (navigationTargetIsList) showList()
+                else {
+                    val restored = store.restore()
+                    if (restored == null) showList() else openBoard(restored)
+                }
             }
         }
     }
