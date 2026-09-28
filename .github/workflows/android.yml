@@ -81,6 +81,8 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu software -feature -Vulkan -camera-back none -camera-front none
           script: |
             for attempt in $(seq 1 60); do value="$(adb shell settings get system font_scale 2>&1 | tr -d '\r' | xargs)"; if printf '%s\n' "$value" | grep -Eq '^[0-9]+([.][0-9]+)?$'; then echo "Android settings provider is ready: font_scale=$value"; break; fi; if [ "$attempt" -eq 60 ]; then echo "Android settings provider did not become ready within 120 seconds; last_output=$value"; exit 1; fi; sleep 2; done
+            ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
+            consecutive=0; for attempt in $(seq 1 60); do output="$(adb shell pm path android 2>&1 | tr -d '\r')"; normalized="$(printf '%s\n' "$output" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sed '/^$/d')"; if [ -n "$normalized" ] && printf '%s\n' "$normalized" | awk 'BEGIN { ok=1; found=0 } { if ($0 !~ /^package:.+/) ok=0; else found=1 } END { exit !(ok && found) }'; then consecutive=$((consecutive + 1)); echo "Package service probe valid ($consecutive/2): $normalized"; if [ "$consecutive" -ge 2 ]; then break; fi; else echo "Package service probe not ready (attempt $attempt): $output"; consecutive=0; fi; if [ "$attempt" -eq 60 ]; then echo "Package service did not become ready within 120 seconds"; exit 1; fi; sleep 2; done
             rm -rf app/build/outputs/androidTest-results/connected/ app/build/reports/androidTests/connected/
             ./gradlew :app:connectedDebugAndroidTest --no-daemon
       - name: Instrumentation result integrity gate
