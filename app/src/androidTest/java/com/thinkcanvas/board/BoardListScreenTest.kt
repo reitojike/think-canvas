@@ -971,6 +971,154 @@ class BoardListScreenTest {
         } finally { activity.finish() }
     }
 
+    @Test fun newTextImmediateSaveClosesOnceAndPersistsOneElementAfterRepeatedDone() {
+        seed(listOf(BoardRow(1, "即時保存", 10)))
+        assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+            .edit().putLong("lastOpenedBoardId", 1).commit())
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            waitFor("‹ 即時保存")
+            val sessions = ViewModelProvider(activity as MainActivity)[BoardSessionViewModel::class.java]
+            sessions.setSaveOperation { boardId, snapshot -> CanvasStore.get(context).save(boardId, snapshot) }
+
+            val width = context.resources.displayMetrics.widthPixels.toFloat()
+            val height = context.resources.displayMetrics.heightPixels.toFloat()
+            val downTime = SystemClock.uptimeMillis()
+            for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action,
+                    width * .5f, height * .5f, 0)
+                assertTrue(automation.injectInputEvent(event, true))
+                event.recycle()
+            }
+            waitFor("新しいテキスト", byDescription = true)
+            val textField = waitForEditable()
+            val args = android.os.Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "一度だけ保存")
+            }
+            assertTrue(textField.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args))
+            val done = waitForExact("完了")
+            act(done, AccessibilityNodeInfo.ACTION_CLICK)
+            done.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+
+            waitFor("一度だけ保存", byDescription = true)
+            assertEquals(null, find(automation.rootInActiveWindow) {
+                it.contentDescription?.toString() == "新しいテキスト"
+            })
+            val database = CanvasDatabase.open(context)
+            try {
+                repeat(40) {
+                    if (runBlocking { database.canvasDao().elements(1L) }.size == 1) return@repeat
+                    Thread.sleep(100)
+                }
+                val committed = runBlocking { database.canvasDao().elements(1L) }
+                assertEquals(1, committed.size)
+                assertEquals("一度だけ保存", committed.single().text)
+                assertTrue(sessions.stateFor(1L, BoardSnapshot()).elements.size == 1)
+            } finally { database.close() }
+        } finally { activity.finish() }
+    }
+
+    @Test fun existingTextImmediateSaveClosesEditor() {
+        seed(listOf(BoardRow(1, "既存編集", 10)))
+        val database = CanvasDatabase.open(context)
+        runBlocking {
+            database.canvasDao().replaceAll(1L, listOf(TextElementRow(
+                id = "existing-draft", boardId = 1L, text = "編集前", kind = "BODY",
+                color = "INK", x = 0f, y = 0f,
+            )), emptyList(), emptyList())
+        }
+        database.close()
+        assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+            .edit().putLong("lastOpenedBoardId", 1).commit())
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            waitFor("‹ 既存編集")
+            val sessions = ViewModelProvider(activity as MainActivity)[BoardSessionViewModel::class.java]
+            sessions.setSaveOperation { boardId, snapshot -> CanvasStore.get(context).save(boardId, snapshot) }
+            act(waitFor("編集前", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            instrumentation.waitForIdleSync()
+            act(waitFor("編集前", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            val textField = waitForEditable()
+            val args = android.os.Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "編集後")
+            }
+            assertTrue(textField.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args))
+            act(waitForExact("完了"), AccessibilityNodeInfo.ACTION_CLICK)
+
+            waitFor("編集後", byDescription = true)
+            assertEquals(null, find(automation.rootInActiveWindow) {
+                it.contentDescription?.toString() == "テキストを編集"
+            })
+            val saved = CanvasDatabase.open(context)
+            try {
+                repeat(40) {
+                    if (runBlocking { saved.canvasDao().elements(1L).single().text } == "編集後") return@repeat
+                    Thread.sleep(100)
+                }
+                assertEquals("編集後", runBlocking { saved.canvasDao().elements(1L).single().text })
+            } finally { saved.close() }
+        } finally { activity.finish() }
+    }
+
+    @Test fun failedDraftSaveKeepsContinuationUntilRetrySucceeds() {
+        seed(listOf(BoardRow(1, "再試行編集", 10)))
+        assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+            .edit().putLong("lastOpenedBoardId", 1).commit())
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            waitFor("‹ 再試行編集")
+            val sessions = ViewModelProvider(activity as MainActivity)[BoardSessionViewModel::class.java]
+            val failure = CompletableDeferred<Unit>()
+            var calls = 0
+            sessions.setSaveOperation { boardId, snapshot ->
+                if (calls++ == 0) failure else CanvasStore.get(context).save(boardId, snapshot)
+            }
+
+            val width = context.resources.displayMetrics.widthPixels.toFloat()
+            val height = context.resources.displayMetrics.heightPixels.toFloat()
+            val downTime = SystemClock.uptimeMillis()
+            for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action,
+                    width * .5f, height * .5f, 0)
+                assertTrue(automation.injectInputEvent(event, true))
+                event.recycle()
+            }
+            waitFor("新しいテキスト", byDescription = true)
+            val args = android.os.Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "失敗後に保存")
+            }
+            assertTrue(waitForEditable().performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args))
+            act(waitForExact("完了"), AccessibilityNodeInfo.ACTION_CLICK)
+            repeat(40) {
+                if (sessions.saveStateFor(1L, BoardSnapshot()).value is com.thinkcanvas.BoardSaveState.Running)
+                    return@repeat
+                Thread.sleep(100)
+            }
+            failure.completeExceptionally(IllegalStateException("expected first save failure"))
+            waitForExact("再試行")
+            waitFor("新しいテキスト", byDescription = true)
+            assertTrue(sessions.saveStateFor(1L, BoardSnapshot()).value is com.thinkcanvas.BoardSaveState.Failed)
+            act(waitForExact("再試行"), AccessibilityNodeInfo.ACTION_CLICK)
+
+            waitFor("失敗後に保存", byDescription = true)
+            assertEquals(null, find(automation.rootInActiveWindow) {
+                it.contentDescription?.toString() == "新しいテキスト"
+            })
+            val database = CanvasDatabase.open(context)
+            try {
+                repeat(40) {
+                    if (runBlocking { database.canvasDao().elements(1L).size } == 1) return@repeat
+                    Thread.sleep(100)
+                }
+                assertEquals("失敗後に保存", runBlocking { database.canvasDao().elements(1L).single().text })
+                assertEquals(2, calls)
+            } finally { database.close() }
+        } finally { activity.finish() }
+    }
+
     @Test fun regionNameEditBlocksSystemBackAndBoardListNavigation() {
         seed(listOf(BoardRow(1, "囲み編集中", 10)), listOf(SpatialElementRow(
             id = "region-edit", boardId = 1, kind = ShapeKind.REGION.name,

@@ -101,6 +101,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.StateFlow
 import com.thinkcanvas.BoardSaveState
+import com.thinkcanvas.BoardSaveAcknowledgement
 
 private val paper = Color(0xFFFCFCFB)
 private val ink = Color(0xFF23211E)
@@ -123,7 +124,7 @@ fun CanvasScreen(
     board: BoardState,
     boardName: String,
     saveState: StateFlow<BoardSaveState>,
-    onRequestSave: (BoardSnapshot) -> Unit,
+    onRequestSave: (BoardSnapshot) -> BoardSaveAcknowledgement?,
     onRetrySave: () -> Unit,
     onOpenList: () -> Unit,
 ) {
@@ -147,11 +148,10 @@ fun CanvasScreen(
     var movePreview by remember { mutableStateOf<Pair<Set<String>, WorldPoint>?>(null) }
     var handlePreview by remember { mutableStateOf<BoardSnapshot?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
-    var finishDraftAfterSave by remember { mutableStateOf(false) }
+    var pendingDraftAcknowledgement by remember { mutableStateOf<BoardSaveAcknowledgement?>(null) }
     val currentSaveState by saveState.collectAsState()
     val saving = currentSaveState is BoardSaveState.Running
     val saveFailed = currentSaveState is BoardSaveState.Failed
-    var observedSaving by remember { mutableStateOf(false) }
     var pendingNewElementId by remember { mutableStateOf<String?>(null) }
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -300,19 +300,14 @@ fun CanvasScreen(
     val latestDraft = rememberUpdatedState(draft)
     val latestSaveBlocked = rememberUpdatedState(saving || saveFailed)
 
-    LaunchedEffect(currentSaveState) {
-        when (currentSaveState) {
-            is BoardSaveState.Running -> observedSaving = true
-            BoardSaveState.Idle -> if (observedSaving) {
-                if (finishDraftAfterSave) {
-                    draft = null
-                    keyboard?.hide()
-                }
-                pendingNewElementId = null
-                finishDraftAfterSave = false
-                observedSaving = false
-            }
-            is BoardSaveState.Failed -> observedSaving = false
+    LaunchedEffect(pendingDraftAcknowledgement) {
+        val acknowledgement = pendingDraftAcknowledgement ?: return@LaunchedEffect
+        acknowledgement.await()
+        if (pendingDraftAcknowledgement === acknowledgement) {
+            draft = null
+            keyboard?.hide()
+            pendingNewElementId = null
+            pendingDraftAcknowledgement = null
         }
     }
 
@@ -368,8 +363,9 @@ fun CanvasScreen(
     val regionNameLabel = stringResource(R.string.region_name)
 
     fun saveSnapshot(closeDraft: Boolean = false) {
-        if (closeDraft) finishDraftAfterSave = true
-        onRequestSave(board.snapshot())
+        if (closeDraft && pendingDraftAcknowledgement != null) return
+        val acknowledgement = onRequestSave(board.snapshot())
+        if (closeDraft) pendingDraftAcknowledgement = acknowledgement
     }
 
     BackHandler {
@@ -540,6 +536,10 @@ fun CanvasScreen(
     }
 
     fun commitDraft() {
+        if (pendingDraftAcknowledgement != null) {
+            if (saveFailed) onRetrySave()
+            return
+        }
         if (saving) return
         if (saveFailed) {
             onRetrySave()
