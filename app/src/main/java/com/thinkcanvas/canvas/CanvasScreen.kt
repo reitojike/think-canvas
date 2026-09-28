@@ -1285,12 +1285,6 @@ fun CanvasScreen(
             )
         }
 
-        if (board.elements.isEmpty() && board.shapes.isEmpty() && board.arrows.isEmpty() &&
-            board.ink.isEmpty() && draft == null) {
-            Text("どこでもタップして書く", color = muted.copy(alpha = .55f), fontSize = 13.sp,
-                modifier = Modifier.align(Alignment.Center))
-        }
-
         InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.PEN,
             viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
             onSelect = { id -> selectedIds = setOf(id); selectedId = null },

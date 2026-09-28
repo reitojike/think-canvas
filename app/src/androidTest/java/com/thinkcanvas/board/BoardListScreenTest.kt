@@ -239,6 +239,30 @@ class BoardListScreenTest {
         } finally { activity.finish() }
     }
 
+    @Test fun emptyBoardShowsExactlyOneCanonicalAccessibleHint() {
+        seed(listOf(BoardRow(1, "空のボード", 10)))
+        assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+            .edit().putLong("lastOpenedBoardId", 1).commit())
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            waitFor("‹ 空のボード")
+            val canonicalHint = context.getString(com.thinkcanvas.R.string.empty_hint)
+            val matchingVisibleHints = mutableListOf<AccessibilityNodeInfo>()
+            fun collectVisibleHints(node: AccessibilityNodeInfo?) {
+                if (node == null) return
+                if (node.isVisibleToUser && node.text?.toString() == canonicalHint) {
+                    matchingVisibleHints += node
+                }
+                for (index in 0 until node.childCount) collectVisibleHints(node.getChild(index))
+            }
+            collectVisibleHints(automation.rootInActiveWindow)
+            assertEquals("canonical resource-backed hint is accessible exactly once",
+                1, matchingVisibleHints.size)
+            assertEquals(canonicalHint, matchingVisibleHints.single().text.toString())
+        } finally { activity.finish() }
+    }
+
     @Test fun deletionRequiresConfirmationAndKeepsOtherBoard() {
         seed(listOf(BoardRow(1, "残す", 10), BoardRow(42, "消す", 20)))
         val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
