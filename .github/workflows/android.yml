@@ -80,6 +80,17 @@ jobs:
           disk-size: 8192M
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu software -feature -Vulkan -camera-back none -camera-front none
           script: |
+            for attempt in $(seq 1 60); do
+              if adb shell settings get system font_scale >/dev/null 2>&1; then
+                echo "Android settings provider is ready"
+                break
+              fi
+              if [ "$attempt" -eq 60 ]; then
+                echo "Android settings provider did not become ready within 120 seconds"
+                exit 1
+              fi
+              sleep 2
+            done
             rm -rf app/build/outputs/androidTest-results/connected/ app/build/reports/androidTests/connected/
             ./gradlew :app:connectedDebugAndroidTest --no-daemon
       - name: Instrumentation result integrity gate
