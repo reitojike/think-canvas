@@ -1175,6 +1175,105 @@ class BoardListScreenTest {
         } finally { activity.finish() }
     }
 
+    @Test fun listShareLoadingRejectsOpenCreateMutationAndSecondShare() {
+        seed(listOf(BoardRow(1, "共有元", 10), BoardRow(2, "開けない別案", 5)))
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val vm = listActions(activity as MainActivity)
+        val (queueStarted, releaseQueue) = blockCanvasStoreQueue()
+        val database = CanvasDatabase.open(context)
+        try {
+            runBlocking { withTimeout(5_000) { queueStarted.await() } }
+            act(waitFor("共有元、", byDescription = true), AccessibilityNodeInfo.ACTION_LONG_CLICK)
+            val shareButton = waitFor("画像で共有")
+            instrumentation.runOnMainSync {
+                assertTrue(shareButton.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                assertTrue(shareButton.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            }
+            Thread.sleep(200)
+            assertEquals(BoardListActionState.Idle, vm.state.value)
+
+            act(waitFor("開けない別案、", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            act(waitFor("新しいボード", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            act(waitFor("共有元、", byDescription = true), AccessibilityNodeInfo.ACTION_LONG_CLICK)
+            act(waitForExact("複製"), AccessibilityNodeInfo.ACTION_CLICK)
+            assertEquals(BoardListActionState.Idle, vm.state.value)
+            assertEquals(2, runBlocking { database.canvasDao().boards().size })
+            assertEquals(-1L, context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+                .getLong("lastOpenedBoardId", -1))
+
+            releaseQueue.complete(Unit)
+            waitFor("共有元 の共有画像プレビュー", byDescription = true)
+            assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                .GLOBAL_ACTION_BACK))
+            act(waitFor("開けない別案、", byDescription = true), AccessibilityNodeInfo.ACTION_CLICK)
+            waitFor("‹ 開けない別案")
+        } finally {
+            releaseQueue.complete(Unit)
+            activity.finish()
+            database.close()
+        }
+    }
+
+    @Test fun listShareOffersPreviewAndCopyWithoutChangingSavedContent() {
+        seed(listOf(BoardRow(1, "共有する案", 10), BoardRow(2, "別の案", 5)))
+        val database = CanvasDatabase.open(context)
+        val text = TextElementRow(id = "saved", boardId = 1, text = "共有する内容",
+            kind = "BODY", color = "INK", x = 20f, y = 30f)
+        runBlocking { database.canvasDao().replaceAll(1, listOf(text), emptyList(), emptyList()) }
+        val before = runBlocking { database.canvasDao().board(1) }
+        val otherBefore = runBlocking { database.canvasDao().board(2) }
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            act(waitFor("共有する案、", byDescription = true), AccessibilityNodeInfo.ACTION_LONG_CLICK)
+            act(waitFor("画像で共有"), AccessibilityNodeInfo.ACTION_CLICK)
+            waitFor("共有する案 の共有画像プレビュー", byDescription = true)
+            waitFor("画像を保存")
+            waitFor("ほかのアプリ")
+            act(waitFor("コピー"), AccessibilityNodeInfo.ACTION_CLICK)
+            waitFor("共有する案、", byDescription = true)
+            act(waitFor("共有する案、", byDescription = true), AccessibilityNodeInfo.ACTION_LONG_CLICK)
+            act(waitFor("画像で共有"), AccessibilityNodeInfo.ACTION_CLICK)
+            waitFor("共有する案 の共有画像プレビュー", byDescription = true)
+            assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                .GLOBAL_ACTION_BACK))
+            waitFor("共有する案、", byDescription = true)
+            assertEquals(before, runBlocking { database.canvasDao().board(1) })
+            assertEquals(otherBefore, runBlocking { database.canvasDao().board(2) })
+            assertEquals(listOf(text), runBlocking { database.canvasDao().elements(1) })
+        } finally { activity.finish(); database.close() }
+    }
+
+    @Test fun selectedTextOpensOnlyItsOwnImagePreview() {
+        seed(listOf(BoardRow(1, "選択するボード", 10)))
+        val database = CanvasDatabase.open(context)
+        val selected = TextElementRow(id = "selected", boardId = 1, text = "選択する対象",
+            kind = "BODY", color = "INK", x = 10f, y = 10f)
+        val outside = TextElementRow(id = "outside", boardId = 1, text = "選択しない対象",
+            kind = "BODY", color = "INK", x = 400f, y = 400f)
+        runBlocking { database.canvasDao().replaceAll(1, listOf(selected, outside),
+            emptyList(), emptyList()) }
+        assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+            .edit().putLong("lastOpenedBoardId", 1).commit())
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            val node = waitFor("選択する対象", byDescription = true)
+            val action = node.actionList.firstOrNull { it.label?.toString() == "選択に追加" }
+                ?: error("選択操作が見つかりません")
+            assertTrue(node.performAction(action.id))
+            act(waitFor("選択範囲を画像で共有", byDescription = true),
+                AccessibilityNodeInfo.ACTION_CLICK)
+            waitFor("選択するボード の共有画像プレビュー", byDescription = true)
+            waitFor("画像を保存")
+            assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                .GLOBAL_ACTION_BACK))
+            assertEquals(listOf(selected, outside), runBlocking { database.canvasDao().elements(1) })
+        } finally { activity.finish(); database.close() }
+    }
+
+
     @Test fun renameAndDuplicateKeepIndependentContent() {
         seed(listOf(BoardRow(1, "元", 10)))
         val database = CanvasDatabase.open(context)

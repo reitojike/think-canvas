@@ -127,6 +127,7 @@ fun CanvasScreen(
     onRequestSave: (BoardSnapshot) -> BoardSaveAcknowledgement?,
     onRetrySave: () -> Unit,
     onOpenList: () -> Unit,
+    onShareSelection: (Set<String>) -> Unit,
 ) {
     var viewport by remember { mutableStateOf(Viewport()) }
     var initialFitApplied by remember(board) { mutableStateOf(false) }
@@ -1501,6 +1502,25 @@ fun CanvasScreen(
                 Box(Modifier.align(Alignment.TopCenter).padding(top = 62.dp)
                     .onGloballyPositioned { chromeBounds["guidance"] = it.boundsInParent() }) {
                     Guidance(message)
+                }
+            }
+
+            if (selectedIds.isNotEmpty() && draft == null && regionNameId == null) {
+                Row(Modifier.align(Alignment.TopCenter)
+                    .padding(top = if (message == null) 62.dp else 100.dp)
+                    .background(Color.White, RoundedCornerShape(10.dp))
+                    .pillBorder(10f).padding(6.dp)
+                    .onGloballyPositioned { chromeBounds["shareSelection"] = it.boundsInParent() }) {
+                    val enabled = !saving && !saveFailed
+                    Box(Modifier.height(48.dp).clip(RoundedCornerShape(8.dp))
+                        .clickable(enabled = enabled) { onShareSelection(selectedIds.toSet()) }
+                        .semantics {
+                            contentDescription = "選択範囲を画像で共有"
+                            if (!enabled) disabled()
+                        }.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+                        Text("選択範囲を画像で共有", color = if (enabled) ink else muted,
+                            fontSize = 13.sp)
+                    }
                 }
             }
 
