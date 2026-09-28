@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
@@ -162,7 +163,7 @@ fun BoardListScreen(
                 listOf("名前を変える", "複製", "画像で共有", "削除", "キャンセル").forEach { action ->
                     Text(action, color = if (action == "削除") vermilion else ink,
                         fontSize = 15.sp, modifier = Modifier.fillMaxWidth().height(52.dp)
-                            .clickable {
+                            .clickable(role = if (action == "画像で共有") Role.Button else null) {
                                 when (action) {
                                     "名前を変える" -> {
                                         renameValue = selected.details.name; renaming = true
