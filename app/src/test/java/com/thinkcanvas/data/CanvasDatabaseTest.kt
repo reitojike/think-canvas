@@ -14,6 +14,7 @@ import com.thinkcanvas.canvas.BoardSnapshot
 import com.thinkcanvas.canvas.ShapeElement
 import com.thinkcanvas.canvas.ShapeKind
 import com.thinkcanvas.canvas.TextElement
+import com.thinkcanvas.canvas.modelLogicalBounds
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -80,7 +81,9 @@ class CanvasDatabaseTest {
             first.close()
 
             val second = open()
-            assertEquals(initial, second.canvasDao().elements(1).single())
+            val loaded = second.canvasDao().elements(1).single()
+            assertEquals(initial, loaded)
+            assertEquals(initial.toModel().modelLogicalBounds(), loaded.toModel().modelLogicalBounds())
             assertEquals("無題のボード", second.canvasDao().board(1)?.name)
             second.canvasDao().replaceAll(1, emptyList(), emptyList(), emptyList())
             second.close()

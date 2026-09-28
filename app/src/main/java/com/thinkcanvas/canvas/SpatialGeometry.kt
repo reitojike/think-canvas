@@ -18,15 +18,34 @@ data class WorldBounds(val left: Float, val top: Float, val right: Float, val bo
 
 fun ShapeElement.bounds() = WorldBounds(x, y, x + width, y + height)
 
+/** Canonical, display-independent model-space bounds for text (contract v1). */
+fun TextElement.modelLogicalBounds(): WorldBounds {
+    val (cellWidth, lineHeight, wrapCells) = when (kind) {
+        TextKind.BODY -> Triple(10f, 20f, 16)
+        TextKind.TITLE -> Triple(11f, 22f, 15)
+    }
+    val explicitLines = text.replace("\r\n", "\n").replace('\r', '\n').split('\n')
+    var maximumWrappedCells = 0
+    var logicalLineCount = 0
+    explicitLines.forEach { line ->
+        val codePointCount = line.codePointCount(0, line.length)
+        maximumWrappedCells = max(maximumWrappedCells, min(codePointCount, wrapCells))
+        logicalLineCount += max(1, (codePointCount + wrapCells - 1) / wrapCells)
+    }
+    val logicalWidth = max(1, maximumWrappedCells) * cellWidth
+    val logicalHeight = max(1, logicalLineCount) * lineHeight
+    return WorldBounds(x, y, x + logicalWidth, y + logicalHeight)
+}
+
 fun BoardSnapshot.boundsOf(id: String,
                            resolvedRenderedBounds: Map<String, WorldBounds> = emptyMap()): WorldBounds? =
     resolvedRenderedBounds[id]
         ?: shapes.firstOrNull { it.id == id }?.bounds()
         ?: ink.firstOrNull { it.id == id }?.renderedBounds()
 
-/** Model-only operations without a display context use the saved anchor, never a text estimate. */
+/** Model-only operations use canonical logical geometry; rendered bounds stay display-only. */
 fun BoardSnapshot.centerOf(id: String): WorldPoint? = boundsOf(id)?.center
-    ?: texts.firstOrNull { it.id == id }?.let { WorldPoint(it.x, it.y) }
+    ?: texts.firstOrNull { it.id == id }?.modelLogicalBounds()?.center
     ?: arrows.firstOrNull { it.id == id }?.let { arrow ->
         arrowPoints(arrow)?.let { (from, to) ->
             WorldPoint((from.x + to.x) / 2f, (from.y + to.y) / 2f)

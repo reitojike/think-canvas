@@ -6,13 +6,43 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SpatialGeometryTest {
-    @Test fun storedTextHasNoAuthoritativeBoundsUntilRendererResolvesIt() {
+    @Test fun logicalTextBoundsAreSeparateFromRenderedBounds() {
         val text = TextElement(id = "text", text = "a long line", x = 10f, y = 20f)
         val snapshot = BoardSnapshot(texts = listOf(text))
         assertEquals(null, snapshot.boundsOf(text.id))
+        assertEquals(WorldBounds(10f, 20f, 120f, 40f), text.modelLogicalBounds())
         val resolved = WorldBounds(10f, 20f, 210f, 62f)
         assertEquals(resolved, snapshot.boundsOf(text.id, mapOf(text.id to resolved)))
+        assertEquals(WorldPoint(65f, 30f), snapshot.centerOf(text.id))
         assertEquals(text, snapshot.texts.single())
+    }
+
+    @Test fun canonicalLogicalLayoutV1UsesFixedCodePointCellsAndPreservesLines() {
+        assertEquals(WorldBounds(0f, 0f, 10f, 20f),
+            TextElement(text = "猫", x = 0f, y = 0f).modelLogicalBounds())
+        assertEquals(WorldBounds(0f, 0f, 160f, 40f), TextElement(
+            text = "映画を見たあとに残った違和感と好きだった場面をあとで整理する", x = 0f, y = 0f,
+        ).modelLogicalBounds())
+        assertEquals(WorldBounds(0f, 0f, 90f, 40f), TextElement(
+            text = "第一印象\nあとで考えたいこと", x = 0f, y = 0f,
+        ).modelLogicalBounds())
+        assertEquals(WorldBounds(0f, 0f, 44f, 22f), TextElement(
+            text = "読書メモ", kind = TextKind.TITLE, x = 0f, y = 0f,
+        ).modelLogicalBounds())
+        assertEquals(WorldBounds(0f, 0f, 165f, 44f), TextElement(
+            text = "今月見た映画から共通するテーマを考える", kind = TextKind.TITLE, x = 0f, y = 0f,
+        ).modelLogicalBounds())
+        assertEquals(TextElement(text = "a\r\nb\r", x = 3f, y = 4f).modelLogicalBounds(),
+            TextElement(text = "a\nb\n", x = 3f, y = 4f).modelLogicalBounds())
+        assertEquals(WorldBounds(0f, 0f, 10f, 60f), TextElement(
+            text = "a\n\n", x = 0f, y = 0f,
+        ).modelLogicalBounds())
+        assertEquals(WorldBounds(0f, 0f, 10f, 20f), TextElement(
+            text = "😀", x = 0f, y = 0f,
+        ).modelLogicalBounds())
+        assertEquals(WorldBounds(0f, 0f, 20f, 20f), TextElement(
+            text = "e\u0301", x = 0f, y = 0f,
+        ).modelLogicalBounds())
     }
 
     @Test fun resolvedArrowGeometryIncludesEndpointOffsetHeadAndStroke() {
@@ -49,15 +79,17 @@ class SpatialGeometryTest {
         assertEquals(WorldBounds(198.875f, 298.875f, 301.125f, 361.125f), geometry.bounds(region.id))
     }
 
-    @Test fun regionMovePreviewAndCommitUseStoredTextAnchor() {
+    @Test fun regionMovePreviewAndCommitUseLogicalCenterAcrossBoundary() {
         val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
             x = 0f, y = 0f, width = 100f, height = 100f)
-        val text = TextElement(id = "text", text = "membership", x = 20f, y = 30f)
+        val text = TextElement(id = "text",
+            text = "映画を見たあとに残った違和感と好きだった場面をあとで整理する", x = 30f, y = 30f)
         val source = BoardSnapshot(texts = listOf(text), shapes = listOf(region))
         val rendered = source.resolveRenderedGeometry(mapOf(text.id to
-            WorldBounds(20f, 30f, 320f, 60f)), scale = .5f, pixelsPerDp = 3f)
-        assertFalse("display center is outside although stored anchor is inside",
+            WorldBounds(text.x, text.y, text.x + 300f, text.y + 30f)), scale = .5f, pixelsPerDp = 3f)
+        assertFalse("display center is outside although logical center is outside",
             region.bounds().contains(rendered.bounds(text.id)!!.center))
+        assertEquals(WorldPoint(110f, 50f), source.centerOf(text.id))
 
         val preview = source.translatedSelection(setOf(region.id), 12f, 8f)
         val committed = BoardState(source.texts, source.shapes).apply {
@@ -65,19 +97,20 @@ class SpatialGeometryTest {
         }.snapshot()
 
         assertEquals(preview, committed)
-        assertEquals(32f, preview.texts.single().x)
+        assertEquals(30f, preview.texts.single().x)
     }
 
-    @Test fun gapPreviewAndCommitUseStoredTextAnchorOnEachSide() {
+    @Test fun gapPreviewAndCommitUseLogicalCenterOnEachSide() {
         val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
             x = 0f, y = 0f, width = 200f, height = 100f)
-        val left = TextElement(id = "left", text = "left", x = 30f, y = 20f)
+        val left = TextElement(id = "left",
+            text = "映画を見たあとに残った違和感と好きだった場面をあとで整理する", x = 30f, y = 20f)
         val right = TextElement(id = "right", text = "right", x = 70f, y = 20f)
         val source = BoardSnapshot(texts = listOf(left, right), shapes = listOf(region))
         val rendered = source.resolveRenderedGeometry(mapOf(
             left.id to WorldBounds(30f, 20f, 180f, 50f),
             right.id to WorldBounds(70f, 20f, 80f, 50f)), scale = 2f, pixelsPerDp = 3f)
-        assertTrue("rendered center puts the stored-left text across the gap",
+        assertTrue("rendered geometry remains separate from logical membership",
             rendered.bounds(left.id)!!.center.x > 50f)
 
         val preview = source.withGap(WorldPoint(50f, 30f), horizontal = true, amount = 20f)
@@ -86,18 +119,20 @@ class SpatialGeometryTest {
         }
 
         assertEquals(preview, committedBoard.snapshot())
-        assertEquals(30f, preview.texts.first { it.id == left.id }.x)
+        assertEquals(50f, preview.texts.first { it.id == left.id }.x)
         assertEquals(90f, preview.texts.first { it.id == right.id }.x)
     }
 
     @Test fun regionMembershipIsInvariantAcrossViewportScales() {
         val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
-            x = 0f, y = 0f, width = 100f, height = 100f)
-        val text = TextElement(id = "text", text = "scale", x = 40f, y = 30f)
+            x = 0f, y = 0f, width = 200f, height = 100f)
+        val text = TextElement(id = "text",
+            text = "映画を見たあとに残った違和感と好きだった場面をあとで整理する", x = 40f, y = 30f)
         val source = BoardSnapshot(texts = listOf(text), shapes = listOf(region))
         val previews = listOf(.25f to 100f, 3f to 100f).map { (scale, measuredWidth) ->
             val geometry = source.resolveRenderedGeometry(mapOf(text.id to WorldBounds(
                 text.x, text.y, text.x + measuredWidth, text.y + 40f)), scale)
+            assertEquals(WorldPoint(120f, 50f), source.centerOf(text.id))
             assertTrue(region.bounds().contains(geometry.bounds(text.id)!!.center))
             source.translatedSelection(setOf(region.id), 5f, 0f)
         }
@@ -153,20 +188,35 @@ class SpatialGeometryTest {
             snapshot.semanticProjection(.25f, 14f).visible(arrow.id))
     }
 
-    @Test fun regionMembershipIsInvariantAcrossMeasuredTextExtents() {
+    @Test fun regionMembershipIsInvariantAcrossRenderedMeasurementsAndFontScale() {
         val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
-            x = 0f, y = 0f, width = 100f, height = 100f)
-        val text = TextElement(id = "text", text = "font", x = 40f, y = 30f)
+            x = 0f, y = 0f, width = 200f, height = 100f)
+        val text = TextElement(id = "text",
+            text = "映画を見たあとに残った違和感と好きだった場面をあとで整理する", x = 40f, y = 30f)
         val source = BoardSnapshot(texts = listOf(text), shapes = listOf(region))
         val previews = listOf(10f, 500f).mapIndexed { index, measuredWidth ->
             val geometry = source.resolveRenderedGeometry(mapOf(text.id to WorldBounds(
                 text.x, text.y, text.x + measuredWidth, text.y + 40f)), scale = 1f)
+            assertEquals(WorldPoint(120f, 50f), source.centerOf(text.id))
             assertEquals(index == 0, region.bounds().contains(geometry.bounds(text.id)!!.center))
             source.translatedSelection(setOf(region.id), 5f, 0f)
         }
 
         assertEquals(previews.first(), previews.last())
         assertEquals(45f, previews.first().texts.single().x)
+    }
+
+    @Test fun movingTextTranslatesCanonicalBoundsAndCenterWithoutResizing() {
+        val text = TextElement(id = "moving", text = "a line\nsecond", x = 12f, y = 18f)
+        val before = text.modelLogicalBounds()
+        val moved = BoardSnapshot(texts = listOf(text)).translatedSelection(setOf(text.id), 25f, -7f)
+        val after = moved.texts.single().modelLogicalBounds()
+        assertEquals(WorldBounds(before.left + 25f, before.top - 7f,
+            before.right + 25f, before.bottom - 7f), after)
+        assertEquals(before.right - before.left, after.right - after.left)
+        assertEquals(before.bottom - before.top, after.bottom - after.top)
+        assertEquals(WorldPoint(text.modelLogicalBounds().center.x + 25f,
+            text.modelLogicalBounds().center.y - 7f), moved.centerOf(text.id))
     }
 
     @Test
