@@ -1263,8 +1263,8 @@ class BoardListScreenTest {
             val action = node.actionList.firstOrNull { it.label?.toString() == "選択に追加" }
                 ?: error("選択操作が見つかりません")
             assertTrue(node.performAction(action.id))
-            act(waitFor("選択範囲を画像で共有", byDescription = true),
-                AccessibilityNodeInfo.ACTION_CLICK)
+            val shareSelection = waitFor("選択範囲を画像で共有", byDescription = true)
+            act(shareSelection, AccessibilityNodeInfo.ACTION_CLICK)
             waitFor("選択するボード の共有画像プレビュー", byDescription = true)
             waitFor("画像を保存")
             assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService

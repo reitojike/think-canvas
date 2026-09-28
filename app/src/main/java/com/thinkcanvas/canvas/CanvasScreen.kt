@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -31,6 +32,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
@@ -1512,14 +1515,17 @@ fun CanvasScreen(
                     .pillBorder(10f).padding(6.dp)
                     .onGloballyPositioned { chromeBounds["shareSelection"] = it.boundsInParent() }) {
                     val enabled = !saving && !saveFailed
-                    Box(Modifier.height(48.dp).clip(RoundedCornerShape(8.dp))
-                        .clickable(enabled = enabled) { onShareSelection(selectedIds.toSet()) }
-                        .semantics {
+                    Button(onClick = { onShareSelection(selectedIds.toSet()) }, enabled = enabled,
+                        modifier = Modifier.height(48.dp).semantics {
                             contentDescription = "選択範囲を画像で共有"
                             if (!enabled) disabled()
-                        }.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-                        Text("選択範囲を画像で共有", color = if (enabled) ink else muted,
-                            fontSize = 13.sp)
+                        }, shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White, contentColor = if (enabled) ink else muted),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp,
+                            pressedElevation = 0.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp)) {
+                        Text("選択範囲を画像で共有", fontSize = 13.sp)
                     }
                 }
             }

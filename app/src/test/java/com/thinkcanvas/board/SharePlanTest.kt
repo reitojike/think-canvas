@@ -106,6 +106,24 @@ class SharePlanTest {
         assertTrue(plan.imageBounds.right > plan.contentBounds.right)
     }
 
+    @Test fun selectedRegionMembershipUsesDisplayIndependentModelCenters() {
+        val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+            x = 0f, y = 0f, width = 100f, height = 100f)
+        val text = TextElement(id = "near-edge", text = "x", x = 90f, y = 20f)
+        val source = BoardSnapshot(texts = listOf(text), shapes = listOf(region))
+        val narrowBounds = mapOf(text.id to WorldBounds(90f, 20f, 96f, 32f))
+        val wideBounds = mapOf(text.id to WorldBounds(90f, 20f, 500f, 32f))
+
+        val narrowPlan = planShare(source, setOf(region.id), narrowBounds,
+            ExportTypography(pixelsPerDp = 1f))
+        val widePlan = planShare(source, setOf(region.id), wideBounds,
+            ExportTypography(pixelsPerDp = 3f))
+
+        assertTrue(text.id in narrowPlan.includedIds)
+        assertEquals(narrowPlan.includedIds, widePlan.includedIds)
+        assertEquals(wideBounds[text.id], widePlan.resolvedGeometry.bounds(text.id))
+    }
+
     @Test fun selectedRegionIncludesItsContentsButNotCrossingArrow() {
         val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
             x = 0f, y = 0f, width = 200f, height = 200f, name = "考え")

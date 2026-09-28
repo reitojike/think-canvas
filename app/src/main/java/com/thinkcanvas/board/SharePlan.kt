@@ -38,7 +38,7 @@ fun planShare(source: BoardSnapshot, selectedIds: Set<String>? = null,
     val textBounds = renderedBounds.filterKeys { id -> source.texts.any { it.id == id } }
     val sharedGeometry = source.resolveRenderedGeometry(textBounds,
         pixelsPerDp = typography.pixelsPerDp)
-    fun center(id: String) = sharedGeometry.bounds(id)?.center ?: source.centerOf(id)
+    fun center(id: String) = source.centerOf(id)
 
     if (selectedIds != null) {
         val selectedRegions = source.shapes.filter {
