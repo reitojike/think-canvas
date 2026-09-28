@@ -22,6 +22,19 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    testOptions {
+        managedDevices {
+            localDevices {
+                create("pixel7Api37") {
+                    device = "Pixel 7"
+                    apiLevel = 37
+                    systemImageSource = "aosp"
+                    require64Bit = true
+                }
+            }
+        }
+    }
+
     signingConfigs {
         create("internal") {
             providers.environmentVariable("THINKCANVAS_INTERNAL_KEYSTORE_FILE").orNull?.let {

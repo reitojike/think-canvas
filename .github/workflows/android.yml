@@ -49,8 +49,8 @@ jobs:
         shell: pwsh
         run: ./scripts/check-public-boundary.ps1
 
-  emulator:
-    name: Android 17 エミュレーター
+  managed-device:
+    name: Android 17 Gradle Managed Device
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -70,12 +70,4 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: ジェスチャーと保存の実機相当テスト
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: '37.0'
-          target: google_apis
-          arch: x86_64
-          profile: pixel_7_pro
-          ram-size: 4096M
-          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu software -feature -Vulkan -camera-back none -camera-front none
-          script: ./gradlew :app:connectedDebugAndroidTest --no-daemon
+        run: ./gradlew :app:pixel7Api37DebugAndroidTest -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
