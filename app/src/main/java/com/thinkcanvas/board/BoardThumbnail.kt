@@ -66,22 +66,30 @@ internal fun thumbnailRegionLabelBounds(snapshot: BoardSnapshot, label: Paint,
         }
 
 internal fun thumbnailFitBounds(snapshot: BoardSnapshot, title: Paint, label: Paint,
-                                scale: Float): WorldBounds? {
-    val values = thumbnailGeometry(snapshot, thumbnailTitleBounds(snapshot, title, scale), scale)
+                                scale: Float, pixelsPerDp: Float = 1f): WorldBounds? {
+    val values = thumbnailGeometry(snapshot, thumbnailTitleBounds(snapshot, title, scale),
+        scale, pixelsPerDp)
         .boundsById.values + thumbnailRegionLabelBounds(snapshot, label, scale).values
     if (values.isEmpty()) return null
     return WorldBounds(values.minOf { it.left }, values.minOf { it.top },
         values.maxOf { it.right }, values.maxOf { it.bottom })
 }
 
+internal fun thumbnailFitScale(width: Float, height: Float, bounds: WorldBounds,
+                               pixelsPerDp: Float): Float =
+    min(.5f * pixelsPerDp, min((width - 28f * pixelsPerDp).coerceAtLeast(1f) /
+        (bounds.right - bounds.left).coerceAtLeast(1f),
+        (height - 28f * pixelsPerDp).coerceAtLeast(1f) /
+        (bounds.bottom - bounds.top).coerceAtLeast(1f)))
+
 internal fun thumbnailGeometry(snapshot: BoardSnapshot,
                                titleBounds: Map<String, WorldBounds>,
-                               scale: Float): ThumbnailGeometry {
+                               scale: Float, pixelsPerDp: Float = 1f): ThumbnailGeometry {
     val bounds = LinkedHashMap<String, WorldBounds>()
     titleBounds.forEach { (id, value) -> bounds[id] = value }
     snapshot.shapes.forEach { shape ->
         val stored = WorldBounds(shape.x, shape.y, shape.x + shape.width, shape.y + shape.height)
-        val strokeRadius = .5f / scale
+        val strokeRadius = .5f * pixelsPerDp / scale
         bounds[shape.id] = WorldBounds(stored.left - strokeRadius, stored.top - strokeRadius,
             stored.right + strokeRadius, stored.bottom + strokeRadius)
     }
@@ -96,12 +104,12 @@ internal fun thumbnailGeometry(snapshot: BoardSnapshot,
         val (start, end) = snapshot.arrowPoints(arrow, offset, arrowTargets) ?: return@mapNotNull null
         val control = snapshot.arrowControl(arrow, offset, arrowTargets) ?: return@mapNotNull null
         val angle = atan2(end.y - control.y, end.x - control.x)
-        val headLength = 4f / scale
+        val headLength = 4f * pixelsPerDp / scale
         val left = WorldPoint(end.x - headLength * cos(angle - .5f),
             end.y - headLength * sin(angle - .5f))
         val right = WorldPoint(end.x - headLength * cos(angle + .5f),
             end.y - headLength * sin(angle + .5f))
-        val radius = .5f / scale
+        val radius = .5f * pixelsPerDp / scale
         val points = listOf(start, end, control, left, right)
         val arrowBounds = WorldBounds(points.minOf { it.x } - radius,
             points.minOf { it.y } - radius, points.maxOf { it.x } + radius,
@@ -130,23 +138,21 @@ internal fun drawBoardThumbnail(canvas: AndroidCanvas, snapshot: BoardSnapshot,
                                 width: Float, height: Float, pixelsPerDp: Float = 1f) {
         canvas.drawColor(0xFFF7F6F4.toInt())
         val title = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0x8C23211E.toInt(); textSize = 8f; typeface = Typeface.DEFAULT_BOLD
+            color = 0x8C23211E.toInt(); textSize = 8f * pixelsPerDp; typeface = Typeface.DEFAULT_BOLD
         }
         val label = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF23211E.toInt(); textSize = 11f; typeface = Typeface.DEFAULT_BOLD
+            color = 0xFF23211E.toInt(); textSize = 11f * pixelsPerDp; typeface = Typeface.DEFAULT_BOLD
             textAlign = Paint.Align.CENTER
         }
         var scale = 1f
-        var geometry = thumbnailGeometry(snapshot, thumbnailTitleBounds(snapshot, title, scale), scale)
-        var bounds = thumbnailFitBounds(snapshot, title, label, scale) ?: return
-        fun fit(bounds: com.thinkcanvas.canvas.WorldBounds) = min(.5f, min((width - 28f).coerceAtLeast(1f) /
-            (bounds.right - bounds.left).coerceAtLeast(1f),
-            (height - 28f).coerceAtLeast(1f) /
-            (bounds.bottom - bounds.top).coerceAtLeast(1f)))
+        var geometry = thumbnailGeometry(snapshot, thumbnailTitleBounds(snapshot, title, scale),
+            scale, pixelsPerDp)
+        var bounds = thumbnailFitBounds(snapshot, title, label, scale, pixelsPerDp) ?: return
         repeat(8) {
-            scale = fit(bounds)
-            geometry = thumbnailGeometry(snapshot, thumbnailTitleBounds(snapshot, title, scale), scale)
-            bounds = thumbnailFitBounds(snapshot, title, label, scale) ?: bounds
+            scale = thumbnailFitScale(width, height, bounds, pixelsPerDp)
+            geometry = thumbnailGeometry(snapshot, thumbnailTitleBounds(snapshot, title, scale),
+                scale, pixelsPerDp)
+            bounds = thumbnailFitBounds(snapshot, title, label, scale, pixelsPerDp) ?: bounds
         }
         val left = (width - (bounds.right - bounds.left) * scale) / 2f - bounds.left * scale
         val top = (height - (bounds.bottom - bounds.top) * scale) / 2f - bounds.top * scale
@@ -159,7 +165,8 @@ internal fun drawBoardThumbnail(canvas: AndroidCanvas, snapshot: BoardSnapshot,
                 style = Paint.Style.STROKE
                 strokeCap = Paint.Cap.ROUND
                 strokeJoin = Paint.Join.ROUND
-                strokeWidth = max(1f, (if (kind == InkKind.MARKER) 15f else 2.5f) * scale)
+                strokeWidth = max(pixelsPerDp,
+                    (if (kind == InkKind.MARKER) 15f else 2.5f) * scale)
             }
             snapshot.ink.filter { it.kind == kind && projection.visible(it.id) }.forEach { element ->
                 element.strokes.forEach { stroke ->
@@ -179,7 +186,7 @@ internal fun drawBoardThumbnail(canvas: AndroidCanvas, snapshot: BoardSnapshot,
         }
         drawInk(InkKind.MARKER)
         val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFFBDB8B1.toInt(); style = Paint.Style.STROKE; strokeWidth = 1f
+            color = 0xFFBDB8B1.toInt(); style = Paint.Style.STROKE; strokeWidth = pixelsPerDp
         }
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x0F23211E; style = Paint.Style.FILL }
         snapshot.shapes.filter { projection.visible(it.id) }.forEach { shape ->
@@ -189,17 +196,20 @@ internal fun drawBoardThumbnail(canvas: AndroidCanvas, snapshot: BoardSnapshot,
             val bottom = y + shape.height * scale
             when (shape.kind) {
                 ShapeKind.REGION -> {
-                    canvas.drawRoundRect(x, y, right, bottom, 8f, 8f, fill)
-                    canvas.drawRoundRect(x, y, right, bottom, 8f, 8f, outline)
+                    canvas.drawRoundRect(x, y, right, bottom, 8f * pixelsPerDp,
+                        8f * pixelsPerDp, fill)
+                    canvas.drawRoundRect(x, y, right, bottom, 8f * pixelsPerDp,
+                        8f * pixelsPerDp, outline)
                     if (shape.name.isNotBlank()) canvas.drawText(shape.name.take(16),
                         (x + right) / 2f, (y + bottom) / 2f + label.textSize / 3f, label)
                 }
-                ShapeKind.RECTANGLE -> canvas.drawRoundRect(x, y, right, bottom, 2f, 2f, outline)
+                ShapeKind.RECTANGLE -> canvas.drawRoundRect(x, y, right, bottom,
+                    2f * pixelsPerDp, 2f * pixelsPerDp, outline)
                 ShapeKind.ELLIPSE -> canvas.drawOval(x, y, right, bottom, outline)
             }
         }
         val arrowLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0x8C23211E.toInt(); style = Paint.Style.STROKE; strokeWidth = 1f
+            color = 0x8C23211E.toInt(); style = Paint.Style.STROKE; strokeWidth = pixelsPerDp
         }
         val arrowHead = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x8C23211E.toInt() }
         snapshot.arrows.filter { projection.visible(it.id) }.forEach { arrow ->

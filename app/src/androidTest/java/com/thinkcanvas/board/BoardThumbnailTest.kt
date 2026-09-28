@@ -25,10 +25,62 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class BoardThumbnailTest {
-    private fun labelPaint() = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textSize = 11f
+    private fun labelPaint(pixelsPerDp: Float = 1f) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 11f * pixelsPerDp
         typeface = Typeface.DEFAULT_BOLD
         textAlign = Paint.Align.CENTER
+    }
+
+    private fun titlePaint(pixelsPerDp: Float = 1f) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 8f * pixelsPerDp
+        typeface = Typeface.DEFAULT_BOLD
+    }
+
+    @Test fun fixedScreenThumbnailGeometryPreservesDpAcrossDensity() {
+        val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+            name = "Density checked label", x = 180f, y = 80f, width = 220f, height = 120f)
+        val title = TextElement(id = "title", kind = TextKind.TITLE,
+            text = "Density checked title", x = 0f, y = 0f)
+        val arrow = ArrowElement(id = "arrow",
+            from = ArrowEnd.Attached(region.id, 1f, .5f), to = ArrowEnd.Free(700f, 140f))
+        val snapshot = BoardSnapshot(texts = listOf(title), shapes = listOf(region), arrows = listOf(arrow))
+
+        fun fittedScale(pixelsPerDp: Float, width: Float, height: Float): Float {
+            val titlePaint = titlePaint(pixelsPerDp)
+            val labelPaint = labelPaint(pixelsPerDp)
+            var scale = .5f * pixelsPerDp
+            repeat(8) {
+                val bounds = thumbnailFitBounds(snapshot, titlePaint, labelPaint, scale, pixelsPerDp)!!
+                scale = thumbnailFitScale(width, height, bounds, pixelsPerDp)
+            }
+            return scale
+        }
+
+        val scale1 = fittedScale(1f, 240f, 160f)
+        val scale3 = fittedScale(3f, 720f, 480f)
+        assertEquals("fit cap and outer margin stay constant in dp", scale1, scale3 / 3f, .001f)
+
+        val bounds1 = thumbnailFitBounds(snapshot, titlePaint(1f), labelPaint(1f), scale1, 1f)!!
+        val bounds3 = thumbnailFitBounds(snapshot, titlePaint(3f), labelPaint(3f), scale3, 3f)!!
+        assertEquals(bounds1, bounds3)
+        val geometry1 = thumbnailGeometry(snapshot,
+            thumbnailTitleBounds(snapshot, titlePaint(1f), scale1), scale1, 1f)
+        val geometry3 = thumbnailGeometry(snapshot,
+            thumbnailTitleBounds(snapshot, titlePaint(3f), scale3), scale3, 3f)
+        assertEquals("region attachment geometry is density independent",
+            geometry1.arrowsById.getValue(arrow.id).start,
+            geometry3.arrowsById.getValue(arrow.id).start)
+
+        val bitmap = Bitmap.createBitmap(720, 480, Bitmap.Config.ARGB_8888)
+        try {
+            drawBoardThumbnail(Canvas(bitmap), snapshot, 720f, 480f, 3f)
+            val paper = 0xFFF7F6F4.toInt()
+            assertTrue("density-scaled fit keeps the physical outer margin",
+                (0 until bitmap.height).all { y -> bitmap.getPixel(0, y) == paper &&
+                    bitmap.getPixel(bitmap.width - 1, y) == paper })
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     @Test fun fittedTitleGeometryMatchesItsFixedPixelExtent() {
