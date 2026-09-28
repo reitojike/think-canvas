@@ -40,6 +40,7 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.FileInputStream
 
 @RunWith(AndroidJUnit4::class)
 class BoardListScreenTest {
@@ -204,6 +205,15 @@ class BoardListScreenTest {
         instrumentation.waitForIdleSync()
     }
 
+    private fun shell(command: String): String {
+        val descriptor = automation.executeShellCommand(command)
+        return try {
+            FileInputStream(descriptor.fileDescriptor).bufferedReader().use { it.readText() }
+        } finally {
+            descriptor.close()
+        }
+    }
+
     @Test fun twentyCardsCanScrollAndOpenFirstAndLast() {
         seed((1L..20L).map { BoardRow(it, "ボード$it", 21L - it) })
         val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
@@ -276,6 +286,78 @@ class BoardListScreenTest {
             act(waitFor("使い方"), AccessibilityNodeInfo.ACTION_CLICK)
             waitFor("基本の操作")
         } finally { activity.finish() }
+    }
+
+    @Test fun guideCtaCanBeScrolledToAndActivatedAtLargeFontInCompactHeight() {
+        val previousFontScale = shell("settings get system font_scale").trim()
+        val previousSizeOutput = shell("wm size")
+        val previousSizeOverride = Regex("Override size: (\\d+x\\d+)")
+            .find(previousSizeOutput)?.groupValues?.get(1)
+        val previousPhysicalSize = requireNotNull(Regex("Physical size: (\\d+x\\d+)")
+            .find(previousSizeOutput)).groupValues[1]
+        var activity: MainActivity? = null
+        try {
+            shell("wm size 900x1100")
+            shell("settings put system font_scale 2.0")
+            seed(listOf(BoardRow(1, "最初のボード", 10)))
+            assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+                .edit().putLong("lastOpenedBoardId", 1).putLong("guideEligibleBoardId", 1)
+                .putBoolean("guideDismissed", false).commit())
+            activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+            waitFor("基本の操作")
+
+            var startButton = find(automation.rootInActiveWindow) {
+                it.text?.toString() == "はじめる"
+            }
+            assertFalse("CTA should begin outside the compact sheet viewport",
+                startButton?.isVisibleToUser == true)
+            var scrollContainer = find(automation.rootInActiveWindow) { it.isScrollable }
+            assertNotNull("guide content exposes vertical scrolling", scrollContainer)
+            var swipeCount = 0
+            for (step in 0 until 12) {
+                if (startButton?.isVisibleToUser == true) break
+                assertNotNull("guide remains vertically scrollable", scrollContainer)
+                swipeUp()
+                swipeCount += 1
+                instrumentation.waitForIdleSync()
+                val root = automation.rootInActiveWindow
+                startButton = find(root) { it.text?.toString() == "はじめる" }
+                scrollContainer = find(root) { it.isScrollable }
+                assertNotNull("guide remains vertically scrollable", scrollContainer)
+            }
+            assertTrue("test exercises vertical scrolling", swipeCount > 0)
+            val reachableButton = requireNotNull(startButton) {
+                "CTA enters the accessibility tree after scrolling"
+            }
+            assertTrue("CTA becomes visible through vertical scrolling", reachableButton.isVisibleToUser)
+            act(reachableButton, AccessibilityNodeInfo.ACTION_CLICK)
+            for (attempt in 0 until 40) {
+                instrumentation.waitForIdleSync()
+                if (find(automation.rootInActiveWindow) { it.text?.toString() == "基本の操作" } == null &&
+                    context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+                        .getBoolean("guideDismissed", false)) break
+                Thread.sleep(100)
+            }
+            assertEquals(null, find(automation.rootInActiveWindow) { it.text?.toString() == "基本の操作" })
+            assertTrue("CTA activation persists dismissal through onStart",
+                context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+                    .getBoolean("guideDismissed", false))
+        } finally {
+            activity?.finish()
+            instrumentation.waitForIdleSync()
+            shell("settings put system font_scale $previousFontScale")
+            if (previousSizeOverride != null) shell("wm size $previousSizeOverride")
+            else shell("wm size reset")
+            assertEquals(previousFontScale, shell("settings get system font_scale").trim())
+            val restoredSize = shell("wm size")
+            assertTrue("original display size restored",
+                restoredSize.contains("Physical size: $previousPhysicalSize"))
+            assertEquals(previousSizeOverride,
+                Regex("Override size: (\\d+x\\d+)").find(restoredSize)?.groupValues?.get(1))
+            instrumentation.waitForIdleSync()
+            Thread.sleep(500)
+        }
     }
 
     @Test fun lastOpenedBoardReturnsAfterActivityRestart() {
