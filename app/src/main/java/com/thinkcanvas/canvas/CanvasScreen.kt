@@ -373,7 +373,7 @@ fun CanvasScreen(
     }
 
     BackHandler {
-        if (!saving && !saveFailed && draft == null) onOpenList()
+        if (!saving && !saveFailed && draft == null && regionNameId == null) onOpenList()
     }
 
     fun hitTest(point: Offset): TextElement? {
@@ -1358,7 +1358,9 @@ fun CanvasScreen(
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = 8.dp)
                     .height(44.dp).background(Color.White, RoundedCornerShape(24.dp))
                     .pillBorder(24f).padding(horizontal = 14.dp)
-                    .clickable(enabled = !saving && !saveFailed && draft == null) { onOpenList() }
+                    .clickable(enabled = !saving && !saveFailed && draft == null && regionNameId == null) {
+                        onOpenList()
+                    }
                     .semantics { contentDescription = "ボード一覧を開く" }
                     .onGloballyPositioned { chromeBounds["board"] = it.boundsInParent() },
                 contentAlignment = Alignment.Center,

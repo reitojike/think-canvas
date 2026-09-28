@@ -22,11 +22,13 @@ import com.thinkcanvas.canvas.BoardSnapshot
 import com.thinkcanvas.canvas.BoardState
 import com.thinkcanvas.canvas.TextColor
 import com.thinkcanvas.canvas.TextKind
+import com.thinkcanvas.canvas.ShapeKind
 import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.CanvasDatabase
 import com.thinkcanvas.data.CanvasStore
 import com.thinkcanvas.data.StoredBoard
 import com.thinkcanvas.data.TextElementRow
+import com.thinkcanvas.data.SpatialElementRow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
@@ -90,11 +92,12 @@ class BoardListScreenTest {
         }
     }
 
-    private fun seed(boards: List<BoardRow>) = runBlocking {
+    private fun seed(boards: List<BoardRow>, shapes: List<SpatialElementRow> = emptyList()) = runBlocking {
         val database = CanvasDatabase.open(context)
         val dao = database.canvasDao()
         dao.boards().forEach { dao.deleteBoard(it.id) }
         boards.forEach { dao.putBoard(it) }
+        dao.putSpatialElements(shapes)
         database.close()
         assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
             .edit().putBoolean("initialized", true).putBoolean("guideDismissed", true)
@@ -145,6 +148,21 @@ class BoardListScreenTest {
             Thread.sleep(100)
         }
         error("表示が見つかりません: $label")
+    }
+
+    private fun waitForCustomAction(label: String): Pair<AccessibilityNodeInfo, AccessibilityNodeInfo.AccessibilityAction> {
+        repeat(40) {
+            instrumentation.waitForIdleSync()
+            var result: Pair<AccessibilityNodeInfo, AccessibilityNodeInfo.AccessibilityAction>? = null
+            find(automation.rootInActiveWindow) { node ->
+                val action = node.actionList.firstOrNull { it.label?.toString() == label }
+                if (action != null) result = node to action
+                action != null
+            }
+            result?.let { return it }
+            Thread.sleep(100)
+        }
+        error("操作が見つかりません: $label")
     }
 
     private fun waitForEditable(): AccessibilityNodeInfo {
@@ -867,6 +885,38 @@ class BoardListScreenTest {
                 instrumentation.waitForIdleSync()
                 waitFor("新しいテキスト", byDescription = true)
             }
+            assertTrue(!activity.isFinishing)
+        } finally { activity.finish() }
+    }
+
+    @Test fun regionNameEditBlocksSystemBackAndBoardListNavigation() {
+        seed(listOf(BoardRow(1, "囲み編集中", 10)), listOf(SpatialElementRow(
+            id = "region-edit", boardId = 1, kind = ShapeKind.REGION.name,
+            x = 0f, y = 0f, width = 320f, height = 220f,
+            color = "INK", name = "編集対象")))
+        assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+            .edit().putLong("lastOpenedBoardId", 1).commit())
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            waitFor("‹ 囲み編集中")
+            val (region, rename) = waitForCustomAction("囲みの名前を編集")
+            assertTrue(region.performAction(rename.id))
+            val field = waitForEditable()
+            val args = android.os.Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                    "入力途中")
+            }
+            assertTrue(field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args))
+            assertFalse("board navigation is unavailable during a region-name edit",
+                waitFor("ボード一覧を開く", byDescription = true).isClickable)
+            repeat(2) {
+                assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                    .GLOBAL_ACTION_BACK))
+                instrumentation.waitForIdleSync()
+            }
+            waitFor("‹ 囲み編集中")
+            waitFor("囲みの名前", byDescription = true)
             assertTrue(!activity.isFinishing)
         } finally { activity.finish() }
     }

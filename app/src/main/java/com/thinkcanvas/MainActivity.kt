@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
         val guideVisible = mutableStateOf(false)
         val transientPending = mutableStateOf(false)
         val errorMessage = mutableStateOf<String?>(null)
+        val startupLoadFailed = mutableStateOf(false)
 
         fun openBoard(stored: StoredBoard) {
             navigationTargetIsList = false
@@ -104,6 +105,7 @@ class MainActivity : ComponentActivity() {
             val failed = boardListActions.state.value as? BoardListActionState.Failed
             if (failed == null) {
                 errorMessage.value = null
+                startupLoadFailed.value = false
                 return
             }
             if (transientPending.value) {
@@ -130,6 +132,22 @@ class MainActivity : ComponentActivity() {
                     errorMessage.value = error.message ?: "一覧を読み込めません"
                 } finally {
                     transientPending.value = false
+                }
+            }
+        }
+
+        fun retryStartupLoad() {
+            if (transientPending.value) return
+            errorMessage.value = null
+            startupLoadFailed.value = false
+            performTransient {
+                try {
+                    showList()
+                } catch (error: Exception) {
+                    startupLoadFailed.value = true
+                    navigationTargetIsList = true
+                    page.value = Page.List
+                    throw error
                 }
             }
         }
@@ -252,18 +270,29 @@ class MainActivity : ComponentActivity() {
                         title = { Text("操作を完了できません") },
                         text = { Text(message) },
                         confirmButton = { TextButton(onClick = { dismissListActionFailure() }) {
-                            Text("閉じる")
-                        } })
+                            Text(if (startupLoadFailed.value) "一覧へ" else "閉じる")
+                        } },
+                        dismissButton = if (startupLoadFailed.value) ({
+                            TextButton(onClick = { retryStartupLoad() }) { Text("再試行") }
+                        }) else null,
+                    )
                 }
             }
         }
 
         if (boardListActions.state.value == BoardListActionState.Idle) {
             performTransient {
-                if (navigationTargetIsList) showList()
-                else {
-                    val restored = store.restore()
-                    if (restored == null) showList() else openBoard(restored)
+                try {
+                    if (navigationTargetIsList) showList()
+                    else {
+                        val restored = store.restore()
+                        if (restored == null) showList() else openBoard(restored)
+                    }
+                } catch (error: Exception) {
+                    startupLoadFailed.value = true
+                    navigationTargetIsList = true
+                    page.value = Page.List
+                    throw error
                 }
             }
         }
