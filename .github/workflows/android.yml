@@ -75,7 +75,65 @@ jobs:
           api-level: '37.0'
           target: google_apis
           arch: x86_64
-          profile: pixel_7_pro
-          ram-size: 4096M
+          profile: pixel_7
+          ram-size: 3072M
+          disk-size: 8192M
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu software -feature -Vulkan -camera-back none -camera-front none
-          script: ./gradlew :app:connectedDebugAndroidTest --no-daemon
+          script: |
+            rm -rf app/build/outputs/androidTest-results/connected/ app/build/reports/androidTests/connected/
+            ./gradlew :app:connectedDebugAndroidTest --no-daemon
+      - name: Instrumentation result integrity gate
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          import xml.etree.ElementTree as ET
+
+          results = Path("app/build/outputs/androidTest-results/connected")
+          xml_files = sorted(results.rglob("TEST-*.xml")) if results.exists() else []
+          testcases = failures = errors = 0
+
+          try:
+              for path in xml_files:
+                  root = ET.parse(path).getroot()
+                  for element in root.iter():
+                      tag = element.tag.rsplit("}", 1)[-1]
+                      if tag == "testcase":
+                          testcases += 1
+                      elif tag == "failure":
+                          failures += 1
+                      elif tag == "error":
+                          errors += 1
+          except (ET.ParseError, OSError) as exc:
+              print(f"Invalid instrumentation result XML: {exc}")
+              sys.exit(1)
+
+          print(f"result_files={len(xml_files)} testcases={testcases} failures={failures} errors={errors}")
+          for apk in (
+              Path("app/build/outputs/apk/debug/app-debug.apk"),
+              Path("app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"),
+          ):
+              if apk.is_file():
+                  print(f"{apk} bytes={apk.stat().st_size}")
+
+          if not xml_files:
+              print("No fresh TEST-*.xml instrumentation results were produced.")
+              sys.exit(1)
+          if testcases == 0:
+              print("Instrumentation results contain no testcases.")
+              sys.exit(1)
+          if failures > 0 or errors > 0:
+              print("Instrumentation results contain failures or errors.")
+              sys.exit(1)
+          PY
+      - name: Android 17 instrumentation results を保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-17-instrumentation-results
+          path: |
+            app/build/outputs/androidTest-results/connected/
+            app/build/reports/androidTests/connected/
+          if-no-files-found: error
+          retention-days: 7
