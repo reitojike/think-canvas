@@ -16,6 +16,7 @@ import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,7 +24,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ConditionalChromeLifecycleTest {
     @Test
-    fun selectionShareRowStopsExcludingCanvasWhenHiddenAndReturnsAtCurrentBounds() {
+    fun regionNameTransitionRemovesFormerSelectionSharePointUntilReselected() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         seedBoard(context)
@@ -31,41 +32,37 @@ class ConditionalChromeLifecycleTest {
         val activity = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
-        val automation = instrumentation.uiAutomation
         try {
-            click(instrumentation, "囲み: Cluster")
-            val originalShareBounds = bounds(waitFor(instrumentation, "選択範囲を画像で共有"))
-            val formerPaddingPoint = originalShareBounds.centerX().toFloat() to
-                (originalShareBounds.bottom + 3f * context.resources.displayMetrics.density)
+            clickActionable(instrumentation, "囲み: Cluster")
+            assertEquals("囲みが選択されている", "選択中",
+                waitForRegionState(instrumentation, "選択中"))
 
-            tap(instrumentation, context.resources.displayMetrics.widthPixels * .15f,
-                context.resources.displayMetrics.heightPixels * .3f)
-            assertTrue("選択解除で共有行が消える", find(automation.rootInActiveWindow,
-                "選択範囲を画像で共有") == null)
-            tap(instrumentation, formerPaddingPoint.first, formerPaddingPoint.second)
-            waitFor(instrumentation, "完了")
-            click(instrumentation, "やめる")
+            val shareButton = waitForActionable(instrumentation, "選択範囲を画像で共有")
+            val shareCenter = center(bounds(shareButton))
 
-            click(instrumentation, "囲み: Cluster")
-            val currentShareBounds = bounds(waitFor(instrumentation, "選択範囲を画像で共有"))
-            assertNotNull("再表示で現在の共有行がアクセシビリティに復帰する",
-                find(automation.rootInActiveWindow, "選択範囲を画像で共有"))
-            tap(instrumentation, currentShareBounds.centerX().toFloat(),
-                currentShareBounds.bottom + 3f * context.resources.displayMetrics.density)
-            assertTrue("再表示中の共有行は canvas input を除外する",
-                find(automation.rootInActiveWindow, "完了") == null)
+            val (region, renameAction) = waitForRegionRenameAction(instrumentation)
+            assertTrue("囲み名編集のアクセシビリティ操作を実行できる",
+                region.performAction(renameAction.id))
+            instrumentation.waitForIdleSync()
+            waitForGone(instrumentation, "選択範囲を画像で共有")
+            assertNotNull("共有行が消えた状態で囲み名 editor が active",
+                findExact(instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前"))
+            assertEquals("former point tap 前も囲みは選択中", "選択中",
+                waitForRegionState(instrumentation, "選択中"))
 
-            click(instrumentation, "名前")
-            assertTrue("名前編集で共有行が消える", find(automation.rootInActiveWindow,
-                "選択範囲を画像で共有") == null)
-            waitFor(instrumentation, "完了")
-            click(instrumentation, "完了")
-            tap(instrumentation, context.resources.displayMetrics.widthPixels * .15f,
-                context.resources.displayMetrics.heightPixels * .3f)
-            assertTrue("名前編集遷移後の選択解除でも共有行が消える",
-                find(automation.rootInActiveWindow, "選択範囲を画像で共有") == null)
-            tap(instrumentation, formerPaddingPoint.first, formerPaddingPoint.second)
-            waitFor(instrumentation, "完了")
+            tap(instrumentation, shareCenter.first, shareCenter.second)
+            assertEquals("former share Button center から囲み選択が解除される", "未選択",
+                waitForRegionState(instrumentation, "未選択"))
+            assertNotNull("選択解除後も囲み名 editor は active",
+                findExact(instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前"))
+
+            clickActionable(instrumentation, "完了")
+            waitForGone(instrumentation, "選択範囲を画像で共有")
+            clickActionable(instrumentation, "囲み: Cluster")
+            assertEquals("再選択後に囲みが選択中", "選択中",
+                waitForRegionState(instrumentation, "選択中"))
+            assertNotNull("再選択後に共有 Button が再表示される",
+                waitForActionable(instrumentation, "選択範囲を画像で共有"))
         } finally {
             activity.finish()
             instrumentation.waitForIdleSync()
@@ -73,7 +70,7 @@ class ConditionalChromeLifecycleTest {
     }
 
     @Test
-    fun hiddenCollapsedAndExpandedToolsLocationsAdmitInkAndToolsCanReturn() {
+    fun collapsedAndExpandedToolFormerCentersAdmitPersistedInkAndAllowReentry() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         seedBoard(context)
@@ -82,30 +79,41 @@ class ConditionalChromeLifecycleTest {
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
         val database = CanvasDatabase.open(context)
+        val initialInkCount = runBlocking { database.canvasDao().inkStrokes(1).size }
         try {
-            val collapsed = bounds(waitFor(instrumentation, "図形ツールを開く"))
-            click(instrumentation, "図形ツールを開く")
-            val markerInExpandedTools = bounds(waitFor(instrumentation, "マーカー"))
-            click(instrumentation, "ペン")
-            draw(instrumentation, collapsed.centerX().toFloat(), collapsed.centerY().toFloat())
-            awaitInkCount(database, 1)
+            val collapsedLauncher = waitForActionable(instrumentation, "図形ツールを開く")
+            val collapsedCenter = center(bounds(collapsedLauncher))
+            clickNode(instrumentation, collapsedLauncher, "図形ツールを開く")
 
-            click(instrumentation, "やめる")
-            waitFor(instrumentation, "図形ツールを開く")
-            click(instrumentation, "図形ツールを開く")
-            val reShownMarker = bounds(waitFor(instrumentation, "マーカー"))
-            assertTrue("再表示後の expanded tool bounds が有効",
-                reShownMarker.width() > 0 && reShownMarker.height() > 0)
-            click(instrumentation, "マーカー")
-            draw(instrumentation, reShownMarker.centerX().toFloat(), reShownMarker.centerY().toFloat())
-            awaitInkCount(database, 2)
-            assertEquals(2, runBlocking { database.canvasDao().inkStrokes(1).size })
+            val collapsedPen = waitForActionable(instrumentation, "ペン")
+            clickNode(instrumentation, collapsedPen, "ペン")
+            waitForGone(instrumentation, "図形ツールを開く")
+            draw(instrumentation, collapsedCenter.first, collapsedCenter.second)
+            awaitInkCount(database, initialInkCount + 1)
+            assertEquals("collapsed launcher の旧位置から始めた ink が保存される",
+                initialInkCount + 1, runBlocking { database.canvasDao().inkStrokes(1).size })
 
-            click(instrumentation, "やめる")
-            waitFor(instrumentation, "図形ツールを開く")
-            click(instrumentation, "図形ツールを開く")
-            assertTrue("再表示された tools の expanded 領域は新しい layout を持つ",
-                markerInExpandedTools.width() > 0)
+            clickActionable(instrumentation, "やめる")
+            val reenteredLauncher = waitForActionable(instrumentation, "図形ツールを開く")
+            clickNode(instrumentation, reenteredLauncher, "図形ツールを開く")
+            val expandedTool = waitForAnyActionable(instrumentation, listOf("ペン", "マーカー"))
+            val expandedCenter = center(bounds(expandedTool))
+            clickNode(instrumentation, expandedTool, requireNotNull(expandedTool.contentDescription).toString())
+            waitForGone(instrumentation, "図形ツールを開く")
+            draw(instrumentation, expandedCenter.first, expandedCenter.second)
+            awaitInkCount(database, initialInkCount + 2)
+            assertEquals("expanded Pen/Marker の旧位置から始めた ink が保存される",
+                initialInkCount + 2, runBlocking { database.canvasDao().inkStrokes(1).size })
+
+            clickActionable(instrumentation, "やめる")
+            val finalLauncher = waitForActionable(instrumentation, "図形ツールを開く")
+            clickNode(instrumentation, finalLauncher, "図形ツールを開く")
+            val finalPen = waitForAnyActionable(instrumentation, listOf("ペン", "マーカー"))
+            clickNode(instrumentation, finalPen, requireNotNull(finalPen.contentDescription).toString())
+            waitForGone(instrumentation, "図形ツールを開く")
+            clickActionable(instrumentation, "やめる")
+            assertNotNull("ink mode 終了後に actionable launcher が再表示される",
+                waitForActionable(instrumentation, "図形ツールを開く"))
         } finally {
             database.close()
             activity.finish()
@@ -126,30 +134,105 @@ class ConditionalChromeLifecycleTest {
         database.close()
     }
 
-    private fun find(node: AccessibilityNodeInfo?, label: String): AccessibilityNodeInfo? {
+    private fun findExact(node: AccessibilityNodeInfo?, label: String): AccessibilityNodeInfo? {
         if (node == null) return null
-        if (node.contentDescription?.toString()?.startsWith(label) == true) return node
-        for (index in 0 until node.childCount) find(node.getChild(index), label)?.let { return it }
+        if (node.contentDescription?.toString() == label) return node
+        for (index in 0 until node.childCount) {
+            findExact(node.getChild(index), label)?.let { return it }
+        }
         return null
     }
 
-    private fun waitFor(instrumentation: android.app.Instrumentation, label: String): AccessibilityNodeInfo {
-        repeat(40) {
-            instrumentation.waitForIdleSync()
-            find(instrumentation.uiAutomation.rootInActiveWindow, label)?.let { return it }
-            Thread.sleep(100)
+    private fun findActionable(node: AccessibilityNodeInfo?, label: String): AccessibilityNodeInfo? {
+        if (node == null) return null
+        val ownsClick = node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }
+        if (node.contentDescription?.toString() == label && ownsClick) return node
+        for (index in 0 until node.childCount) {
+            findActionable(node.getChild(index), label)?.let { return it }
         }
-        error("アクセシビリティ要素が見つかりません: $label")
+        return null
     }
 
-    private fun click(instrumentation: android.app.Instrumentation, label: String) {
-        var node: AccessibilityNodeInfo? = waitFor(instrumentation, label)
-        while (node != null && !node.isClickable) node = node.parent
-        assertTrue("$label を操作できる", node?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true)
+    private fun waitForActionable(
+        instrumentation: android.app.Instrumentation,
+        label: String,
+    ): AccessibilityNodeInfo {
+        repeat(40) {
+            instrumentation.waitForIdleSync()
+            findActionable(instrumentation.uiAutomation.rootInActiveWindow, label)?.let { return it }
+            Thread.sleep(100)
+        }
+        error("操作可能なアクセシビリティ要素が見つかりません: $label")
+    }
+
+    private fun waitForAnyActionable(
+        instrumentation: android.app.Instrumentation,
+        labels: List<String>,
+    ): AccessibilityNodeInfo {
+        repeat(40) {
+            instrumentation.waitForIdleSync()
+            val root = instrumentation.uiAutomation.rootInActiveWindow
+            for (label in labels) findActionable(root, label)?.let { return it }
+            Thread.sleep(100)
+        }
+        error("操作可能なアクセシビリティ要素が見つかりません: ${labels.joinToString()}")
+    }
+
+    private fun waitForRegionState(
+        instrumentation: android.app.Instrumentation,
+        expected: String,
+    ): String {
+        repeat(40) {
+            instrumentation.waitForIdleSync()
+            val state = findActionable(instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster")
+                ?.stateDescription?.toString()
+            if (state == expected) return state
+            Thread.sleep(100)
+        }
+        error("囲みの stateDescription が $expected になりません")
+    }
+
+    private fun waitForRegionRenameAction(
+        instrumentation: android.app.Instrumentation,
+    ): Pair<AccessibilityNodeInfo, AccessibilityNodeInfo.AccessibilityAction> {
+        repeat(40) {
+            instrumentation.waitForIdleSync()
+            val region = findActionable(instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster")
+            val action = region?.actionList?.firstOrNull { it.label?.toString() == "囲みの名前を編集" }
+            if (region != null && action != null) return region to action
+            Thread.sleep(100)
+        }
+        error("囲み: Cluster の名前編集 accessibility action が見つかりません")
+    }
+
+    private fun clickActionable(instrumentation: android.app.Instrumentation, label: String) {
+        clickNode(instrumentation, waitForActionable(instrumentation, label), label)
+    }
+
+    private fun clickNode(
+        instrumentation: android.app.Instrumentation,
+        node: AccessibilityNodeInfo,
+        label: String,
+    ) {
+        assertTrue("$label の node 自身が ACTION_CLICK を持つ",
+            node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
+        assertTrue("$label を操作できる", node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         instrumentation.waitForIdleSync()
     }
 
+    private fun waitForGone(instrumentation: android.app.Instrumentation, label: String) {
+        repeat(40) {
+            instrumentation.waitForIdleSync()
+            if (findExact(instrumentation.uiAutomation.rootInActiveWindow, label) == null) return
+            Thread.sleep(100)
+        }
+        error("非表示になったアクセシビリティ要素が残っています: $label")
+    }
+
     private fun bounds(node: AccessibilityNodeInfo): Rect = Rect().also(node::getBoundsInScreen)
+
+    private fun center(rect: Rect): Pair<Float, Float> =
+        rect.exactCenterX() to rect.exactCenterY()
 
     private fun tap(instrumentation: android.app.Instrumentation, x: Float, y: Float) {
         val down = SystemClock.uptimeMillis()
