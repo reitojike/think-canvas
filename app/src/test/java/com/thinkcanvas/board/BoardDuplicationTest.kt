@@ -11,6 +11,7 @@ import com.thinkcanvas.canvas.InkStroke
 import com.thinkcanvas.canvas.ShapeElement
 import com.thinkcanvas.canvas.ShapeKind
 import com.thinkcanvas.canvas.TextElement
+import com.thinkcanvas.canvas.modelLogicalBounds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -37,6 +38,7 @@ class BoardDuplicationTest {
         assertNotEquals(ink.id, copy.ink.single().id)
         assertNotEquals(stroke.id, copy.ink.single().strokes.single().id)
         assertEquals(text.copy(id = copy.texts.single().id), copy.texts.single())
+        assertEquals(text.modelLogicalBounds(), copy.texts.single().modelLogicalBounds())
         assertEquals(shape.copy(id = copy.shapes.single().id), copy.shapes.single())
         assertEquals(ink.copy(id = copy.ink.single().id,
             strokes = listOf(stroke.copy(id = copy.ink.single().strokes.single().id))), copy.ink.single())

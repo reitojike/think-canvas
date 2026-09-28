@@ -1,6 +1,8 @@
 package com.thinkcanvas.canvas
 
 import android.os.SystemClock
+import com.thinkcanvas.board.fittedViewport
+import com.thinkcanvas.board.RegionLabelSize
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -29,6 +31,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -114,6 +117,7 @@ private data class Draft(
 @Composable
 fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     var viewport by remember { mutableStateOf(Viewport()) }
+    var initialFitApplied by remember(board) { mutableStateOf(false) }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var tool by remember { mutableStateOf(SpatialTool.NONE) }
@@ -151,6 +155,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
     val regionNameFocusRequester = remember { FocusRequester() }
+    val canvasTextStyle = LocalTextStyle.current
+    val regionLabelStyle = canvasTextStyle.copy(fontSize = DetailedRenderFacts.REGION_LABEL_SIZE_SP.sp)
     val searchFocusRequester = remember { FocusRequester() }
     val viewConfiguration = LocalViewConfiguration.current
     val context = LocalContext.current
@@ -195,7 +201,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         else 166.dp
         val measured = textMeasurer.measure(
             text = AnnotatedString(element.text),
-            style = TextStyle(fontSize = size, lineHeight = size * 1.5f,
+            style = canvasTextStyle.copy(fontSize = size, lineHeight = size * 1.5f,
                 fontWeight = if (title) FontWeight.Bold else FontWeight.Normal),
             maxLines = if (tier == SemanticTier.NEAR) Int.MAX_VALUE else 1,
             overflow = TextOverflow.Ellipsis,
@@ -205,20 +211,71 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         return TextExtent(measured.width.toFloat(), measured.height.toFloat())
     }
     val measuredTextExtents = remember(board.elements, board.shapes, viewport.scale, density,
-        selectedIds, matchIds) {
+        canvasTextStyle, selectedIds, matchIds) {
         board.elements.associate { element ->
             element.id to measureTextExtent(element, viewport.scale, keptIds, boundaryShapes)
         }
     }
+    val measuredRegionLabelSizes = remember(snapshot.shapes, canvasSize.width, density, regionLabelStyle) {
+        val labelWidth = (canvasSize.width - 40).coerceAtLeast(1)
+        snapshot.shapes.filter { it.kind == ShapeKind.REGION && it.name.isNotBlank() }
+            .associate { shape ->
+                val size = textMeasurer.measure(AnnotatedString(shape.name),
+                    style = regionLabelStyle, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    constraints = Constraints(maxWidth = labelWidth)).size
+                shape.id to RegionLabelSize(size.width.toFloat(), size.height.toFloat())
+            }
+    }
+    val latestRegionLabelSizes = rememberUpdatedState(measuredRegionLabelSizes)
+    LaunchedEffect(board, canvasSize, density, canvasTextStyle) {
+        if (!initialFitApplied && canvasSize.width > 0 && canvasSize.height > 0) {
+            var fitted = snapshot.fittedViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat())
+            for (pass in 0 until 8) {
+                val approximateProjection = snapshot.semanticProjection(fitted.scale, bodyDp,
+                    pixelsPerDp = density.density, titleDp = titleDp)
+                val visibleShapes = snapshot.shapes.filter { approximateProjection.visible(it.id) }
+                val textSizes = snapshot.texts.associate { element ->
+                    element.id to measureTextExtent(element, fitted.scale, emptySet(), visibleShapes)
+                }
+                val resolvedTextBounds = textSizes.mapNotNull { (id, extent) ->
+                    val text = snapshot.texts.first { it.id == id }
+                    id to WorldBounds(text.x, text.y, text.x + extent.width, text.y + extent.height)
+                }.toMap()
+                val geometry = snapshot.resolveRenderedGeometry(resolvedTextBounds,
+                    fitted.scale, density.density)
+                val displayProjection = snapshot.semanticProjection(fitted.scale, bodyDp,
+                    pixelsPerDp = density.density, titleDp = titleDp,
+                    resolvedRenderedBounds = geometry.boundsById)
+                val visibleLabels = measuredRegionLabelSizes.filterKeys { id ->
+                    displayProjection.visible(id) && !displayProjection.farLikeRegion(id)
+                }
+                val next = snapshot.fittedViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat(),
+                    visibleLabels, textSizes, maximumScale = fitted.scale, renderedGeometry = geometry)
+                val settled = next.scale >= fitted.scale - .001f
+                fitted = next
+                if (settled) break
+            }
+            viewport = fitted
+            initialFitApplied = true
+        }
+    }
+    val resolvedTextBounds = measuredTextExtents.mapNotNull { (id, extent) ->
+        val text = snapshot.texts.firstOrNull { it.id == id } ?: return@mapNotNull null
+        id to WorldBounds(text.x, text.y, text.x + extent.width, text.y + extent.height)
+    }.toMap()
+    val renderedGeometry = remember(resolvedTextBounds, snapshot.shapes, snapshot.arrows,
+        snapshot.ink, viewport.scale, density.density) {
+        snapshot.resolveRenderedGeometry(resolvedTextBounds, viewport.scale, density.density)
+    }
+    val latestRenderedGeometry = rememberUpdatedState(renderedGeometry)
     val searchMatches = rawSearchMatches.map { match ->
-        val element = board.elements.firstOrNull { it.id == match.id }
-        val extent = measuredTextExtents[match.id]
-        if (element == null || extent == null) match else match.copy(bounds = WorldBounds(
-            element.x, element.y, element.x + extent.width, element.y + extent.height))
+        val bounds = renderedGeometry.bounds(match.id)
+        if (bounds == null) match else match.copy(bounds = bounds)
     }
     val currentMatch = searchMatches.getOrNull(searchPosition)
     val projection = board.snapshot().semanticProjection(viewport.scale, bodyDp,
-        selectedIds + matchIds, density.density, titleDp, titleLineHeightWorld, measuredTextExtents)
+        selectedIds + matchIds, density.density, titleDp, titleLineHeightWorld,
+        renderedGeometry.boundsById)
     val latestProjection = rememberUpdatedState(projection)
     val latestLastBlankTap = rememberUpdatedState(lastBlankTap)
     val latestSearchOpen = rememberUpdatedState(searchOpen)
@@ -355,15 +412,20 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         val snapshot = latestSnapshot.value
         snapshot.arrows.asReversed().firstOrNull { arrow ->
             latestProjection.value.visible(arrow.id) &&
-                snapshot.distanceToArrow(world, arrow, 6f / view.scale) <= 12f / view.scale
+            snapshot.distanceToArrow(world, arrow,
+                DetailedRenderFacts.ARROW_ENDPOINT_OFFSET_DP * density.density / view.scale,
+                latestRenderedGeometry.value.boundsById) <= 12f / view.scale
         }?.let { return it.id }
         val visibleShapes = snapshot.shapes.asReversed().filter { latestProjection.value.visible(it.id) }
         visibleShapes.firstOrNull { shape ->
-            val (nameX, nameY) = view.worldToScreen(shape.x + 8f, shape.y - 22f)
-            val nameWidth = with(density) { maxOf(48.dp.toPx(), shape.name.length * 14.dp.toPx()) }
+            val (nameX, nameY) = view.worldToScreen(
+                shape.x + DetailedRenderFacts.REGION_LABEL_LEFT_WORLD,
+                shape.y - DetailedRenderFacts.REGION_LABEL_TOP_WORLD)
+            val labelSize = latestRegionLabelSizes.value[shape.id]
+            val minimumLabelTarget = with(density) { 48.dp.toPx() }
             val nameHit = shape.kind == ShapeKind.REGION && shape.name.isNotBlank() &&
-                point.x in nameX..(nameX + nameWidth) &&
-                point.y in (nameY - with(density) { 8.dp.toPx() })..(nameY + with(density) { 28.dp.toPx() })
+                labelSize != null && point.x in nameX..(nameX + maxOf(minimumLabelTarget, labelSize.width)) &&
+                point.y in nameY..(nameY + maxOf(minimumLabelTarget, labelSize.height))
             shape.hitStroke(world, 12f / view.scale) || nameHit
         }?.let { return it.id }
         visibleShapes.firstOrNull { it.kind != ShapeKind.REGION &&
@@ -386,7 +448,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
         val target = hitTest(point)?.id ?: latestSnapshot.value.shapes.asReversed()
             .firstOrNull { latestProjection.value.visible(it.id) &&
                 (it.containsInterior(world) || it.hitStroke(world, 12f / latestViewport.value.scale)) }?.id
-        val bounds = target?.let { latestSnapshot.value.boundsOf(it) }
+        val bounds = target?.let { latestSnapshot.value.boundsOf(it,
+            latestRenderedGeometry.value.boundsById) }
         return if (target != null && bounds != null) ArrowEnd.Attached(
             target, ((x - bounds.left) / (bounds.right - bounds.left)).coerceIn(0f, 1f),
             ((y - bounds.top) / (bounds.bottom - bounds.top)).coerceIn(0f, 1f),
@@ -407,7 +470,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             })
             HandleKind.BEND -> source.copy(arrows = source.arrows.map { arrow ->
                 if (arrow.id != id) arrow else {
-                    val points = source.arrowPoints(arrow, 6f / latestViewport.value.scale)
+                    val points = source.arrowPoints(arrow,
+                        DetailedRenderFacts.ARROW_ENDPOINT_OFFSET_DP * density.density /
+                            latestViewport.value.scale,
+                        latestRenderedGeometry.value.boundsById)
                     if (points == null) arrow else {
                         val dx = points.second.x - points.first.x
                         val dy = points.second.y - points.first.y
@@ -626,7 +692,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                         (start - Offset(x, y)).getDistance() <= radius
                     }?.let { shape -> if (handle == null) { targetId = shape.id; handle = HandleKind.MOVE } }
                     snapshot.arrows.filter { it.id in latestSelectedIds.value }.forEach { arrow ->
-                        snapshot.arrowPoints(arrow, 6f / latestViewport.value.scale)?.let { (a, b) ->
+                        snapshot.arrowPoints(arrow,
+                            DetailedRenderFacts.ARROW_ENDPOINT_OFFSET_DP * density.density /
+                                latestViewport.value.scale,
+                            latestRenderedGeometry.value.boundsById)?.let { (a, b) ->
                             val (ax, ay) = latestViewport.value.worldToScreen(a.x, a.y)
                             val (bx, by) = latestViewport.value.worldToScreen(b.x, b.y)
                             if ((start - Offset(ax, ay)).getDistance() <= radius) {
@@ -635,7 +704,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                                 targetId = arrow.id; handle = HandleKind.TO
                             }
                         }
-                        snapshot.arrowControl(arrow, 6f / latestViewport.value.scale)?.let { c ->
+                        snapshot.arrowControl(arrow,
+                            DetailedRenderFacts.ARROW_ENDPOINT_OFFSET_DP * density.density /
+                                latestViewport.value.scale,
+                            latestRenderedGeometry.value.boundsById)?.let { c ->
                             val (x, y) = latestViewport.value.worldToScreen(c.x, c.y)
                             if ((start - Offset(x, y)).getDistance() <= radius) {
                                 targetId = arrow.id; handle = HandleKind.BEND
@@ -744,7 +816,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                             "lasso" -> {
                                 val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
                                 selectedIds = latestSnapshot.value.visibleLassoSelection(
-                                    lassoPoints + WorldPoint(x, y), latestProjection.value)
+                                    lassoPoints + WorldPoint(x, y), latestProjection.value,
+                                    latestRenderedGeometry.value.boundsById,
+                                    DetailedRenderFacts.ARROW_ENDPOINT_OFFSET_DP * density.density /
+                                        latestViewport.value.scale)
                                 selectedId = selectedIds.singleOrNull()?.takeIf { id -> board.elements.any { it.id == id } }
                                 guidance = "${selectedIds.size}個を選択"
                                 tool = SpatialTool.NONE
@@ -955,9 +1030,15 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 displaySnapshot.shapes.filterIndexed { index, it -> it != sourceSnapshot.shapes[index] }.map { it.id }).toSet()
         }
         val movingIds = movingPreview?.first ?: emptySet()
+        val displayTextBounds = displaySnapshot.texts.mapNotNull { text ->
+            val extent = measuredTextExtents[text.id] ?: return@mapNotNull null
+            text.id to WorldBounds(text.x, text.y, text.x + extent.width, text.y + extent.height)
+        }.toMap()
+        val displayGeometry = displaySnapshot.resolveRenderedGeometry(displayTextBounds,
+            viewport.scale, density.density)
         val displayProjection = displaySnapshot.semanticProjection(viewport.scale, bodyDp,
             selectedIds + matchIds + movingIds, density.density, titleDp, titleLineHeightWorld,
-            measuredTextExtents)
+            displayGeometry.boundsById)
         val displayBoundaryShapes = displaySnapshot.shapes.filter { displayProjection.visible(it.id) }
         InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.MARKER,
             viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
@@ -974,7 +1055,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             })
         SpatialElements(displaySnapshot, viewport, selectedIds, movingIds, spatialPreview, lassoPoints,
             gapPreview, ghostIds, displayProjection, matchIds, currentMatch?.id,
-            searchOpen && searchQuery.isNotBlank(),
+            searchOpen && searchQuery.isNotBlank(), canvasSize.width,
             onHandle = { id, kind ->
             if (saving || saveFailed) false else {
                 val changed = when (kind) {
@@ -984,7 +1065,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     } ?: false
                     HandleKind.FROM, HandleKind.TO -> board.arrows.firstOrNull { it.id == id }?.let { arrow ->
                         val end = board.snapshot().detachedEnd(arrow, kind == HandleKind.FROM,
-                            6f / viewport.scale)
+                            DetailedRenderFacts.ARROW_ENDPOINT_OFFSET_DP * density.density /
+                                viewport.scale, displayGeometry.boundsById)
                         if (end == null) false else if (kind == HandleKind.FROM)
                             board.updateArrow(id, from = end)
                         else board.updateArrow(id, to = end)
@@ -1048,7 +1130,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                     if (it) saveSnapshot()
                 }
             },
-        )
+            renderedBounds = displayGeometry.boundsById)
 
         attachmentEditor?.takeIf { displayProjection.visible(it.first) }?.let { (arrowId, endKind) ->
             board.arrows.firstOrNull { it.id == arrowId }?.let { arrow ->
@@ -1385,7 +1467,9 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                                     selectedIds = board.snapshot().visibleLassoSelection(listOf(
                                         WorldPoint(left, top), WorldPoint(right, top),
                                         WorldPoint(right, bottom), WorldPoint(left, bottom),
-                                    ), projection)
+                                    ), projection, renderedGeometry.boundsById,
+                                        DetailedRenderFacts.ARROW_ENDPOINT_OFFSET_DP * density.density /
+                                            viewport.scale)
                                     selectedId = null
                                     guidance = "${selectedIds.size}個を選択"
                                     true
@@ -1418,7 +1502,8 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
             }
 
             menuTarget?.takeIf(projection::visible)?.let { id ->
-                val center = board.snapshot().centerOf(id) ?: WorldPoint(0f, 0f)
+                val center = renderedGeometry.bounds(id)?.center
+                    ?: board.snapshot().centerOf(id) ?: WorldPoint(0f, 0f)
                 val (anchorX, anchorY) = viewport.worldToScreen(center.x, center.y)
                 val menuX = anchorX.coerceIn(8f, maxOf(8f, canvasSize.width - with(density) { 320.dp.toPx() }))
                 val menuY = (anchorY + with(density) { 22.dp.toPx() })

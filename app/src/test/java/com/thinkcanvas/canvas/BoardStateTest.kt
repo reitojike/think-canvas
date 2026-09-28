@@ -36,6 +36,28 @@ class BoardStateTest {
     }
 
     @Test
+    fun textEditUndoRedoReDerivesLogicalMembershipWhileKeepingAnchor() {
+        val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+            x = 0f, y = 0f, width = 100f, height = 100f)
+        val short = TextElement(id = "text", text = "猫", x = 40f, y = 20f)
+        val board = BoardState(listOf(short), listOf(region))
+        assertEquals(WorldPoint(45f, 30f), board.snapshot().centerOf(short.id))
+        assertTrue(region.bounds().contains(board.snapshot().centerOf(short.id)!!))
+
+        val long = "映画を見たあとに残った違和感と好きだった場面をあとで整理する"
+        assertTrue(board.edit(short.id, long, TextKind.BODY, TextColor.INK))
+        assertEquals(40f, board.elements.single().x)
+        assertEquals(WorldPoint(120f, 40f), board.snapshot().centerOf(short.id))
+        assertFalse(region.bounds().contains(board.snapshot().centerOf(short.id)!!))
+
+        assertTrue(board.undo())
+        assertEquals(WorldPoint(45f, 30f), board.snapshot().centerOf(short.id))
+        assertTrue(board.redo())
+        assertEquals(WorldPoint(120f, 40f), board.snapshot().centerOf(short.id))
+        assertEquals(40f, board.elements.single().x)
+    }
+
+    @Test
     fun viewportChangesNeverChangeWorldCoordinates() {
         val element = TextElement(text = "配置", x = 173.25f, y = -88.5f)
         val board = BoardState(listOf(element))

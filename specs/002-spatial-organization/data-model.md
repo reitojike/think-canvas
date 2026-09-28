@@ -4,7 +4,28 @@
 
 ## Board と TextElement
 
-`boards` と `text_elements` を現行 schema v1 に含める。文字の中心判定には、表示倍率・端末文字サイズから独立した論理境界を使う。ボードの名前と更新時刻を空間要素の保存で失わない。
+`boards` と `text_elements` を現行 schema v2 に含める。文字の中心判定には、表示倍率・端末文字サイズから独立した論理境界を使う。ボードの名前と更新時刻を空間要素の保存で失わない。
+
+### TextElement の canonical model logical bounds
+
+`TextElement.x/y` は world-space の左上配置 / draw anchor であり、中心ではない。model contract version 1 では `text`, `kind`, `x`, `y` から `MODEL_LOGICAL_BOUNDS` を純粋に導出し、その中心を region membership、gap scope/side などの model-space 判定に使う。`RENDERED_BOUNDS` は表示専用 authority であり、この導出や model membership に使わない。
+
+| Kind | 1 code point の幅 | 行高 | 行あたりの wrap 上限 | 最大行幅 |
+|---|---:|---:|---:|---:|
+| `BODY` | 10 world units | 20 world units | 16 cells | 160 world units |
+| `TITLE` | 11 world units | 22 world units | 15 cells | 165 world units |
+
+導出規則:
+
+1. CRLF と CR を LF に正規化し、LF で分割する。明示された空行と末尾の空行を保持する。
+2. 改行以外の Unicode code point を各 1 cell と数える。UTF-16 code unit、grapheme、glyph 幅は使わない。
+3. 各明示行を kind 固有の上限で greedy に折り返す。空行も論理行を 1 行占める。
+4. padding は 0。幅は最大 wrapped row の cell 数と 1 の大きい方に cell 幅を掛け、高さは論理行数と 1 の大きい方に行高を掛ける。
+5. `MODEL_LOGICAL_BOUNDS = [x, y, x + logicalWidth, y + logicalHeight]`、`MODEL_LOGICAL_CENTER = center(MODEL_LOGICAL_BOUNDS)` とする。
+
+この v1 の `logicalWidth`, `logicalHeight`, bounds、center、version はいずれも persisted field ではない。既存 Room v2 row を含むすべての行が同じ `text/kind/x/y` から導出できるため、migration、backfill、Room version 更新、schema 更新は行わない。create は同じ導出を使い、text/kind edit は `x/y` を保ったまま bounds/center を再導出してよい。color edit は論理 geometry を変えない。move は `x/y` と導出 bounds/center を同一 world-space delta で移動する。Undo/Redo、duplicate、save/reload は既存の model facts を保持し、同じ geometry を再導出する。
+
+model contract version 1 は per-row の version field ではなく固定された repository contract である。現在の行に version が保存されないため、将来 derivation を変えて既存の membership semantics を変える場合は、別途 product/data-semantics と必要な versioning/migration を実装前に決定する。
 
 ## SpatialElement
 
