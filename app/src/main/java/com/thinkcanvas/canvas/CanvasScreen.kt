@@ -1,6 +1,7 @@
 package com.thinkcanvas.canvas
 
 import android.os.SystemClock
+import androidx.activity.compose.BackHandler
 import com.thinkcanvas.board.fittedViewport
 import com.thinkcanvas.board.RegionLabelSize
 import androidx.compose.animation.core.animate
@@ -34,6 +35,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -97,6 +99,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.StateFlow
+import com.thinkcanvas.BoardSaveState
+import com.thinkcanvas.BoardSaveAcknowledgement
 
 private val paper = Color(0xFFFCFCFB)
 private val ink = Color(0xFF23211E)
@@ -115,7 +120,14 @@ private data class Draft(
 )
 
 @Composable
-fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
+fun CanvasScreen(
+    board: BoardState,
+    boardName: String,
+    saveState: StateFlow<BoardSaveState>,
+    onRequestSave: (BoardSnapshot) -> BoardSaveAcknowledgement?,
+    onRetrySave: () -> Unit,
+    onOpenList: () -> Unit,
+) {
     var viewport by remember { mutableStateOf(Viewport()) }
     var initialFitApplied by remember(board) { mutableStateOf(false) }
     var selectedId by remember { mutableStateOf<String?>(null) }
@@ -136,10 +148,10 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     var movePreview by remember { mutableStateOf<Pair<Set<String>, WorldPoint>?>(null) }
     var handlePreview by remember { mutableStateOf<BoardSnapshot?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
-    var saving by remember { mutableStateOf(false) }
-    var saveFailed by remember { mutableStateOf(false) }
-    var finishDraftAfterSave by remember { mutableStateOf(false) }
-    var pendingInkSave by remember { mutableStateOf(false) }
+    var pendingDraftAcknowledgement by remember { mutableStateOf<BoardSaveAcknowledgement?>(null) }
+    val currentSaveState by saveState.collectAsState()
+    val saving = currentSaveState is BoardSaveState.Running
+    val saveFailed = currentSaveState is BoardSaveState.Failed
     var pendingNewElementId by remember { mutableStateOf<String?>(null) }
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -287,7 +299,17 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val latestInkTool = rememberUpdatedState(inkTool)
     val latestDraft = rememberUpdatedState(draft)
     val latestSaveBlocked = rememberUpdatedState(saving || saveFailed)
-    val latestCommit = rememberUpdatedState(onCommittedChange)
+
+    LaunchedEffect(pendingDraftAcknowledgement) {
+        val acknowledgement = pendingDraftAcknowledgement ?: return@LaunchedEffect
+        acknowledgement.await()
+        if (pendingDraftAcknowledgement === acknowledgement) {
+            draft = null
+            keyboard?.hide()
+            pendingNewElementId = null
+            pendingDraftAcknowledgement = null
+        }
+    }
 
     fun animateViewport(target: Viewport) {
         latestAnimation.value?.cancel()
@@ -341,40 +363,13 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     val regionNameLabel = stringResource(R.string.region_name)
 
     fun saveSnapshot(closeDraft: Boolean = false) {
-        if (saving) { pendingInkSave = true; return }
-        // 再試行は現在の全 stroke を保存するため、古い待機フラグを持ち越さない。
-        pendingInkSave = false
-        finishDraftAfterSave = closeDraft
-        saving = true
-        saveFailed = false
-        val pending = try {
-            latestCommit.value()
-        } catch (_: Exception) {
-            saving = false
-            saveFailed = true
-            return
-        }
-        uiScope.launch {
-            try {
-                pending.await()
-                if (finishDraftAfterSave) {
-                    draft = null
-                    keyboard?.hide()
-                }
-                pendingNewElementId = null
-                finishDraftAfterSave = false
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                saveFailed = true
-            } finally {
-                saving = false
-                if (pendingInkSave && !saveFailed) {
-                    pendingInkSave = false
-                    saveSnapshot()
-                }
-            }
-        }
+        if (closeDraft && pendingDraftAcknowledgement != null) return
+        val acknowledgement = onRequestSave(board.snapshot())
+        if (closeDraft) pendingDraftAcknowledgement = acknowledgement
+    }
+
+    BackHandler {
+        if (!saving && !saveFailed && draft == null && regionNameId == null) onOpenList()
     }
 
     fun hitTest(point: Offset): TextElement? {
@@ -541,9 +536,13 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
     }
 
     fun commitDraft() {
+        if (pendingDraftAcknowledgement != null) {
+            if (saveFailed) onRetrySave()
+            return
+        }
         if (saving) return
         if (saveFailed) {
-            saveSnapshot(finishDraftAfterSave)
+            onRetrySave()
             return
         }
         val current = draft ?: return
@@ -1353,9 +1352,13 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = 8.dp)
                     .height(44.dp).background(Color.White, RoundedCornerShape(24.dp))
                     .pillBorder(24f).padding(horizontal = 14.dp)
+                    .clickable(enabled = !saving && !saveFailed && draft == null && regionNameId == null) {
+                        onOpenList()
+                    }
+                    .semantics { contentDescription = "ボード一覧を開く" }
                     .onGloballyPositioned { chromeBounds["board"] = it.boundsInParent() },
                 contentAlignment = Alignment.Center,
-            ) { Text(stringResource(R.string.board_name), color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+            ) { Text("‹ $boardName", color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
 
             if (inkTool == null) IconButton(onClick = {
                 searchOpen = true; searchQuery = ""; searchPosition = 0
@@ -1605,7 +1608,7 @@ fun CanvasScreen(board: BoardState, onCommittedChange: () -> Deferred<Unit>) {
                 modifier = Modifier.align(Alignment.TopEnd)
                     .padding(top = if (inkTool != null) 70.dp else 8.dp, end = 8.dp)
                     .height(44.dp)
-                    .then(if (saveFailed && draft == null) Modifier.clickable { saveSnapshot() } else Modifier)
+                    .then(if (saveFailed && draft == null) Modifier.clickable { onRetrySave() } else Modifier)
                     .semantics {
                         if (saveFailed && draft == null) contentDescription = saveFailedLabel
                     }

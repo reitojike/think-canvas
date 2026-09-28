@@ -7,6 +7,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
@@ -115,6 +116,112 @@ class BoardSessionViewModelTest {
         saved.complete(Unit)
 
         assertEquals(BoardSaveState.Idle, sessions.saveStateFor(1L, initial).value)
+    }
+
+    @Test fun immediateSuccessCompletesItsRequestAcknowledgement() {
+        val sessions = testSessions()
+        val snapshot = BoardSnapshot()
+        sessions.stateFor(1L, snapshot)
+        sessions.setSaveOperation { _, _ -> CompletableDeferred(Unit) }
+
+        val acknowledgement = requireNotNull(sessions.requestSave(1L, snapshot))
+
+        assertEquals(1L, acknowledgement.boardId)
+        assertEquals(1L, acknowledgement.requestId)
+        assertTrue(acknowledgement.isCompleted)
+    }
+
+    @Test fun failureDoesNotCompleteAcknowledgementAndRetryCompletesOriginalRequest() {
+        val sessions = testSessions()
+        val snapshot = BoardSnapshot()
+        val first = CompletableDeferred<Unit>()
+        val retry = CompletableDeferred<Unit>()
+        var calls = 0
+        sessions.stateFor(1L, snapshot)
+        sessions.setSaveOperation { _, _ -> if (calls++ == 0) first else retry }
+
+        val acknowledgement = requireNotNull(sessions.requestSave(1L, snapshot))
+        first.completeExceptionally(IllegalStateException("write failed"))
+        assertFalse(acknowledgement.isCompleted)
+        assertTrue(sessions.saveStateFor(1L, snapshot).value is BoardSaveState.Failed)
+
+        sessions.retrySave(1L)
+        assertFalse(acknowledgement.isCompleted)
+        retry.complete(Unit)
+
+        assertTrue(acknowledgement.isCompleted)
+        assertEquals(BoardSaveState.Idle, sessions.saveStateFor(1L, snapshot).value)
+    }
+
+    @Test fun coalescedRequestWaitsForTheCoveringSave() {
+        val sessions = testSessions()
+        val board = sessions.stateFor(1L, BoardSnapshot())
+        val first = CompletableDeferred<Unit>()
+        val covering = CompletableDeferred<Unit>()
+        val calls = mutableListOf<BoardSnapshot>()
+        sessions.setSaveOperation { _, snapshot ->
+            calls += snapshot
+            if (calls.size == 1) first else covering
+        }
+        board.create("first", TextKind.BODY, TextColor.INK, 1f, 2f)
+        val oldSnapshot = board.snapshot()
+        val oldAcknowledgement = requireNotNull(sessions.requestSave(1L, oldSnapshot))
+        board.create("coalesced", TextKind.BODY, TextColor.INK, 3f, 4f)
+        val requested = board.snapshot()
+        val acknowledgement = requireNotNull(sessions.requestSave(1L, requested))
+
+        first.complete(Unit)
+        assertTrue(oldAcknowledgement.isCompleted)
+        assertFalse(acknowledgement.isCompleted)
+        assertEquals(listOf(oldSnapshot, requested), calls)
+
+        covering.complete(Unit)
+        assertTrue(acknowledgement.isCompleted)
+    }
+
+    @Test fun anotherBoardSaveCannotCompleteTheRequest() {
+        val sessions = testSessions()
+        val first = CompletableDeferred<Unit>()
+        val second = CompletableDeferred<Unit>()
+        val a = BoardSnapshot()
+        val b = BoardSnapshot()
+        sessions.stateFor(1L, a)
+        sessions.stateFor(2L, b)
+        sessions.setSaveOperation { boardId, _ -> if (boardId == 1L) first else second }
+
+        val acknowledgement = requireNotNull(sessions.requestSave(1L, a))
+        val unrelated = requireNotNull(sessions.requestSave(2L, b))
+        second.complete(Unit)
+
+        assertTrue(unrelated.isCompleted)
+        assertFalse(acknowledgement.isCompleted)
+        first.complete(Unit)
+        assertTrue(acknowledgement.isCompleted)
+    }
+
+    @Test fun eachRequestHasAnIndependentExactlyOnceAcknowledgement() = runBlocking {
+        val sessions = testSessions()
+        val snapshot = BoardSnapshot()
+        val first = CompletableDeferred<Unit>()
+        var calls = 0
+        sessions.stateFor(1L, snapshot)
+        sessions.setSaveOperation { _, _ -> calls++; first }
+
+        val one = requireNotNull(sessions.requestSave(1L, snapshot))
+        val two = requireNotNull(sessions.requestSave(1L, snapshot))
+        assertNotSame(one, two)
+        assertEquals(1L, one.requestId)
+        assertEquals(2L, two.requestId)
+        first.complete(Unit)
+        assertTrue(one.isCompleted)
+        assertTrue(two.isCompleted)
+
+        two.await()
+        two.await()
+        one.await()
+        assertTrue(one.isCompleted)
+        assertTrue(two.isCompleted)
+        assertEquals(1, calls)
     }
 
     @Test fun failureAfterReopeningSessionIsRetainedAndRetryable() {
