@@ -38,6 +38,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -1433,6 +1434,9 @@ fun CanvasScreen(
                     .onGloballyPositioned { chromeBounds["tools"] = it.boundsInParent() },
                 horizontalAlignment = Alignment.End,
             ) {
+                DisposableEffect(Unit) {
+                    onDispose { chromeBounds.remove("tools") }
+                }
                 SpatialTools(tool, toolsExpanded, !saving && !saveFailed,
                     onExpand = {
                         if (tool == SpatialTool.NONE) toolsExpanded = !toolsExpanded
@@ -1514,6 +1518,9 @@ fun CanvasScreen(
                     .background(Color.White, RoundedCornerShape(10.dp))
                     .pillBorder(10f).padding(6.dp)
                     .onGloballyPositioned { chromeBounds["shareSelection"] = it.boundsInParent() }) {
+                    DisposableEffect(Unit) {
+                        onDispose { chromeBounds.remove("shareSelection") }
+                    }
                     val enabled = !saving && !saveFailed
                     Button(onClick = { onShareSelection(selectedIds.toSet()) }, enabled = enabled,
                         modifier = Modifier.height(48.dp).semantics {
