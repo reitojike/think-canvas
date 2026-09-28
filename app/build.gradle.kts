@@ -28,7 +28,7 @@ android {
                 create("pixel7Api37") {
                     device = "Pixel 7"
                     apiLevel = 37
-                    systemImageSource = "aosp"
+                    systemImageSource = "google"
                     require64Bit = true
                 }
             }
