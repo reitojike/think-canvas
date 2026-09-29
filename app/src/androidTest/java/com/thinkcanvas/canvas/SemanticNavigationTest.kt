@@ -99,6 +99,7 @@ class SemanticNavigationTest {
         try {
             val settled = awaitOpeningZoom()
             repeat(8) {
+                Thread.sleep(100)
                 composeRule.waitForIdle()
                 assertEquals("opening-fit does not bounce between semantic tiers", settled,
                     currentOpeningZoom())

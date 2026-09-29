@@ -1064,7 +1064,8 @@ class BoardListScreenTest {
             composeRule.onNodeWithContentDescription("囲みの名前").performTextInput("入力途中")
             composeRule.onNodeWithContentDescription("ボード一覧を開く").assertIsNotEnabled()
             repeat(2) {
-                scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+                assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                    .GLOBAL_ACTION_BACK))
                 composeRule.waitForIdle()
             }
             awaitText("‹ 囲み編集中")
