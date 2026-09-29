@@ -920,7 +920,8 @@ class BoardListScreenTest {
             tapCanvasCenter()
             awaitDescription("新しいテキスト")
             repeat(2) {
-                scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+                assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                    .GLOBAL_ACTION_BACK))
                 composeRule.waitForIdle()
                 awaitDescription("新しいテキスト")
             }
@@ -942,11 +943,11 @@ class BoardListScreenTest {
             tapCanvasCenter()
             awaitDescription("新しいテキスト")
             composeRule.onNode(hasSetTextAction()).performTextInput("一度だけ保存")
-            composeRule.onNodeWithText("完了").performClick()
-            if (composeRule.onAllNodesWithText("完了").fetchSemanticsNodes().isNotEmpty()) {
-                val secondClick = runCatching { composeRule.onNodeWithText("完了").performClick() }
-                if (secondClick.isFailure) assertTrue(
-                    composeRule.onAllNodesWithText("完了").fetchSemanticsNodes().isEmpty())
+            val doneAction = requireNotNull(composeRule.onNodeWithText("完了")
+                .fetchSemanticsNode().config[SemanticsActions.OnClick].action)
+            composeRule.runOnIdle {
+                assertTrue(doneAction())
+                assertTrue(doneAction())
             }
 
             awaitDescription("一度だけ保存", substring = true)
