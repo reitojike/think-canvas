@@ -1,9 +1,19 @@
 package com.thinkcanvas.canvas
 
 import android.content.Intent
-import android.os.SystemClock
-import android.view.MotionEvent
-import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.MainActivity
@@ -14,75 +24,88 @@ import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SemanticNavigationTest {
+    @get:Rule val composeRule = createEmptyComposeRule()
     @Test fun openingFitKeepsFarBodyOnlyExtentAfterBodyBecomesHidden() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val activity = openBoardWithContent(
-            listOf(
-                TextElement(id = "far-body-a", text = "First body", x = 120f, y = 120f),
-                TextElement(id = "far-body-b", text = "Second body", x = 2_100f, y = 1_100f),
-                TextElement(id = "far-body-c", text = "Third body", x = 4_200f, y = 2_300f),
-            ), emptyList())
+        val context = instrumentation.targetContext
+        val database = CanvasDatabase.open(context)
+        runBlocking {
+            if (database.canvasDao().board(1) == null) database.canvasDao().putBoard(BoardRow())
+            database.canvasDao().replaceAll(1, listOf(
+                TextElementRow.fromModel(1, TextElement(id = "far-body-a", text = "First body", x = 120f, y = 120f)),
+                TextElementRow.fromModel(1, TextElement(id = "far-body-b", text = "Second body", x = 2_100f, y = 1_100f)),
+                TextElementRow.fromModel(1, TextElement(id = "far-body-c", text = "Third body", x = 4_200f, y = 2_300f)),
+            ), emptyList(), emptyList())
+        }
+        database.close()
+        showBoardOneAtStartup(context)
+        val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
         try {
-            val zoom = awaitStableOpeningZoom(instrumentation)
+            val zoomMatcher = hasContentDescription("倍率を切り替える、", substring = true)
+            composeRule.waitUntil(10_000) {
+                composeRule.onAllNodes(zoomMatcher).fetchSemanticsNodes().firstOrNull()?.let { node ->
+                    val description = (if (SemanticsProperties.ContentDescription in node.config)
+                        node.config[SemanticsProperties.ContentDescription] else emptyList()).joinToString()
+                    description.substringAfter("、", "").substringBefore('%').toIntOrNull()?.let { it < 50 } == true &&
+                        composeRule.onAllNodes(hasContentDescription("First body") or hasText("First body"))
+                            .fetchSemanticsNodes().isEmpty()
+                } == true
+            }
+            composeRule.waitForIdle()
+            val zoomNode = composeRule.onAllNodes(zoomMatcher).fetchSemanticsNodes().single()
+            val zoom = (if (SemanticsProperties.ContentDescription in zoomNode.config)
+                zoomNode.config[SemanticsProperties.ContentDescription] else emptyList()).joinToString()
             assertTrue("FAR-scale BODY-only content stays in the opening fit: $zoom",
-                zoom.startsWith("15%") || zoom.substringBefore('%').toInt() < 50)
+                zoom.contains("%") && zoom.substringAfter("、", "").substringBefore('%').toInt() < 50)
             assertTrue("FAR still hides ordinary BODY text",
-                findNode(instrumentation.uiAutomation.rootInActiveWindow, "First body") == null)
+                composeRule.onAllNodes(hasContentDescription("First body") or hasText("First body"))
+                    .fetchSemanticsNodes().isEmpty())
         } finally {
-            activity.finish()
-            instrumentation.waitForIdleSync()
+            scenario.close()
         }
     }
 
     @Test fun openingFitIncludesHiddenBodiesAlongsideShapes() {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val activity = openBoardWithContent(
+        val scenario = openBoardWithContent(
             listOf(
                 TextElement(id = "mixed-body-left", text = "Left body", x = 80f, y = 120f),
                 TextElement(id = "mixed-body-right", text = "Right body", x = 4_000f, y = 1_600f),
             ), listOf(ShapeElement(id = "mixed-shape", kind = ShapeKind.RECTANGLE,
                 x = 1_900f, y = 900f, width = 180f, height = 120f)))
         try {
-            val zoom = awaitStableOpeningZoom(instrumentation)
+            val zoom = awaitOpeningZoom()
             assertTrue("hidden BODY extents keep the mixed board fitted: $zoom",
                 zoom.substringBefore('%').toInt() < 50)
             assertTrue("FAR still hides ordinary BODY text",
-                findNode(instrumentation.uiAutomation.rootInActiveWindow, "Left body") == null)
-        } finally {
-            activity.finish()
-            instrumentation.waitForIdleSync()
-        }
+                composeRule.onAllNodes(hasContentDescription("Left body") or hasText("Left body"))
+                    .fetchSemanticsNodes().isEmpty())
+        } finally { scenario.close() }
     }
 
     @Test fun openingFitViewportSettlesAfterSemanticTierChanges() {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val activity = openBoardWithContent(
+        val scenario = openBoardWithContent(
             listOf(
                 TextElement(id = "settle-body-a", text = "Alpha", x = 100f, y = 200f),
                 TextElement(id = "settle-body-b", text = "Beta", x = 1_600f, y = 1_100f),
                 TextElement(id = "settle-body-c", text = "Gamma", x = 3_600f, y = 2_000f),
             ), emptyList())
         try {
-            val settled = awaitStableOpeningZoom(instrumentation)
+            val settled = awaitOpeningZoom()
             repeat(8) {
-                Thread.sleep(100)
-                instrumentation.waitForIdleSync()
+                composeRule.waitForIdle()
                 assertEquals("opening-fit does not bounce between semantic tiers", settled,
-                    currentOpeningZoom(instrumentation))
+                    currentOpeningZoom())
             }
             assertTrue("iteration converges to a FAR opening fit: $settled",
                 settled.substringBefore('%').toInt() < 50)
-        } finally {
-            activity.finish()
-            instrumentation.waitForIdleSync()
-        }
+        } finally { scenario.close() }
     }
 
     @Test fun zoomCycleAndSearchControlsAreAccessibleWithoutSaving() {
@@ -95,81 +118,45 @@ class SemanticNavigationTest {
         }
         cleanDatabase.close()
         showBoardOneAtStartup(context)
-        val activity = instrumentation.startActivitySync(
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        val automation = instrumentation.uiAutomation
-
-        fun find(node: AccessibilityNodeInfo?, description: String): AccessibilityNodeInfo? {
-            if (node == null) return null
-            if (node.contentDescription?.toString()?.startsWith(description) == true) return node
-            for (index in 0 until node.childCount)
-                find(node.getChild(index), description)?.let { return it }
-            return null
-        }
-        fun waitFor(description: String): AccessibilityNodeInfo {
-            repeat(30) {
-                instrumentation.waitForIdleSync()
-                find(automation.rootInActiveWindow, description)?.let { return it }
-                Thread.sleep(100)
+        val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
+        try {
+            fun waitForZoom(label: String) = awaitDescription("倍率を切り替える、$label")
+            fun click(description: String) {
+                awaitDescription(description, substring = true)
+                composeRule.onNodeWithContentDescription(description, substring = true).performClick()
             }
-            error("操作が見つかりません: $description")
-        }
-        fun click(description: String) {
-            var node: AccessibilityNodeInfo? = waitFor(description)
-            while (node != null && !node.isClickable) node = node.parent
-            assertTrue("$description を操作できる", node?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true)
-        }
-        fun waitForZoom(label: String) {
-            repeat(30) {
-                instrumentation.waitForIdleSync()
-                if (find(automation.rootInActiveWindow, "倍率を切り替える、$label") != null) return
-                Thread.sleep(50)
-            }
-            error("倍率表示が $label になりません")
-        }
 
-        waitForZoom("100%  近")
-        click("倍率を切り替える")
-        waitForZoom("50%  中")
-        click("倍率を切り替える")
-        waitForZoom("25%  遠")
-        click("倍率を切り替える")
-        waitForZoom("100%  近")
+            waitForZoom("100%  近")
+            click("倍率を切り替える")
+            waitForZoom("50%  中")
+            click("倍率を切り替える")
+            waitForZoom("25%  遠")
+            click("倍率を切り替える")
+            waitForZoom("100%  近")
 
-        click("ボード内を検索")
-        assertNotNull(waitFor("ボード内を探す"))
-        assertNotNull(waitFor("前の検索結果"))
-        assertNotNull(waitFor("次の検索結果"))
-        click("検索を閉じる")
-        assertNotNull(waitFor("ボード内を検索"))
+            click("ボード内を検索")
+            awaitDescription("ボード内を探す")
+            awaitDescription("前の検索結果")
+            awaitDescription("次の検索結果")
+            click("検索を閉じる")
+            awaitDescription("ボード内を検索")
 
-        val width = context.resources.displayMetrics.widthPixels.toFloat()
-        val height = context.resources.displayMetrics.heightPixels.toFloat()
-        fun touchTap(x: Float, y: Float) {
-            val downTime = SystemClock.uptimeMillis()
-            for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
-                val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action,
-                    x, y, 0)
-                assertTrue(automation.injectInputEvent(event, true))
-                event.recycle()
-                Thread.sleep(40)
-            }
-        }
-        touchTap(width * .5f, height * .38f)
-        touchTap(width * .5f, height * .38f)
-        waitForZoom("50%  中")
+            composeRule.onNodeWithContentDescription("キャンバス")
+                .performTouchInput { doubleClick() }
+            waitForZoom("50%  中")
 
-        val database = CanvasDatabase.open(context)
-        assertEquals(0, runBlocking { database.canvasDao().elements(1).size })
-        assertEquals(0, runBlocking { database.canvasDao().spatialElements(1).size })
-        database.close()
-        activity.finish()
-        instrumentation.waitForIdleSync()
+            val database = CanvasDatabase.open(context)
+            try {
+                assertEquals(0, runBlocking { database.canvasDao().elements(1).size })
+                assertEquals(0, runBlocking { database.canvasDao().spatialElements(1).size })
+            } finally { database.close() }
+        } finally { scenario.close() }
     }
 
-    private fun openBoardWithContent(texts: List<TextElement>, shapes: List<ShapeElement>): MainActivity {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val context = instrumentation.targetContext
+    private fun openBoardWithContent(
+        texts: List<TextElement>, shapes: List<ShapeElement>,
+    ): ActivityScenario<MainActivity> {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
         val database = CanvasDatabase.open(context)
         runBlocking {
             if (database.canvasDao().board(1) == null) database.canvasDao().putBoard(BoardRow())
@@ -178,39 +165,34 @@ class SemanticNavigationTest {
         }
         database.close()
         showBoardOneAtStartup(context)
-        return instrumentation.startActivitySync(
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        return ActivityScenario.launch(Intent(context, MainActivity::class.java))
     }
 
-    private fun findNode(node: AccessibilityNodeInfo?, prefix: String): AccessibilityNodeInfo? {
-        if (node == null) return null
-        if (node.contentDescription?.toString()?.startsWith(prefix) == true) return node
-        for (index in 0 until node.childCount)
-            findNode(node.getChild(index), prefix)?.let { return it }
-        return null
+    private fun currentOpeningZoom(): String? {
+        val node = composeRule.onAllNodesWithContentDescription("倍率を切り替える、", substring = true)
+            .fetchSemanticsNodes().firstOrNull() ?: return null
+        val descriptions = if (SemanticsProperties.ContentDescription in node.config)
+            node.config[SemanticsProperties.ContentDescription] else emptyList()
+        return descriptions.firstOrNull()?.substringAfter("、", "")
     }
 
-    private fun currentOpeningZoom(instrumentation: android.app.Instrumentation): String? =
-        findNode(instrumentation.uiAutomation.rootInActiveWindow, "倍率を切り替える、")
-            ?.contentDescription?.toString()?.removePrefix("倍率を切り替える、")
-
-    private fun awaitStableOpeningZoom(instrumentation: android.app.Instrumentation): String {
-        var previous: String? = null
-        var stableSamples = 0
-        repeat(60) {
-            instrumentation.waitForIdleSync()
-            val current = currentOpeningZoom(instrumentation)
-            if (current != null && current == previous) stableSamples++ else stableSamples = 0
-            if (stableSamples >= 4) return current!!
-            previous = current
-            Thread.sleep(100)
+    private fun awaitOpeningZoom(): String {
+        composeRule.waitUntil(10_000) {
+            currentOpeningZoom()?.substringBefore('%')?.toIntOrNull()?.let { it < 50 } == true
         }
-        error("初期表示倍率が安定しません: $previous")
+        composeRule.waitForIdle()
+        return requireNotNull(currentOpeningZoom())
+    }
+
+    private fun awaitDescription(value: String, substring: Boolean = false) {
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithContentDescription(value, substring = substring)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     @Test fun farRegionFitsAndSearchFindsSavedText() {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val context = instrumentation.targetContext
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
         val body = TextElement(id = "search-body",
             text = "Idea note\nMore detail\nAnother line", x = 450f, y = 1040f)
         val secondBody = TextElement(id = "search-second", text = "Second idea", x = 900f, y = 1400f)
@@ -225,77 +207,53 @@ class SemanticNavigationTest {
         }
         database.close()
         showBoardOneAtStartup(context)
-        val activity = instrumentation.startActivitySync(
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        val automation = instrumentation.uiAutomation
-        fun find(node: AccessibilityNodeInfo?, prefix: String, clickable: Boolean = false): AccessibilityNodeInfo? {
-            if (node == null) return null
-            if (node.contentDescription?.toString()?.startsWith(prefix) == true &&
-                (!clickable || node.isClickable)) return node
-            for (index in 0 until node.childCount)
-                find(node.getChild(index), prefix, clickable)?.let { return it }
-            return null
-        }
-        fun waitFor(prefix: String, clickable: Boolean = false): AccessibilityNodeInfo {
-            repeat(40) {
-                instrumentation.waitForIdleSync()
-                find(automation.rootInActiveWindow, prefix, clickable)?.let { return it }
-                Thread.sleep(100)
+        val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
+        try {
+            fun click(prefix: String) {
+                awaitDescription(prefix, substring = true)
+                composeRule.onNodeWithContentDescription(prefix, substring = true).performClick()
             }
-            error("要素が見つかりません: $prefix")
-        }
-        fun click(prefix: String) {
-            var node: AccessibilityNodeInfo? = waitFor(prefix)
-            while (node != null && !node.isClickable) node = node.parent
-            assertTrue("$prefix を操作できる", node?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true)
-        }
-        waitFor("Idea note")
-        click("倍率を切り替える")
-        waitFor("倍率を切り替える、50%  中")
-        click("倍率を切り替える")
-        waitFor("倍率を切り替える、25%  遠")
-        assertTrue(find(automation.rootInActiveWindow, "Idea note") == null)
-        click("ボード内を検索")
-        waitFor("ボード内を探す")
-        fun editable(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
-            if (node == null) return null
-            if (node.isEditable) return node
-            for (index in 0 until node.childCount)
-                editable(node.getChild(index))?.let { return it }
-            return null
-        }
-        val field = editable(automation.rootInActiveWindow)
-        assertNotNull("検索入力欄が見つかりません", field)
-        fun search(term: String) {
-            val input = android.os.Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, term)
+            awaitDescription("Idea note", substring = true)
+            click("倍率を切り替える")
+            awaitDescription("倍率を切り替える、50%  中")
+            click("倍率を切り替える")
+            awaitDescription("倍率を切り替える、25%  遠")
+            assertTrue(composeRule.onAllNodesWithContentDescription("Idea note", substring = true)
+                .fetchSemanticsNodes().isEmpty())
+            click("ボード内を検索")
+            awaitDescription("ボード内を探す")
+            fun search(term: String) {
+                val field = composeRule.onNodeWithContentDescription("ボード内を探す")
+                field.performTextClearance()
+                field.performTextInput(term)
             }
-            assertTrue(field!!.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, input))
-        }
-        search("Idea")
-        waitFor("1件目、全2件")
-        waitFor("Idea note") // 遠景で隠れる本文も検索中は見える
-        click("次の検索結果")
-        waitFor("2件目、全2件")
-        click("次の検索結果")
-        waitFor("1件目、全2件")
-        waitFor("倍率を切り替える、80%  近")
-        click("倍率を切り替える")
-        waitFor("倍率を切り替える、50%  中")
-        waitFor("1件目、全2件")
-        search("absent")
-        waitFor("0件")
-        click("検索を閉じる")
-        click("倍率を切り替える")
-        waitFor("倍率を切り替える、25%  遠")
-        assertTrue(find(automation.rootInActiveWindow, "Idea note") == null)
-        click("囲み: Cluster")
-        waitFor("Idea note")
-        val persisted = CanvasDatabase.open(context)
-        assertEquals(2, runBlocking { persisted.canvasDao().elements(1).size })
-        assertEquals(1, runBlocking { persisted.canvasDao().spatialElements(1).size })
-        persisted.close()
-        activity.finish()
-        instrumentation.waitForIdleSync()
+            search("Idea")
+            awaitDescription("1件目、全2件")
+            awaitDescription("Idea note", substring = true) // 遠景で隠れる本文も検索中は見える
+            click("次の検索結果")
+            awaitDescription("2件目、全2件")
+            click("次の検索結果")
+            awaitDescription("1件目、全2件")
+            awaitDescription("倍率を切り替える、80%  近")
+            click("倍率を切り替える")
+            awaitDescription("倍率を切り替える、50%  中")
+            awaitDescription("1件目、全2件")
+            search("absent")
+            awaitDescription("0件")
+            click("検索を閉じる")
+            click("倍率を切り替える")
+            awaitDescription("倍率を切り替える、25%  遠")
+            assertTrue(composeRule.onAllNodesWithContentDescription("Idea note", substring = true)
+                .fetchSemanticsNodes().isEmpty())
+            awaitDescription("囲み: Cluster")
+            composeRule.onNode(hasContentDescription("囲み: Cluster") and hasClickAction())
+                .performClick()
+            awaitDescription("Idea note", substring = true)
+            val persisted = CanvasDatabase.open(context)
+            try {
+                assertEquals(2, runBlocking { persisted.canvasDao().elements(1).size })
+                assertEquals(1, runBlocking { persisted.canvasDao().spatialElements(1).size })
+            } finally { persisted.close() }
+        } finally { scenario.close() }
     }
 }
