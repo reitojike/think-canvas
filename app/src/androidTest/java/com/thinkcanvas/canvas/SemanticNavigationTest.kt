@@ -1,20 +1,28 @@
 package com.thinkcanvas.canvas
 
 import android.content.Intent
+import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
+import android.view.View
+import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.doubleClick
-import androidx.compose.ui.test.performTextClearance
-import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.UiController
+import androidx.test.espresso.ViewAction
+import androidx.test.espresso.matcher.ViewMatchers.isRoot
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.MainActivity
 import com.thinkcanvas.data.CanvasDatabase
@@ -23,6 +31,7 @@ import com.thinkcanvas.data.SpatialElementRow
 import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
+import org.hamcrest.Matcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -110,8 +119,7 @@ class SemanticNavigationTest {
     }
 
     @Test fun zoomCycleAndSearchControlsAreAccessibleWithoutSaving() {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val context = instrumentation.targetContext
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
         val cleanDatabase = CanvasDatabase.open(context)
         runBlocking {
             if (cleanDatabase.canvasDao().board(1) == null) cleanDatabase.canvasDao().putBoard(BoardRow())
@@ -121,29 +129,28 @@ class SemanticNavigationTest {
         showBoardOneAtStartup(context)
         val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
         try {
-            fun waitForZoom(label: String) = awaitDescription("倍率を切り替える、$label")
-            fun click(description: String) {
-                awaitDescription(description, substring = true)
-                composeRule.onNodeWithContentDescription(description, substring = true).performClick()
-            }
-
-            waitForZoom("100%  近")
-            click("倍率を切り替える")
+            awaitInitialZoom("100%  近")
+            assertA11yActionable("倍率を切り替える、100%  近")
+            activateViaSemantics("倍率を切り替える")
             waitForZoom("50%  中")
-            click("倍率を切り替える")
+            assertA11yActionable("倍率を切り替える、50%  中")
+            activateViaSemantics("倍率を切り替える")
             waitForZoom("25%  遠")
-            click("倍率を切り替える")
+            assertA11yActionable("倍率を切り替える、25%  遠")
+            activateViaSemantics("倍率を切り替える")
             waitForZoom("100%  近")
 
-            click("ボード内を検索")
-            awaitDescription("ボード内を探す")
-            awaitDescription("前の検索結果")
-            awaitDescription("次の検索結果")
-            click("検索を閉じる")
-            awaitDescription("ボード内を検索")
+            assertA11yActionable("ボード内を検索")
+            activateViaSemantics("ボード内を検索")
+            awaitA11y("ボード内を探す")
+            awaitEditableA11y()
+            awaitA11y("前の検索結果")
+            awaitA11y("次の検索結果")
+            assertA11yActionable("検索を閉じる")
+            activateViaSemantics("検索を閉じる")
+            awaitA11y("ボード内を検索")
 
-            composeRule.onNodeWithContentDescription("キャンバス")
-                .performTouchInput { doubleClick() }
+            onView(isRoot()).perform(blankDoubleTap())
             waitForZoom("50%  中")
 
             val database = CanvasDatabase.open(context)
@@ -192,6 +199,167 @@ class SemanticNavigationTest {
         }
     }
 
+    private fun findA11y(
+        node: AccessibilityNodeInfo?, prefix: String, clickable: Boolean,
+    ): AccessibilityNodeInfo? {
+        if (node == null) return null
+        if (node.contentDescription?.toString()?.startsWith(prefix) == true &&
+            (!clickable || node.isClickable)) return node
+        for (index in 0 until node.childCount) {
+            findA11y(node.getChild(index), prefix, clickable)?.let { return it }
+        }
+        return null
+    }
+
+    private fun awaitInitialZoom(label: String) {
+        val prefix = "倍率を切り替える、$label"
+        try {
+            composeRule.waitUntil(20_000) {
+                composeRule.onAllNodesWithContentDescription(prefix)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (cause: ComposeTimeoutException) {
+            throw AssertionError("初期Compose UIが ready になりません: $label", cause)
+        }
+
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val deadline = SystemClock.uptimeMillis() + 20_000L
+        for (observation in 0 until 40) {
+            if (observation > 0 && SystemClock.uptimeMillis() >= deadline) break
+            instrumentation.waitForIdleSync()
+            if (findA11y(instrumentation.uiAutomation.rootInActiveWindow, prefix, false) != null) return
+            val remaining = deadline - SystemClock.uptimeMillis()
+            if (remaining <= 0L) break
+            if (observation < 39) Thread.sleep(minOf(500L, remaining))
+        }
+        error("初期platform accessibilityが ready になりません: $label")
+    }
+
+    private fun waitForZoom(label: String) {
+        val prefix = "倍率を切り替える、$label"
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        try {
+            // waitUntil advances the Compose test clock; the platform tree stays the oracle.
+            composeRule.waitUntil(5_000) {
+                instrumentation.waitForIdleSync()
+                findA11y(instrumentation.uiAutomation.rootInActiveWindow, prefix, false) != null
+            }
+        } catch (cause: ComposeTimeoutException) {
+            throw IllegalStateException("倍率表示が $label になりません", cause)
+        }
+    }
+
+    private fun awaitA11y(
+        prefix: String, clickable: Boolean = false,
+        attempts: Int = 40, pollMillis: Long = 100,
+    ): AccessibilityNodeInfo {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        repeat(attempts) {
+            instrumentation.waitForIdleSync()
+            findA11y(instrumentation.uiAutomation.rootInActiveWindow, prefix, clickable)
+                ?.let { return it }
+            Thread.sleep(pollMillis)
+        }
+        error("Accessibility node が見つかりません: $prefix")
+    }
+
+    private fun findEditableA11y(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (node == null) return null
+        if (node.isEditable) return node
+        for (index in 0 until node.childCount) {
+            findEditableA11y(node.getChild(index))?.let { return it }
+        }
+        return null
+    }
+
+    private fun awaitEditableA11y(attempts: Int = 40): AccessibilityNodeInfo {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        repeat(attempts) {
+            instrumentation.waitForIdleSync()
+            findEditableA11y(instrumentation.uiAutomation.rootInActiveWindow)?.let { return it }
+            Thread.sleep(100)
+        }
+        error("検索入力欄が見つかりません")
+    }
+
+    // Layer A: the platform tree must expose the control as actionable; no platform action is performed.
+    private fun assertA11yActionable(prefix: String) {
+        var node: AccessibilityNodeInfo? = awaitA11y(prefix)
+        while (node != null && !node.isClickable) node = node.parent
+        val actionable = checkNotNull(node) { "$prefix に clickable な platform node がありません" }
+        assertTrue("$prefix は有効", actionable.isEnabled)
+        assertTrue("$prefix は利用者に見える", actionable.isVisibleToUser)
+        assertTrue("$prefix は ACTION_CLICK を公開する",
+            actionable.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
+    }
+
+    // Layer B: run the app's accessibility OnClick semantics action; the platform tree checks the result.
+    private fun activateViaSemantics(prefix: String) {
+        composeRule.onNode(hasContentDescription(prefix, substring = true) and hasClickAction())
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+    }
+
+    // Layer A: the platform tree must expose a fresh, editable search field with ACTION_SET_TEXT; no platform action is performed.
+    private fun assertA11ySetTextActionable() {
+        val editable = awaitEditableA11y()
+        assertTrue("検索欄は有効", editable.isEnabled)
+        assertTrue("検索欄は利用者に見える", editable.isVisibleToUser)
+        assertTrue("検索欄は ACTION_SET_TEXT を公開する",
+            editable.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT })
+    }
+
+    // Layer B: run the app's SetText semantics action; the platform tree checks the result.
+    private fun replaceSearchTextViaSemantics(term: String) {
+        composeRule.onNode(hasSetTextAction()).performTextReplacement(term)
+        composeRule.waitForIdle()
+    }
+
+    // One deterministic touchscreen double-tap: a single injectMotionEventSequence with DOWN/UP at 0/40/80/120ms.
+    // Timestamps end at "now" so no event is stamped in the future.
+    private fun blankDoubleTap() = object : ViewAction {
+        override fun getConstraints(): Matcher<View> = isRoot()
+        override fun getDescription() = "blank-canvas double tap as one motion event sequence"
+        override fun perform(uiController: UiController, view: View) {
+            val location = IntArray(2).also(view::getLocationOnScreen)
+            val tapX = location[0] + view.width * 0.5f
+            val tapY = location[1] + view.height * 0.38f
+            val start = SystemClock.uptimeMillis() - 120
+            val events = listOf(
+                Triple(start, start, MotionEvent.ACTION_DOWN),
+                Triple(start, start + 40, MotionEvent.ACTION_UP),
+                Triple(start + 80, start + 80, MotionEvent.ACTION_DOWN),
+                Triple(start + 80, start + 120, MotionEvent.ACTION_UP),
+            ).map { (downTime, eventTime, action) ->
+                val properties = arrayOf(MotionEvent.PointerProperties().apply {
+                    id = 0
+                    toolType = MotionEvent.TOOL_TYPE_FINGER
+                })
+                val coords = arrayOf(MotionEvent.PointerCoords().apply {
+                    x = tapX
+                    y = tapY
+                    pressure = 1f
+                    size = 1f
+                })
+                MotionEvent.obtain(
+                    downTime, eventTime, action, 1, properties, coords,
+                    0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0,
+                )
+            }
+            try {
+                assertTrue("double tap の motion event sequence を注入できる",
+                    uiController.injectMotionEventSequence(events))
+            } finally { events.forEach { it.recycle() } }
+        }
+    }
+
+    private fun clickA11y(prefix: String, clickable: Boolean = false, attempts: Int = 40) {
+        var node: AccessibilityNodeInfo? = awaitA11y(prefix, clickable = clickable, attempts = attempts)
+        while (node != null && !node.isClickable) node = node.parent
+        assertTrue("$prefix を支援技術から操作できる",
+            node?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true)
+    }
+
     @Test fun farRegionFitsAndSearchFindsSavedText() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val body = TextElement(id = "search-body",
@@ -210,45 +378,51 @@ class SemanticNavigationTest {
         showBoardOneAtStartup(context)
         val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
         try {
-            fun click(prefix: String) {
-                awaitDescription(prefix, substring = true)
-                composeRule.onNodeWithContentDescription(prefix, substring = true).performClick()
-            }
             awaitDescription("Idea note", substring = true)
-            click("倍率を切り替える")
-            awaitDescription("倍率を切り替える、50%  中")
-            click("倍率を切り替える")
-            awaitDescription("倍率を切り替える、25%  遠")
+            assertA11yActionable("倍率を切り替える")
+            activateViaSemantics("倍率を切り替える")
+            awaitA11y("倍率を切り替える、50%  中")
+            assertA11yActionable("倍率を切り替える")
+            activateViaSemantics("倍率を切り替える")
+            awaitA11y("倍率を切り替える、25%  遠")
             assertTrue(composeRule.onAllNodesWithContentDescription("Idea note", substring = true)
                 .fetchSemanticsNodes().isEmpty())
-            click("ボード内を検索")
-            awaitDescription("ボード内を探す")
-            fun search(term: String) {
-                val field = composeRule.onNodeWithContentDescription("ボード内を探す")
-                field.performTextClearance()
-                field.performTextInput(term)
-            }
-            search("Idea")
-            awaitDescription("1件目、全2件")
+            assertA11yActionable("ボード内を検索")
+            activateViaSemantics("ボード内を検索")
+            awaitA11y("ボード内を探す")
+            assertA11ySetTextActionable()
+            replaceSearchTextViaSemantics("Idea")
+            awaitA11y("1件目、全2件")
             awaitDescription("Idea note", substring = true) // 遠景で隠れる本文も検索中は見える
-            click("次の検索結果")
-            awaitDescription("2件目、全2件")
-            click("次の検索結果")
-            awaitDescription("1件目、全2件")
-            awaitDescription("倍率を切り替える、80%  近")
-            click("倍率を切り替える")
-            awaitDescription("倍率を切り替える、50%  中")
-            awaitDescription("1件目、全2件")
-            search("absent")
-            awaitDescription("0件")
-            click("検索を閉じる")
-            click("倍率を切り替える")
-            awaitDescription("倍率を切り替える、25%  遠")
+            assertA11yActionable("次の検索結果")
+            activateViaSemantics("次の検索結果")
+            awaitA11y("2件目、全2件")
+            assertA11yActionable("前の検索結果")
+            activateViaSemantics("前の検索結果")
+            awaitA11y("1件目、全2件")
+            assertA11yActionable("次の検索結果")
+            activateViaSemantics("次の検索結果")
+            awaitA11y("2件目、全2件")
+            assertA11yActionable("次の検索結果")
+            activateViaSemantics("次の検索結果")
+            awaitA11y("1件目、全2件")
+            awaitA11y("倍率を切り替える、80%  近")
+            assertA11yActionable("倍率を切り替える")
+            activateViaSemantics("倍率を切り替える")
+            awaitA11y("倍率を切り替える、50%  中")
+            awaitA11y("1件目、全2件")
+            assertA11ySetTextActionable()
+            replaceSearchTextViaSemantics("absent")
+            awaitA11y("0件")
+            assertA11yActionable("検索を閉じる")
+            activateViaSemantics("検索を閉じる")
+            assertA11yActionable("倍率を切り替える")
+            activateViaSemantics("倍率を切り替える")
+            awaitA11y("倍率を切り替える、25%  遠")
             assertTrue(composeRule.onAllNodesWithContentDescription("Idea note", substring = true)
                 .fetchSemanticsNodes().isEmpty())
-            awaitDescription("囲み: Cluster")
-            composeRule.onNode(hasContentDescription("囲み: Cluster") and hasClickAction())
-                .performClick()
+            assertA11yActionable("囲み: Cluster")
+            activateViaSemantics("囲み: Cluster")
             awaitDescription("Idea note", substring = true)
             val persisted = CanvasDatabase.open(context)
             try {
