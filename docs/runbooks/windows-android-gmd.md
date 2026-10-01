@@ -57,8 +57,10 @@ Full と Focused の引数は同時指定できません。別の Gradle command
   changed-file / staged / untracked directory census、untracked source / test / repository configuration
   file bytes の SHA-256、HEAD / branch / dirty state
   を合成し、実行前後の source state が一致することも確認します。diff 本文は診断に保存しません。
-  hash 対象は app/src、app/schemas、scripts、docs、specs、gradle、.specify、.agents/skills、
-  .github と root の build / wrapper / authority 設定です。別 worktree、Android userdata、
+  hash 対象は現行 settings の app 全体（source / schema / module build 設定）、Gradle が
+  自動読み込みする buildSrc、scripts、docs、specs、gradle、.specify、.agents/skills、
+  .github と root の build / settings（Groovy / Kotlin 両形式）/ wrapper / authority 設定です。
+  Git の ignore を尊重して build outputs を除外します。別 worktree、Android userdata、
   個人ファイルの content は読みません。
 
 ## XML gate と診断

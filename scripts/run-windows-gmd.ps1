@@ -118,8 +118,10 @@ function Get-Fingerprint {
     }
     # Census untracked directories without reading Android userdata or other personal content.
     $untrackedCensus = @((Git @('ls-files', '--others', '--directory', '--exclude-standard', '-z')) -split "`0" | Where-Object { $_ })
-    $sourcePaths = @('app/src', 'app/schemas', 'scripts', 'docs', 'specs', 'gradle', '.specify', '.agents/skills',
-        '.github', 'AGENTS.md', 'build.gradle.kts', 'settings.gradle.kts', 'gradle.properties', 'gradlew', 'gradlew.bat', '.gitignore')
+    # Current settings declares :app; buildSrc is loaded automatically by Gradle.
+    $sourcePaths = @('app', 'buildSrc', 'scripts', 'docs', 'specs', 'gradle', '.specify', '.agents/skills',
+        '.github', 'AGENTS.md', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts',
+        'gradle.properties', 'gradlew', 'gradlew.bat', '.gitignore')
     $untracked = @(Git (@('ls-files', '--others', '--exclude-standard', '-z', '--') + $sourcePaths))
     $untrackedPaths = @($untracked -split "`0" | Where-Object { $_ })
     $untrackedHashes = @($untrackedPaths | Sort-Object | ForEach-Object {
