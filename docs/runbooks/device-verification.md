@@ -1,5 +1,8 @@
 # Android 実機確認
 
+Windows の Android / Gradle Managed Device 検証は
+[Windows Android / GMD 検証](windows-android-gmd.md) の共通 launcher を使います。
+
 ## 配布経路
 
 | 目的 | 経路 | applicationId |
