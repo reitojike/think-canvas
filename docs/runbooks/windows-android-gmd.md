@@ -129,10 +129,27 @@ security/sandbox 設定は変更していません。
 Claude の同 launcher は adb を通過しましたが、salvage した init の狭い result-directory prefix
 gate で停止しました。configuration-only dry-run 1回で device/variant と run 内の declared outputs
 を確認し、gate を run namespace containment に補正しました。exact XML gate は維持しています。
-この補正後の runtime は未実証です。Codex/Claude focused PASS、両 full x2 consecutive、
-default_boot が通常 blocker でないことを証明できるまで、launcher-ready / MERGE_READY と
-扱いません。最新の詳細な run evidence / AC mapping は Issue #52 の final consolidation report
-を参照します。
+
+その後、Claude Code の Windows では `-Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect`
+を渡す補正後の launcher を実証済みです (`ISSUE_52_WINDOWS_GMD_RUNTIME_PROVEN`)。
+
+- focused `InkGestureTest#secondFingerCancelsWetInkAndSingleFingerStillDraws`: 1/0/0/0、exact testcase
+- full `-ExpectedTestCount 66` を 2 回: いずれも 66/0/0/0、unique testcase 66、run ごとの fresh
+  owned XML (2 回目は 1 回目と別の XML)
+- launcher の判定は `WINDOWS_GMD_PASS` / `FRESH_EXACT_XML`、実際の emulator argv は
+  `-gpu swiftshader_indirect`
+
+`swiftshader_indirect` がこの issue で実証済みの Windows GMD の GPU contract です (`SWIFTSHADER_INDIRECT_WINDOWS_GMD_CONTRACT_PROVEN`)。
+同じ環境で property なしの場合は、emulator が `-gpu auto-no-window` で起動し、boot 後に
+`emulator-5554` が adb `offline` のまま test task が timeout しました。property だけを追加した
+単一変数の比較で fresh focused PASS になったため、この launcher path についてはこの
+`auto-no-window` の adb offline / timeout 系統は閉じています。Windows 26H2 はこの失敗の原因と
+しては扱いません。
+
+Codex native Windows は引き続き別の runtime/profile-context blocker
+(`CODEX_WINDOWS_PROFILE_CONTEXT_BLOCKER`、外部 Codex runtime dependency) です。Codex の Windows GMD
+そのものが実証されたわけではなく、補正後の launcher が未検証であることの根拠でもありません。
+最新の詳細な run evidence / AC mapping は Issue #52 の completion report を参照します。
 
 | Classification | 意味 |
 | --- | --- |
@@ -165,10 +182,11 @@ probe を行います。signature に一致する known mitigation は最大1つ
 workaround stacking はしません。default_boot は同 launcher/source/mode の Claude 比較を1回
 行い、Codex runtime の原因を推測で断定しません。Claude 専用 Gradle command は使いません。
 
-focused path 成立後に Codex full x2 consecutive、Claude focused、Claude full x2 consecutive を
-確認します。全6成功 run の fresh XML、executor、HEAD/source、count/name、manual intervention
-なしを記録します。Claude が毎回必要な Codex 運用は未達です。Linux CI は Windows proof の
-代用にしません。
+Claude Code の Windows での focused 1 回と full x2 consecutive は、同 launcher で実証済みです
+(上記)。fresh XML、executor、HEAD/source、count/name、manual intervention なしを記録します。
+Codex native Windows の focused/full は外部 runtime dependency により未実証のままで、運用上は
+(1) Codex は fail-fast、(2) 同 launcher での Claude differential、(3) GitHub Actions の GMD XML を
+独立した merge の根拠にします。Linux CI は Windows proof の代用にしません。
 
 focused 実証後に final PR を作り canonical `@codex review` を依頼します。execution-essential
 finding の bounded correction は最大1回。hardening-only finding はこの scope の merge blocker
