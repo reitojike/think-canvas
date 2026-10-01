@@ -62,8 +62,11 @@ Full の class と常時の tests_regex は map から実際に Remove します
 wrapper JAR を Java の `ArgumentList` で直接起動するため、CMD quoting を caller が再構築する
 必要はありません。固定 task は `:app:pixel7Api37DebugAndroidTest`。task の `--rerun`、
 `--no-daemon`、`--offline`、SDK/JDK auto-download 禁止を launcher が所有します。
-wrapper URL に対応する canonical distribution の `.zip.ok`、lib、executable を先に確認し、
-missing の場合は download せず停止します。offline は network retrieval を避ける契約であり、
+wrapper URL に対応する canonical distribution の `.zip.ok`、選択した distribution directory が
+ちょうど 1 つであること、`lib/` 直下にちょうど 1 つの通常 file `gradle-launcher-*.jar` (case-sensitive)、
+`bin/gradle.bat` を read-only で先に確認し、missing / 曖昧 / 読めない / reparse の場合は fail closed で
+wrapper を起動せず、download も cache の削除・修復もせず `WINDOWS_GMD_WRAPPER_DISTRIBUTION_MISSING`
+(`WRAPPER_CACHE_MISSING_NO_DOWNLOAD`) で停止します。JAR の暗号学的な完全性検証は行いません。offline は network retrieval を避ける契約であり、
 NIO / default_boot の mitigation とは扱いません。
 
 Gradle には `-Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect` を必ず 1 回だけ
@@ -172,9 +175,22 @@ Codex native Windows は引き続き別の runtime/profile-context blocker
 ./scripts/run-windows-gmd.ps1 -VerifyStatic
 ```
 
-static は ignored fixture namespace で selector、wrapper cache、zero/wrong/stale/foreign XML、
-source bytes mismatch、hidden flags、external config、secret 非継承を確認します。Gradle/GMD は
-起動しません。PowerShell parser、public boundary、diff check、exact 3-file census も行います。
+`-VerifyStatic` は launcher 自身が所有する fixture / static check だけを行います。ignored fixture
+namespace で selector、wrapper cache の readiness (合成 fixture 上の distribution directory 数、
+launcher JAR の個数・型・case・場所、reparse、列挙失敗)、zero/wrong/stale/foreign XML、
+source bytes mismatch、hidden flags、external config、secret 非継承、GPU property がちょうど 1 回
+であることを確認します。Gradle/GMD は起動しません。`STATIC_PASS` は、次の repository 検証を実行した
+ことを意味しません。
+
+PR 前の独立した必須 check として、次を別々に実行して結果を記録します。`-VerifyStatic` の
+`STATIC_PASS` だけで repository の検証が満たされたとは扱いません。
+
+- PowerShell parser diagnostics (`scripts/run-windows-gmd.ps1` の parse error が 0 件)
+- `pwsh -File scripts/check-public-boundary.ps1`
+- `git diff --check`
+- `git diff --check <fresh-main-SHA>...HEAD`
+- base から head への exact 3-file census (`scripts/run-windows-gmd.ps1`、
+  `docs/runbooks/windows-android-gmd.md`、`docs/runbooks/device-verification.md`)
 
 static floor の後、Codex focused を exactly once 実行します。environment/runtime blocker なら
 exact signature を #52 の既存 evidence と current official/upstream reports に照合し、minimal

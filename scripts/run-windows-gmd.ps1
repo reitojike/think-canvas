@@ -485,9 +485,21 @@ function Get-SourceSnapshot {
     return [ordered]@{ head = Git @('rev-parse', 'HEAD'); files = $records }
 }
 function Test-WrapperCache($Selection) {
-    return (Observe-Path (Join-Path $Selection.cacheDirectory ($Selection.name + '.zip.ok'))).kind -eq 'file' -and
-        (Observe-Path (Join-Path $Selection.root 'lib')).kind -eq 'directory' -and
-        (Observe-Path (Join-Path $Selection.root 'bin/gradle.bat')).kind -eq 'file'
+    # Read-only and fail closed. The bundled wrapper re-downloads when the extracted distribution is not
+    # exactly one directory with exactly one lib/gradle-launcher-*.jar, so require the same shape here.
+    try {
+        $cache = Observe-Path $Selection.cacheDirectory
+        if ($cache.kind -ne 'directory') { return $false }
+        if ((Observe-Path (Join-Path $Selection.cacheDirectory ($Selection.name + '.zip.ok'))).kind -ne 'file') { return $false }
+        $dirs = @(Get-ChildItem -LiteralPath $cache.item.FullName -Force -ErrorAction Stop | Where-Object { $_.PSIsContainer })
+        if ($dirs.Count -ne 1 -or $dirs[0].FullName -cne [IO.Path]::GetFullPath($Selection.root)) { return $false }
+        if ((Observe-Path $Selection.root).kind -ne 'directory') { return $false }
+        $lib = Observe-Path (Join-Path $Selection.root 'lib')
+        if ($lib.kind -ne 'directory' -or (Observe-Path (Join-Path $Selection.root 'bin/gradle.bat')).kind -ne 'file') { return $false }
+        $jars = @(Get-ChildItem -LiteralPath $lib.item.FullName -Force -ErrorAction Stop |
+            Where-Object { $_.Name -cmatch '^gradle-launcher-.*\.jar$' })
+        return $jars.Count -eq 1 -and -not $jars[0].PSIsContainer -and -not ($jars[0].Attributes -band [IO.FileAttributes]::ReparsePoint)
+    } catch { return $false }
 }
 function Get-GmdArguments {
     return @('-Dfile.encoding=UTF-8', '-Xmx64m', '-Xms64m', '-Dorg.gradle.appname=gradlew', '-classpath',
@@ -574,6 +586,58 @@ function Verify-StaticChecks {
     Check ($dist.cacheDirectory.EndsWith('3m7h6ceboy5k31n8kzwzuxssm')) 'WRAPPER_CACHE_KEY'
     Check (Test-WrapperCache $dist) 'REAL_CACHE_PRESENT'
     $fixture = Join-Path $diagnostics 'fixtures'; [void][IO.Directory]::CreateDirectory($fixture)
+    # Synthetic wrapper-cache readiness fixtures: never the real cache; no Gradle/wrapper child is started.
+    $cacheFixtures = Join-Path $fixture ('wrapper-cache-' + [Guid]::NewGuid().ToString('N'))
+    function CacheFixture([string]$Case, [scriptblock]$Mutate) {
+        $cache = Join-Path $cacheFixtures $Case
+        $sel = @{ name = 'gradle-9.8.0-bin'; cacheDirectory = $cache; root = Join-Path $cache 'gradle-9.8.0' }
+        foreach ($dir in @('lib', 'bin')) { [void][IO.Directory]::CreateDirectory((Join-Path $sel.root $dir)) }
+        foreach ($file in @((Join-Path $cache 'gradle-9.8.0-bin.zip.ok'), (Join-Path $sel.root 'bin/gradle.bat'),
+            (Join-Path $sel.root 'lib/gradle-launcher-9.8.0.jar'))) { [IO.File]::WriteAllText($file, '') }
+        if ($Mutate) { & $Mutate $sel }
+        return $sel
+    }
+    function CacheSnapshot($Selection) {
+        if (-not (Test-Path -LiteralPath $Selection.cacheDirectory)) { return '' }
+        return (@(Get-ChildItem -LiteralPath $Selection.cacheDirectory -Recurse -Force | ForEach-Object {
+            $_.FullName + '|' + $(if ($_.PSIsContainer) { 'd' } else { $_.Length }) + '|' + $_.LastWriteTimeUtc.Ticks }) -join ';')
+    }
+    function CacheRejected($Selection, [string]$Name) {
+        $before = CacheSnapshot $Selection
+        $rejected = -not (Test-WrapperCache $Selection)
+        Check ($rejected -and $before -ceq (CacheSnapshot $Selection)) $Name
+    }
+    Check (Test-WrapperCache (CacheFixture 'valid' $null)) 'CACHE_VALID_ONE_LAUNCHER_JAR'
+    CacheRejected (CacheFixture 'no-ok' { param($s) Remove-Item -LiteralPath (Join-Path $s.cacheDirectory 'gradle-9.8.0-bin.zip.ok') }) 'CACHE_NO_ZIP_OK'
+    CacheRejected (CacheFixture 'no-lib' { param($s) Remove-Item -LiteralPath (Join-Path $s.root 'lib') -Recurse }) 'CACHE_NO_LIB'
+    CacheRejected (CacheFixture 'no-bat' { param($s) Remove-Item -LiteralPath (Join-Path $s.root 'bin/gradle.bat') }) 'CACHE_NO_GRADLE_BAT'
+    CacheRejected (CacheFixture 'jar-zero' { param($s) Remove-Item -LiteralPath (Join-Path $s.root 'lib/gradle-launcher-9.8.0.jar') }) 'CACHE_JAR_ZERO'
+    CacheRejected (CacheFixture 'jar-two' { param($s) [IO.File]::WriteAllText((Join-Path $s.root 'lib/gradle-launcher-extra.jar'), '') }) 'CACHE_JAR_TWO'
+    CacheRejected (CacheFixture 'jar-dir-only' { param($s)
+        Remove-Item -LiteralPath (Join-Path $s.root 'lib/gradle-launcher-9.8.0.jar')
+        [void][IO.Directory]::CreateDirectory((Join-Path $s.root 'lib/gradle-launcher-9.8.0.jar')) }) 'CACHE_JAR_DIRECTORY_ONLY'
+    CacheRejected (CacheFixture 'jar-file-and-dir' { param($s) [void][IO.Directory]::CreateDirectory((Join-Path $s.root 'lib/gradle-launcher-dir.jar')) }) 'CACHE_JAR_FILE_AND_DIRECTORY'
+    CacheRejected (CacheFixture 'dirs-zero' { param($s) Remove-Item -LiteralPath $s.root -Recurse }) 'CACHE_ZERO_DISTRIBUTION_DIRS'
+    CacheRejected (CacheFixture 'dirs-many' { param($s) [void][IO.Directory]::CreateDirectory((Join-Path $s.cacheDirectory 'gradle-9.8.1')) }) 'CACHE_MULTIPLE_DISTRIBUTION_DIRS'
+    CacheRejected (CacheFixture 'root-mismatch' { param($s) Move-Item -LiteralPath $s.root -Destination (Join-Path $s.cacheDirectory 'gradle-9.9.9') }) 'CACHE_ROOT_MISMATCH'
+    CacheRejected (CacheFixture 'jar-outside-lib' { param($s)
+        Remove-Item -LiteralPath (Join-Path $s.root 'lib/gradle-launcher-9.8.0.jar')
+        foreach ($outside in @($s.cacheDirectory, $s.root, (Join-Path $s.root 'bin'))) { [IO.File]::WriteAllText((Join-Path $outside 'gradle-launcher-9.8.0.jar'), '') } }) 'CACHE_JAR_OUTSIDE_LIB'
+    CacheRejected (CacheFixture 'jar-wrong-case' { param($s)
+        Remove-Item -LiteralPath (Join-Path $s.root 'lib/gradle-launcher-9.8.0.jar')
+        [IO.File]::WriteAllText((Join-Path $s.root 'lib/Gradle-Launcher-9.8.0.JAR'), '') }) 'CACHE_JAR_CASE_MISMATCH'
+    CacheRejected (CacheFixture 'lib-reparse' { param($s)
+        $real = Join-Path $s.cacheDirectory 'real-lib'; Move-Item -LiteralPath (Join-Path $s.root 'lib') -Destination $real
+        [void](New-Item -ItemType Junction -Path (Join-Path $s.root 'lib') -Target $real) }) 'CACHE_LIB_REPARSE'
+    CacheRejected (CacheFixture 'root-reparse' { param($s)
+        $real = Join-Path $cacheFixtures 'real-root'; Move-Item -LiteralPath $s.root -Destination $real
+        [void](New-Item -ItemType Junction -Path $s.root -Target $real) }) 'CACHE_ROOT_REPARSE'
+    Check (-not (Test-WrapperCache @{ name = 'gradle-9.8.0-bin'; cacheDirectory = (Join-Path $cacheFixtures 'bad<>path'); root = (Join-Path $cacheFixtures 'bad<>path/x') })) 'CACHE_ENUMERATION_FAILS_CLOSED'
+    # The no-download stop must precede the wrapper child launch in the main flow.
+    $launcherText = [IO.File]::ReadAllText((Join-Path $oldTree 'scripts/run-windows-gmd.ps1'))
+    $stopAt = $launcherText.IndexOf("throw 'WRAPPER_CACHE_MISSING_NO_DOWNLOAD'", [StringComparison]::Ordinal)
+    $launchAt = $launcherText.IndexOf("Invoke-Child `$javaExe `$argv 'gradle'", [StringComparison]::Ordinal)
+    Check ($stopAt -gt 0 -and $launchAt -gt $stopAt -and $launcherText.Contains("classification = 'WINDOWS_GMD_WRAPPER_DISTRIBUTION_MISSING'")) 'CACHE_REJECT_BEFORE_WRAPPER_LAUNCH'
     $script:owned = @{ root = Join-Path $fixture 'outputs' }
     $xmlPath = Join-Path $owned.root 'app/outputs/androidTest-results/managedDevice/debug/pixel7Api37/TEST-pixel7Api37.xml'
     [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($xmlPath))
