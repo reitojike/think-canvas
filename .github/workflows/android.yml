@@ -71,3 +71,13 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: ジェスチャーと保存の実機相当テスト
         run: ./gradlew :app:pixel7Api37DebugAndroidTest -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
+      - name: Android 17 GMD 診断結果を保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-17-gmd-test-results
+          path: |
+            app/build/reports/androidTests/managedDevice/
+            app/build/outputs/androidTest-results/managedDevice/
+          if-no-files-found: warn
+          retention-days: 7
