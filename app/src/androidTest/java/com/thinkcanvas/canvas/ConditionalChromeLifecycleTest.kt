@@ -5,6 +5,11 @@ import android.graphics.Rect
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.MainActivity
@@ -18,11 +23,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ConditionalChromeLifecycleTest {
+    @get:Rule val composeRule = createEmptyComposeRule()
+
     @Test
     fun regionNameTransitionRemovesFormerSelectionSharePointUntilReselected() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -43,6 +51,7 @@ class ConditionalChromeLifecycleTest {
             val (region, renameAction) = waitForRegionRenameAction(instrumentation)
             assertTrue("囲み名編集のアクセシビリティ操作を実行できる",
                 region.performAction(renameAction.id))
+            composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
             waitForGone(instrumentation, "選択範囲を画像で共有")
             assertNotNull("共有行が消えた状態で囲み名 editor が active",
@@ -146,11 +155,36 @@ class ConditionalChromeLifecycleTest {
     private fun findActionable(node: AccessibilityNodeInfo?, label: String): AccessibilityNodeInfo? {
         if (node == null) return null
         val ownsClick = node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }
-        if (node.contentDescription?.toString() == label && ownsClick) return node
+        if (node.contentDescription?.toString() == label &&
+            (label != "囲み: Cluster" || ownsClick)) {
+            assertPlatformControl(node, label)
+            return node
+        }
         for (index in 0 until node.childCount) {
             findActionable(node.getChild(index), label)?.let { return it }
         }
         return null
+    }
+
+    // Layer A: exact description と同じ control の platform exposure / geometry を確認する。
+    private fun assertPlatformControl(
+        description: AccessibilityNodeInfo,
+        label: String,
+    ): AccessibilityNodeInfo {
+        assertEquals(label, description.contentDescription?.toString())
+        assertTrue("$label の description は有効", description.isEnabled)
+        assertTrue("$label の description は利用者に見える", description.isVisibleToUser)
+        var node: AccessibilityNodeInfo? = description
+        while (node != null && !node.isClickable) node = node.parent
+        val actionable = checkNotNull(node) { "$label に対応する clickable node がありません" }
+        assertTrue("$label の control は有効", actionable.isEnabled)
+        assertTrue("$label の control は利用者に見える", actionable.isVisibleToUser)
+        assertTrue("$label の control は clickable", actionable.isClickable)
+        assertTrue("$label の control は ACTION_CLICK を公開する",
+            actionable.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
+        assertEquals("$label の description と control は同じ bounds",
+            bounds(description), bounds(actionable))
+        return actionable
     }
 
     private fun waitForActionable(
@@ -158,6 +192,7 @@ class ConditionalChromeLifecycleTest {
         label: String,
     ): AccessibilityNodeInfo {
         repeat(40) {
+            composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
             findActionable(instrumentation.uiAutomation.rootInActiveWindow, label)?.let { return it }
             Thread.sleep(100)
@@ -170,6 +205,7 @@ class ConditionalChromeLifecycleTest {
         labels: List<String>,
     ): AccessibilityNodeInfo {
         repeat(40) {
+            composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
             val root = instrumentation.uiAutomation.rootInActiveWindow
             for (label in labels) findActionable(root, label)?.let { return it }
@@ -183,6 +219,7 @@ class ConditionalChromeLifecycleTest {
         expected: String,
     ): String {
         repeat(40) {
+            composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
             val state = findActionable(instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster")
                 ?.stateDescription?.toString()
@@ -196,6 +233,7 @@ class ConditionalChromeLifecycleTest {
         instrumentation: android.app.Instrumentation,
     ): Pair<AccessibilityNodeInfo, AccessibilityNodeInfo.AccessibilityAction> {
         repeat(40) {
+            composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
             val region = findActionable(instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster")
             val action = region?.actionList?.firstOrNull { it.label?.toString() == "囲みの名前を編集" }
@@ -214,14 +252,17 @@ class ConditionalChromeLifecycleTest {
         node: AccessibilityNodeInfo,
         label: String,
     ) {
-        assertTrue("$label の node 自身が ACTION_CLICK を持つ",
-            node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
-        assertTrue("$label を操作できる", node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        assertPlatformControl(node, label)
+        // Layer B: Layer A で確認した exact control の OnClick を実行する。
+        composeRule.onNode(hasContentDescription(label) and hasClickAction())
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
         instrumentation.waitForIdleSync()
     }
 
     private fun waitForGone(instrumentation: android.app.Instrumentation, label: String) {
         repeat(40) {
+            composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
             if (findExact(instrumentation.uiAutomation.rootInActiveWindow, label) == null) return
             Thread.sleep(100)
