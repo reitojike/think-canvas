@@ -1,9 +1,13 @@
 package com.thinkcanvas
 
+import android.graphics.Bitmap
+import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
@@ -11,6 +15,7 @@ import androidx.lifecycle.withStateAtLeast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -21,16 +26,33 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.lifecycleScope
+import com.thinkcanvas.board.BoardImageRenderer
 import com.thinkcanvas.board.BoardListScreen
+import com.thinkcanvas.board.ExportTypography
 import com.thinkcanvas.board.GuideSheet
+import com.thinkcanvas.board.ImageDelivery
+import com.thinkcanvas.board.ShareSheet
+import com.thinkcanvas.board.planShare
+import com.thinkcanvas.canvas.BoardSnapshot
 import com.thinkcanvas.canvas.BoardState
 import com.thinkcanvas.canvas.CanvasScreen
 import com.thinkcanvas.data.CanvasStore
 import com.thinkcanvas.data.StoredBoard
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+
+private data class ShareDialogState(
+    val requestId: Long,
+    val title: String,
+    val bitmap: Bitmap? = null,
+    val message: String? = null,
+)
 
 private sealed interface Page {
     data object Loading : Page
@@ -64,6 +86,128 @@ class MainActivity : ComponentActivity() {
         val transientPending = mutableStateOf(false)
         val errorMessage = mutableStateOf<String?>(null)
         val startupLoadFailed = mutableStateOf(false)
+        val shareDialog = mutableStateOf<ShareDialogState?>(null)
+        val shareBusy = mutableStateOf(false)
+        var shareRequestId = 0L
+        val pendingDocument = File(cacheDir, "pending-board-image.png")
+
+        fun notice(message: String) = Toast.makeText(this@MainActivity, message,
+            Toast.LENGTH_SHORT).show()
+
+        val createDocument = registerForActivityResult(
+            ActivityResultContracts.CreateDocument("image/png")) { uri ->
+            if (uri == null) {
+                shareBusy.value = false
+                pendingDocument.delete()
+                notice("画像の保存を取り消しました")
+            } else if (pendingDocument.isFile) {
+                lifecycleScope.launch {
+                    try {
+                        ImageDelivery.writeDocument(this@MainActivity, uri,
+                            withContext(Dispatchers.IO) { pendingDocument.readBytes() })
+                        shareDialog.value?.bitmap?.takeUnless(Bitmap::isRecycled)?.recycle()
+                        shareDialog.value = null
+                        notice("画像を保存しました")
+                    } catch (error: Exception) {
+                        errorMessage.value = error.message ?: "画像を保存できません"
+                    } finally {
+                        pendingDocument.delete()
+                        shareBusy.value = false
+                    }
+                }
+            } else {
+                shareBusy.value = false
+                errorMessage.value = "画像の準備が失われました。もう一度お試しください"
+            }
+        }
+        val shareResult = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()) {
+            notice("共有メニューを閉じました")
+        }
+
+        fun dismissShare() {
+            shareDialog.value?.bitmap?.takeUnless(Bitmap::isRecycled)?.recycle()
+            shareDialog.value = null
+        }
+
+        fun showShare(title: String, snapshot: BoardSnapshot, typography: ExportTypography,
+                      selectedIds: Set<String>? = null) {
+            val request = ++shareRequestId
+            dismissShare()
+            shareDialog.value = ShareDialogState(request, title)
+            lifecycleScope.launch {
+                try {
+                    val bitmap = withContext(Dispatchers.Default) {
+                        val bounds = BoardImageRenderer.renderedBounds(snapshot, typography)
+                        val plan = planShare(snapshot, selectedIds, bounds, typography)
+                        BoardImageRenderer.render(plan)
+                    }
+                    if (shareDialog.value?.requestId == request)
+                        shareDialog.value = ShareDialogState(request, title, bitmap)
+                    else bitmap.recycle()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: IllegalArgumentException) {
+                    if (shareDialog.value?.requestId == request)
+                        shareDialog.value = ShareDialogState(request, title,
+                            message = error.message ?: "画像を作成できません")
+                } catch (_: OutOfMemoryError) {
+                    if (shareDialog.value?.requestId == request)
+                        shareDialog.value = ShareDialogState(request, title,
+                            message = "画像が大きすぎるため作成できません")
+                } catch (error: Exception) {
+                    if (shareDialog.value?.requestId == request)
+                        shareDialog.value = ShareDialogState(request, title,
+                            message = error.message ?: "画像を作成できません")
+                }
+            }
+        }
+
+        fun deliver(kind: Int) {
+            if (shareBusy.value) return
+            val bitmap = shareDialog.value?.bitmap ?: return
+            shareBusy.value = true
+            lifecycleScope.launch {
+                var waitingForDocument = false
+                try {
+                    val bytes = ImageDelivery.png(bitmap)
+                    when (kind) {
+                        0 -> if (Build.VERSION.SDK_INT >= 29) {
+                            ImageDelivery.saveToPhotos(this@MainActivity, bytes)
+                            dismissShare()
+                            notice("画像を保存しました")
+                        } else {
+                            withContext(Dispatchers.IO) { pendingDocument.writeBytes(bytes) }
+                            createDocument.launch("think-canvas-${System.currentTimeMillis()}.png")
+                            waitingForDocument = true
+                        }
+                        1 -> {
+                            val uri = ImageDelivery.cacheUri(this@MainActivity, bytes)
+                            ImageDelivery.copy(this@MainActivity, uri)
+                            dismissShare()
+                            notice("画像をコピーしました")
+                        }
+                        else -> {
+                            val uri = ImageDelivery.cacheUri(this@MainActivity, bytes)
+                            shareResult.launch(ImageDelivery.shareIntent(this@MainActivity, uri))
+                            dismissShare()
+                            notice("共有メニューを開きました")
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: OutOfMemoryError) {
+                    errorMessage.value = "画像を準備するメモリが不足しています"
+                } catch (error: Exception) {
+                    errorMessage.value = error.message ?: "画像を渡せません"
+                } finally {
+                    if (!waitingForDocument) {
+                        if (kind == 0 && Build.VERSION.SDK_INT < 29) pendingDocument.delete()
+                        shareBusy.value = false
+                    }
+                }
+            }
+        }
 
         fun openBoard(stored: StoredBoard) {
             navigationTargetIsList = false
@@ -203,6 +347,11 @@ class MainActivity : ComponentActivity() {
                 background = Color(0xFFFCFCFB),
                 surface = Color(0xFFFCFCFB),
             )) {
+                val shareTypography = ExportTypography.from(LocalDensity.current,
+                    LocalTextStyle.current)
+                androidx.compose.runtime.DisposableEffect(Unit) {
+                    onDispose { shareDialog.value?.bitmap?.takeUnless(Bitmap::isRecycled)?.recycle() }
+                }
                 when (val current = page.value) {
                     Page.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(stringResource(R.string.loading_board))
@@ -226,6 +375,12 @@ class MainActivity : ComponentActivity() {
                         },
                         onDelete = { id -> admitListOperation {
                             boardListActions.start(BoardListAction.Delete(id))
+                        } },
+                        onShare = { id -> admitListOperation {
+                            performTransient {
+                                val stored = store.savedBoard(id) ?: error("ボードが見つかりません")
+                                showShare(stored.details.name, stored.snapshot, shareTypography)
+                            }
                         } },
                         onHelp = { guideVisible.value = true },
                     )
@@ -251,8 +406,20 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             },
+                            onShareSelection = { ids -> performTransient {
+                                val stored = store.savedBoard(current.id)
+                                    ?: error("ボードが見つかりません")
+                                showShare(stored.details.name, stored.snapshot, shareTypography, ids)
+                            } },
                             )
                     }
+                }
+                shareDialog.value?.let { sharing ->
+                    ShareSheet(sharing.title, sharing.bitmap, sharing.message, shareBusy.value,
+                        onSave = { deliver(0) },
+                        onCopy = { deliver(1) },
+                        onShare = { deliver(2) },
+                        onDismiss = { if (!shareBusy.value) dismissShare() })
                 }
                 if (guideVisible.value) GuideSheet(
                     onStart = {

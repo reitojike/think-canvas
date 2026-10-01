@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
@@ -73,6 +74,7 @@ fun BoardListScreen(
     onRename: (Long, String) -> Unit,
     onDuplicate: (Long) -> Unit,
     onDelete: (Long) -> Unit,
+    onShare: (Long) -> Unit,
     onHelp: () -> Unit,
 ) {
     var selectedId by remember { mutableStateOf<Long?>(null) }
@@ -158,15 +160,16 @@ fun BoardListScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = ink)) { Text("保存") }
                 }
             } else {
-                listOf("名前を変える", "複製", "削除", "キャンセル").forEach { action ->
+                listOf("名前を変える", "複製", "画像で共有", "削除", "キャンセル").forEach { action ->
                     Text(action, color = if (action == "削除") vermilion else ink,
                         fontSize = 15.sp, modifier = Modifier.fillMaxWidth().height(52.dp)
-                            .clickable {
+                            .clickable(role = if (action == "画像で共有") Role.Button else null) {
                                 when (action) {
                                     "名前を変える" -> {
                                         renameValue = selected.details.name; renaming = true
                                     }
                                     "複製" -> { onDuplicate(selected.details.id); selectedId = null }
+                                    "画像で共有" -> { onShare(selected.details.id); selectedId = null }
                                     "削除" -> { deleteId = selected.details.id; selectedId = null }
                                     else -> selectedId = null
                                 }

@@ -1074,6 +1074,113 @@ class BoardListScreenTest {
         } finally { scenario.close() }
     }
 
+    @Test fun listShareLoadingRejectsOpenCreateMutationAndSecondShare() {
+        seed(listOf(BoardRow(1, "共有元", 10), BoardRow(2, "開けない別案", 5)))
+        val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
+        lateinit var vm: BoardListActionViewModel
+        scenario.onActivity { vm = listActions(it) }
+        val (queueStarted, releaseQueue) = blockCanvasStoreQueue()
+        val database = CanvasDatabase.open(context)
+        try {
+            runBlocking { withTimeout(5_000) { queueStarted.await() } }
+            awaitDescription("共有元、", substring = true)
+            composeRule.onNodeWithContentDescription("共有元、", substring = true)
+                .performSemanticsAction(SemanticsActions.OnLongClick)
+            composeRule.onNodeWithText("画像で共有")
+                .performSemanticsAction(SemanticsActions.OnClick) { click ->
+                    composeRule.runOnUiThread {
+                        assertTrue(click())
+                        assertTrue(click())
+                    }
+                }
+            composeRule.waitForIdle()
+            assertEquals(BoardListActionState.Idle, vm.state.value)
+
+            composeRule.onNodeWithContentDescription("開けない別案、", substring = true).performClick()
+            composeRule.onNodeWithContentDescription("新しいボード").performClick()
+            composeRule.onNodeWithContentDescription("共有元、", substring = true)
+                .performSemanticsAction(SemanticsActions.OnLongClick)
+            composeRule.onNodeWithText("複製").performClick()
+            assertEquals(BoardListActionState.Idle, vm.state.value)
+            assertEquals(2, runBlocking { database.canvasDao().boards().size })
+            assertEquals(-1L, context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+                .getLong("lastOpenedBoardId", -1))
+
+            releaseQueue.complete(Unit)
+            awaitDescription("共有元 の共有画像プレビュー")
+            assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                .GLOBAL_ACTION_BACK))
+            awaitDescription("開けない別案、", substring = true)
+            composeRule.onNodeWithContentDescription("開けない別案、", substring = true).performClick()
+            awaitText("‹ 開けない別案")
+        } finally {
+            releaseQueue.complete(Unit)
+            scenario.close()
+            database.close()
+        }
+    }
+
+    @Test fun listShareOffersPreviewAndCopyWithoutChangingSavedContent() {
+        seed(listOf(BoardRow(1, "共有する案", 10), BoardRow(2, "別の案", 5)))
+        val database = CanvasDatabase.open(context)
+        val text = TextElementRow(id = "saved", boardId = 1, text = "共有する内容",
+            kind = "BODY", color = "INK", x = 20f, y = 30f)
+        runBlocking { database.canvasDao().replaceAll(1, listOf(text), emptyList(), emptyList()) }
+        val before = runBlocking { database.canvasDao().board(1) }
+        val otherBefore = runBlocking { database.canvasDao().board(2) }
+        val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
+        try {
+            awaitDescription("共有する案、", substring = true)
+            composeRule.onNodeWithContentDescription("共有する案、", substring = true)
+                .performSemanticsAction(SemanticsActions.OnLongClick)
+            composeRule.onNodeWithText("画像で共有").performClick()
+            awaitDescription("共有する案 の共有画像プレビュー")
+            awaitText("画像を保存")
+            awaitText("ほかのアプリ")
+            composeRule.onNodeWithText("コピー").performClick()
+            awaitDescription("共有する案、", substring = true)
+            composeRule.onNodeWithContentDescription("共有する案、", substring = true)
+                .performSemanticsAction(SemanticsActions.OnLongClick)
+            composeRule.onNodeWithText("画像で共有").performClick()
+            awaitDescription("共有する案 の共有画像プレビュー")
+            assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                .GLOBAL_ACTION_BACK))
+            awaitDescription("共有する案、", substring = true)
+            assertEquals(before, runBlocking { database.canvasDao().board(1) })
+            assertEquals(otherBefore, runBlocking { database.canvasDao().board(2) })
+            assertEquals(listOf(text), runBlocking { database.canvasDao().elements(1) })
+        } finally { scenario.close(); database.close() }
+    }
+
+    @Test fun selectedTextOpensOnlyItsOwnImagePreview() {
+        seed(listOf(BoardRow(1, "選択するボード", 10)))
+        val database = CanvasDatabase.open(context)
+        val selected = TextElementRow(id = "selected", boardId = 1, text = "選択する対象",
+            kind = "BODY", color = "INK", x = 10f, y = 10f)
+        val outside = TextElementRow(id = "outside", boardId = 1, text = "選択しない対象",
+            kind = "BODY", color = "INK", x = 400f, y = 400f)
+        runBlocking { database.canvasDao().replaceAll(1, listOf(selected, outside),
+            emptyList(), emptyList()) }
+        assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+            .edit().putLong("lastOpenedBoardId", 1).commit())
+        val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
+        try {
+            awaitDescription("選択する対象")
+            val actions = composeRule.onNodeWithContentDescription("選択する対象")
+                .fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            val action = actions.firstOrNull { it.label == "選択に追加" }
+                ?: error("選択操作が見つかりません")
+            composeRule.runOnUiThread { assertTrue(action.action()) }
+            awaitDescription("選択範囲を画像で共有")
+            composeRule.onNodeWithContentDescription("選択範囲を画像で共有").performClick()
+            awaitDescription("選択するボード の共有画像プレビュー")
+            awaitText("画像を保存")
+            assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                .GLOBAL_ACTION_BACK))
+            assertEquals(listOf(selected, outside), runBlocking { database.canvasDao().elements(1) })
+        } finally { scenario.close(); database.close() }
+    }
+
     @Test fun renameAndDuplicateKeepIndependentContent() {
         seed(listOf(BoardRow(1, "元", 10)))
         val database = CanvasDatabase.open(context)

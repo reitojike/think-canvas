@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -31,10 +32,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -127,6 +131,7 @@ fun CanvasScreen(
     onRequestSave: (BoardSnapshot) -> BoardSaveAcknowledgement?,
     onRetrySave: () -> Unit,
     onOpenList: () -> Unit,
+    onShareSelection: (Set<String>) -> Unit,
 ) {
     var viewport by remember { mutableStateOf(Viewport()) }
     var initialFitApplied by remember(board) { mutableStateOf(false) }
@@ -1433,6 +1438,9 @@ fun CanvasScreen(
                     .onGloballyPositioned { chromeBounds["tools"] = it.boundsInParent() },
                 horizontalAlignment = Alignment.End,
             ) {
+                DisposableEffect(Unit) {
+                    onDispose { chromeBounds.remove("tools") }
+                }
                 SpatialTools(tool, toolsExpanded, !saving && !saveFailed,
                     onExpand = {
                         if (tool == SpatialTool.NONE) toolsExpanded = !toolsExpanded
@@ -1505,6 +1513,31 @@ fun CanvasScreen(
                 Box(Modifier.align(Alignment.TopCenter).padding(top = 62.dp)
                     .onGloballyPositioned { chromeBounds["guidance"] = it.boundsInParent() }) {
                     Guidance(message)
+                }
+            }
+
+            if (selectedIds.isNotEmpty() && draft == null && regionNameId == null) {
+                Row(Modifier.align(Alignment.TopCenter)
+                    .padding(top = if (message == null) 62.dp else 100.dp)
+                    .background(Color.White, RoundedCornerShape(10.dp))
+                    .pillBorder(10f).padding(6.dp)
+                    .onGloballyPositioned { chromeBounds["shareSelection"] = it.boundsInParent() }) {
+                    DisposableEffect(Unit) {
+                        onDispose { chromeBounds.remove("shareSelection") }
+                    }
+                    val enabled = !saving && !saveFailed
+                    Button(onClick = { onShareSelection(selectedIds.toSet()) }, enabled = enabled,
+                        modifier = Modifier.height(48.dp).semantics {
+                            contentDescription = "選択範囲を画像で共有"
+                            if (!enabled) disabled()
+                        }, shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White, contentColor = if (enabled) ink else muted),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp,
+                            pressedElevation = 0.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp)) {
+                        Text("選択範囲を画像で共有", fontSize = 13.sp)
+                    }
                 }
             }
 
