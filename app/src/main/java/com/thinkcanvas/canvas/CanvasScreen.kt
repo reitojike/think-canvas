@@ -739,6 +739,10 @@ fun CanvasScreen(
                     else awaitPointerEvent()
                     if (event == null) {
                         mode = "longPressPending"
+                        // 長押し成立は視覚表示と振動で知らせる。drag の admission は touchSlop だけが決める。
+                        if (activeId == null) guidance = "ドラッグして余白を作る"
+                        else movePreview = (if (activeId in latestSelectedIds.value)
+                            latestSelectedIds.value else setOf(activeId)) to WorldPoint(0f, 0f)
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         continue
                     }
@@ -861,7 +865,7 @@ fun CanvasScreen(
                                     selectedIds = latestSelectedIds.value + activeId
                                     guidance = "${selectedIds.size}個を選択"
                                 } else menuTarget = activeId
-                            }
+                            } else guidance = null
                             "handle" -> if (activeId != null && handle != null) {
                                 val changed = when (handle) {
                                     HandleKind.MOVE -> board.moveSelection(
@@ -942,14 +946,8 @@ fun CanvasScreen(
                             if (activeId == null) {
                                 mode = "gap"
                                 gapPreview = startWorld to startWorld
-                                guidance = "ドラッグして余白を作る"
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            } else {
-                                mode = "move"
-                                val ids = if (activeId in latestSelectedIds.value)
-                                    latestSelectedIds.value else setOf(activeId)
-                                movePreview = ids to WorldPoint(0f, 0f)
-                            }
+                            } else mode = "move"
                         }
                         when (mode) {
                             "ink" -> {

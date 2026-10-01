@@ -8,6 +8,7 @@ import android.view.MotionEvent
 import android.view.ViewConfiguration
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
@@ -93,7 +94,11 @@ class LongPressGestureTest {
     }
 
     /** DOWN → long-press timeout 経過 → [steps] の MOVE → UP を touchscreen の指として注入する。 */
-    private fun Harness.longPress(down: Pair<Float, Float>, steps: List<Pair<Float, Float>>) {
+    private fun Harness.longPress(
+        down: Pair<Float, Float>,
+        steps: List<Pair<Float, Float>>,
+        whileHeld: () -> Unit = {},
+    ) {
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
         var downTime = 0L
         fun send(action: Int, position: Pair<Float, Float>) {
@@ -118,6 +123,7 @@ class LongPressGestureTest {
         send(MotionEvent.ACTION_DOWN, down)
         // 長押し成立を待つ。余裕は test の送信間隔であり、製品の閾値ではない。
         Thread.sleep(ViewConfiguration.getLongPressTimeout().toLong() + 200L)
+        whileHeld()
         steps.forEach { send(MotionEvent.ACTION_MOVE, it) }
         send(MotionEvent.ACTION_UP, steps.lastOrNull() ?: down)
         composeRule.waitForIdle()
@@ -192,7 +198,12 @@ class LongPressGestureTest {
         val leftBefore = screenLeftTop(leftText)
         val rightBefore = screenLeftTop(rightText)
         val point = blankPoint()
-        longPress(point, jitter(point))
+        longPress(point, jitter(point)) {
+            // 長押し成立は gap preview ではなく案内表示で視認できる（FR-013）。
+            composeRule.waitUntil(5_000) {
+                composeRule.onAllNodesWithText("ドラッグして余白を作る").fetchSemanticsNodes().isNotEmpty()
+            }
+        }
         Thread.sleep(500)
         assertEquals(before, rows())
         assertEquals(leftBefore, screenLeftTop(leftText))
