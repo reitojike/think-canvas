@@ -356,6 +356,7 @@ try {
     $summary.xml = $totals
     Save-Json 'xml-results.json' $totals
     if ($freshXml.Count -gt 0) { $summary.phase = 'xml-results' }
+    $xmlGatePassed = $false
     if ($log -match 'Timed out trying to check default_boot .* is loadable') {
         $summary.classification = 'WINDOWS_GMD_DEFAULT_BOOT_TIMEOUT'
     } elseif ($log -match 'Could not acquire device lock|Failed to setup|pixel7Api37Setup FAILED') {
@@ -372,13 +373,13 @@ try {
         $summary.classification = 'WINDOWS_GMD_TEST_FAILURE'
     } elseif ($gradle.exitCode -ne 0) {
         $summary.classification = 'WINDOWS_GMD_GRADLE_FAILURE'
-    } else { $summary.classification = 'WINDOWS_GMD_PASS' }
+    } else { $xmlGatePassed = $true }
     $afterSource = Get-Fingerprint
     Save-Json 'source-fingerprint-after.json' $afterSource
     if ($afterSource.fingerprint -cne $beforeSource.fingerprint) {
         $summary.classification = 'WINDOWS_GMD_PREFLIGHT_BLOCKED'
         $summary.reason = 'Source state changed during run; comparison/result invalid'
-    }
+    } elseif ($xmlGatePassed) { $summary.classification = 'WINDOWS_GMD_PASS' }
 } catch {
     $summary.reason = Protect-Text $_.Exception.Message
     if ($summary.phase -ne 'preflight' -and $summary.classification -eq 'WINDOWS_GMD_PREFLIGHT_BLOCKED') {
