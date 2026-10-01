@@ -665,7 +665,7 @@ fun CanvasScreen(
                 val startTime = SystemClock.uptimeMillis()
                 val start = down.position
                 var end = start
-                var gapDirectionConfirmed = false
+                var dragAdmitted = false
                 val activeTool = latestTool.value
                 var drawingKind = if (down.type == PointerType.Stylus) InkKind.PEN else latestInkTool.value
                 var drawingInput = if (down.type == PointerType.Stylus) InkInputType.STYLUS else InkInputType.TOUCH
@@ -738,15 +738,11 @@ fun CanvasScreen(
                     } else if (mode == "tap" && remaining <= 0) null
                     else awaitPointerEvent()
                     if (event == null) {
-                        mode = if (activeId == null) "gap" else "move"
-                        if (activeId == null) {
-                            gapPreview = startWorld to startWorld
-                            guidance = "ドラッグして余白を作る"
-                        } else {
-                            val ids = if (activeId in latestSelectedIds.value)
-                                latestSelectedIds.value else setOf(activeId)
-                            movePreview = ids to WorldPoint(0f, 0f)
-                        }
+                        mode = "longPressPending"
+                        // 長押し成立は視覚表示と振動で知らせる。drag の admission は touchSlop だけが決める。
+                        if (activeId == null) guidance = "ドラッグして余白を作る"
+                        else movePreview = (if (activeId in latestSelectedIds.value)
+                            latestSelectedIds.value else setOf(activeId)) to WorldPoint(0f, 0f)
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         continue
                     }
@@ -832,10 +828,10 @@ fun CanvasScreen(
                                 guidance = "${selectedIds.size}個を選択"
                                 tool = SpatialTool.NONE
                             }
-                            "move" -> if (activeId != null) {
+                            "move", "longPressPending" -> if (activeId != null) {
                                 val dx = (end.x - start.x) / latestViewport.value.scale
                                 val dy = (end.y - start.y) / latestViewport.value.scale
-                                if (kotlin.math.abs(dx) + kotlin.math.abs(dy) > 1f) {
+                                if (dragAdmitted) {
                                     val ids = if (activeId in latestSelectedIds.value) latestSelectedIds.value else setOf(activeId)
                                     val beforeSnapshot = board.snapshot()
                                     if (board.moveSelection(ids, dx, dy)) {
@@ -869,7 +865,7 @@ fun CanvasScreen(
                                     selectedIds = latestSelectedIds.value + activeId
                                     guidance = "${selectedIds.size}個を選択"
                                 } else menuTarget = activeId
-                            }
+                            } else guidance = null
                             "handle" -> if (activeId != null && handle != null) {
                                 val changed = when (handle) {
                                     HandleKind.MOVE -> board.moveSelection(
@@ -890,13 +886,10 @@ fun CanvasScreen(
                             "gap" -> {
                                 val dx = (end.x - start.x) / latestViewport.value.scale
                                 val dy = (end.y - start.y) / latestViewport.value.scale
-                                if (kotlin.math.max(kotlin.math.abs(end.x - start.x),
-                                        kotlin.math.abs(end.y - start.y)) >= 14f) {
-                                    val horizontal = kotlin.math.abs(dx) >= kotlin.math.abs(dy)
-                                    if (board.insertGap(startWorld, horizontal, if (horizontal) dx else dy)) {
-                                        guidance = "余白を作りました"
-                                        saveSnapshot()
-                                    }
+                                val horizontal = kotlin.math.abs(dx) >= kotlin.math.abs(dy)
+                                if (board.insertGap(startWorld, horizontal, if (horizontal) dx else dy)) {
+                                    guidance = "余白を作りました"
+                                    saveSnapshot()
                                 }
                             }
                         }
@@ -945,6 +938,17 @@ fun CanvasScreen(
                         end = change.position
                         val delta = change.position - change.previousPosition
                         if (mode == "tap" && (change.position - start).getDistance() > touchSlop) mode = "pan"
+                        if (mode == "move" && !dragAdmitted && (change.position - start).getDistance() > touchSlop) {
+                            dragAdmitted = true
+                        }
+                        if (mode == "longPressPending" && (change.position - start).getDistance() > touchSlop) {
+                            dragAdmitted = true
+                            if (activeId == null) {
+                                mode = "gap"
+                                gapPreview = startWorld to startWorld
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            } else mode = "move"
+                        }
                         when (mode) {
                             "ink" -> {
                                 val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
@@ -985,12 +989,6 @@ fun CanvasScreen(
                             "gap" -> {
                                 val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
                                 gapPreview = startWorld to WorldPoint(x, y)
-                                if (!gapDirectionConfirmed &&
-                                    kotlin.math.max(kotlin.math.abs(end.x - start.x),
-                                        kotlin.math.abs(end.y - start.y)) >= 14f) {
-                                    gapDirectionConfirmed = true
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                }
                                 guidance = if (kotlin.math.abs(x - startWorld.x) >= kotlin.math.abs(y - startWorld.y))
                                     "横に余白を作る" else "縦に余白を作る"
                             }

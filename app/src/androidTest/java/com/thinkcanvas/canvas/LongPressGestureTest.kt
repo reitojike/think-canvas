@@ -1,0 +1,239 @@
+package com.thinkcanvas.canvas
+
+import android.content.Context
+import android.content.Intent
+import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
+import android.view.ViewConfiguration
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ActivityScenario
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.thinkcanvas.MainActivity
+import com.thinkcanvas.R
+import com.thinkcanvas.data.BoardRow
+import com.thinkcanvas.data.CanvasDatabase
+import com.thinkcanvas.data.TextElementRow
+import com.thinkcanvas.data.showBoardOneAtStartup
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/** Spec 002 の long-press release / long-press drag の判定を、実 pointer 入力で確認する。 */
+@RunWith(AndroidJUnit4::class)
+class LongPressGestureTest {
+    @get:Rule val composeRule = createEmptyComposeRule()
+
+    private val leftText = "Left note"
+    private val rightText = "Right note"
+    private val leftX = 200f
+    private val rightX = 1_400f
+
+    private class Harness(
+        val context: Context,
+        val scenario: ActivityScenario<MainActivity>,
+        val database: CanvasDatabase,
+    )
+
+    private fun withBoard(block: Harness.() -> Unit) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val seed = CanvasDatabase.open(context)
+        runBlocking {
+            if (seed.canvasDao().board(1) == null) seed.canvasDao().putBoard(BoardRow())
+            seed.canvasDao().replaceAll(1, listOf(
+                TextElementRow.fromModel(1, TextElement(id = "left", text = leftText, x = leftX, y = 300f)),
+                TextElementRow.fromModel(1, TextElement(id = "right", text = rightText, x = rightX, y = 300f)),
+            ), emptyList(), emptyList())
+        }
+        seed.close()
+        showBoardOneAtStartup(context)
+        val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
+        val database = CanvasDatabase.open(context)
+        try {
+            // board の復元は Compose の idle 管理外の IO を含むため、seed した内容の表示を待つ。
+            composeRule.waitUntil(10_000) {
+                listOf(leftText, rightText).all {
+                    composeRule.onAllNodesWithContentDescription(it).fetchSemanticsNodes().isNotEmpty()
+                }
+            }
+            composeRule.waitForIdle()
+            Harness(context, scenario, database).block()
+        } finally {
+            database.close()
+            scenario.close()
+        }
+    }
+
+    private fun Harness.rows() = runBlocking { database.canvasDao().elements(1) }
+
+    private fun Harness.screenLeftTop(text: String): Pair<Float, Float> {
+        val origin = IntArray(2)
+        scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
+        val bounds = composeRule.onNodeWithContentDescription(text).fetchSemanticsNode().boundsInWindow
+        return (origin[0] + bounds.left) to (origin[1] + bounds.top)
+    }
+
+    private fun Harness.centerOf(text: String): Pair<Float, Float> {
+        val origin = IntArray(2)
+        scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
+        val bounds = composeRule.onNodeWithContentDescription(text).fetchSemanticsNode().boundsInWindow
+        return (origin[0] + bounds.center.x) to (origin[1] + bounds.center.y)
+    }
+
+    /** 現在の画面倍率。2 要素の world 間隔と画面上の間隔から求める。 */
+    private fun Harness.scale(): Float =
+        (screenLeftTop(rightText).first - screenLeftTop(leftText).first) / (rightX - leftX)
+
+    private fun Harness.blankPoint(): Pair<Float, Float> {
+        val a = centerOf(leftText)
+        val b = centerOf(rightText)
+        return ((a.first + b.first) / 2f) to a.second
+    }
+
+    /** DOWN → long-press timeout 経過 → [steps] の MOVE → UP を touchscreen の指として注入する。 */
+    private fun Harness.longPress(
+        down: Pair<Float, Float>,
+        steps: List<Pair<Float, Float>>,
+        whileHeld: () -> Unit = {},
+    ) {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        var downTime = 0L
+        fun send(action: Int, position: Pair<Float, Float>) {
+            val properties = arrayOf(MotionEvent.PointerProperties().apply {
+                id = 0
+                toolType = MotionEvent.TOOL_TYPE_FINGER
+            })
+            val coordinates = arrayOf(MotionEvent.PointerCoords().apply {
+                x = position.first
+                y = position.second
+                pressure = 1f
+                size = 1f
+            })
+            val now = SystemClock.uptimeMillis()
+            if (action == MotionEvent.ACTION_DOWN) downTime = now
+            val event = MotionEvent.obtain(downTime, now, action, 1, properties, coordinates,
+                0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
+            assertTrue(automation.injectInputEvent(event, true))
+            event.recycle()
+            Thread.sleep(35)
+        }
+        send(MotionEvent.ACTION_DOWN, down)
+        // 長押し成立を待つ。余裕は test の送信間隔であり、製品の閾値ではない。
+        Thread.sleep(ViewConfiguration.getLongPressTimeout().toLong() + 200L)
+        whileHeld()
+        steps.forEach { send(MotionEvent.ACTION_MOVE, it) }
+        send(MotionEvent.ACTION_UP, steps.lastOrNull() ?: down)
+        composeRule.waitForIdle()
+    }
+
+    private fun Harness.slop() = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+
+    private fun Harness.jitter(from: Pair<Float, Float>) = listOf(
+        (from.first + slop() / 3f) to from.second,
+        (from.first + slop() / 3f) to (from.second - slop() / 4f),
+        from,
+    )
+
+    private fun Harness.dragSteps(from: Pair<Float, Float>, distance: Float) =
+        (1..8).map { (from.first + distance * it / 8f) to from.second }
+
+    private fun Harness.assertNoTextDraft() {
+        listOf(R.string.new_text, R.string.edit_text).forEach {
+            assertEquals(0, composeRule.onAllNodesWithContentDescription(context.getString(it))
+                .fetchSemanticsNodes().size)
+        }
+    }
+
+    private fun Harness.click(description: String) {
+        composeRule.onNodeWithContentDescription(description).performClick()
+        composeRule.waitForIdle()
+    }
+
+    private fun Harness.awaitRows(predicate: (List<TextElementRow>) -> Boolean) {
+        composeRule.waitUntil(10_000) { predicate(rows()) }
+    }
+
+    @Test
+    fun elementLongPressReleaseOpensMenuAndDeleteIsReachable() = withBoard {
+        val before = rows()
+        val target = centerOf(leftText)
+        val leftBefore = screenLeftTop(leftText)
+        longPress(target, jitter(target))
+        assertEquals(before, rows())
+        assertEquals(leftBefore, screenLeftTop(leftText))
+        assertNoTextDraft()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.menu_delete)).assertExists()
+        click(context.getString(R.string.menu_delete))
+        awaitRows { it.map(TextElementRow::id) == listOf("right") }
+        click(context.getString(R.string.undo))
+        awaitRows { it == before }
+    }
+
+    @Test
+    fun elementLongPressDragMovesAndUndoRedoApply() = withBoard {
+        val before = rows()
+        val scale = scale()
+        val target = centerOf(leftText)
+        val distance = slop() * 5f
+        longPress(target, dragSteps(target, distance))
+        awaitRows { rows -> rows.first { it.id == "left" }.x != leftX }
+        val moved = rows()
+        assertEquals(leftX + distance / scale, moved.first { it.id == "left" }.x, 1f)
+        assertEquals(300f, moved.first { it.id == "left" }.y, 1f)
+        assertEquals(before.first { it.id == "right" }, moved.first { it.id == "right" })
+        assertEquals(0, composeRule.onAllNodesWithContentDescription(
+            context.getString(R.string.menu_delete)).fetchSemanticsNodes().size)
+        click(context.getString(R.string.undo))
+        awaitRows { it == before }
+        click(context.getString(R.string.redo))
+        awaitRows { it == moved }
+    }
+
+    @Test
+    fun blankLongPressReleaseDoesNothing() = withBoard {
+        val before = rows()
+        val leftBefore = screenLeftTop(leftText)
+        val rightBefore = screenLeftTop(rightText)
+        val point = blankPoint()
+        longPress(point, jitter(point)) {
+            // 長押し成立は gap preview ではなく案内表示で視認できる（FR-013）。
+            composeRule.waitUntil(5_000) {
+                composeRule.onAllNodesWithText("ドラッグして余白を作る").fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+        Thread.sleep(500)
+        assertEquals(before, rows())
+        assertEquals(leftBefore, screenLeftTop(leftText))
+        assertEquals(rightBefore, screenLeftTop(rightText))
+        assertNoTextDraft()
+        assertEquals(0, composeRule.onAllNodesWithContentDescription(
+            context.getString(R.string.menu_delete)).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun blankLongPressDragInsertsGapAsOneUndoableOperation() = withBoard {
+        val before = rows()
+        val scale = scale()
+        val point = blankPoint()
+        val distance = slop() * 5f
+        longPress(point, dragSteps(point, distance))
+        awaitRows { rows -> rows.first { it.id == "right" }.x != rightX }
+        val after = rows()
+        assertEquals(before.first { it.id == "left" }, after.first { it.id == "left" })
+        assertEquals(rightX + distance / scale, after.first { it.id == "right" }.x, 1f)
+        assertEquals(300f, after.first { it.id == "right" }.y, 1f)
+        click(context.getString(R.string.undo))
+        awaitRows { it == before }
+        click(context.getString(R.string.redo))
+        awaitRows { it == after }
+    }
+}
