@@ -116,7 +116,11 @@ function Get-Fingerprint {
             $hashes[$kind] = (Get-FileHash -LiteralPath $temp -Algorithm SHA256).Hash
         } finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp } }
     }
-    $untracked = @(Git @('ls-files', '--others', '--exclude-standard', '-z'))
+    # Census untracked directories without reading Android userdata or other personal content.
+    $untrackedCensus = @((Git @('ls-files', '--others', '--directory', '--exclude-standard', '-z')) -split "`0" | Where-Object { $_ })
+    $sourcePaths = @('app/src', 'app/schemas', 'scripts', 'docs', 'specs', 'gradle', '.specify', '.agents/skills',
+        '.github', 'AGENTS.md', 'build.gradle.kts', 'settings.gradle.kts', 'gradle.properties', 'gradlew', 'gradlew.bat', '.gitignore')
+    $untracked = @(Git (@('ls-files', '--others', '--exclude-standard', '-z', '--') + $sourcePaths))
     $untrackedPaths = @($untracked -split "`0" | Where-Object { $_ })
     $untrackedHashes = @($untrackedPaths | Sort-Object | ForEach-Object {
         [ordered]@{ path = $_; sha256 = (Get-FileHash -LiteralPath (Join-Path $worktree $_) -Algorithm SHA256).Hash }
@@ -126,7 +130,7 @@ function Get-Fingerprint {
         unstagedSha256 = $hashes.unstaged; stagedSha256 = $hashes.staged
         changedFiles = @( (Git @('diff', '--name-status', '-z')) -split "`0" | Where-Object { $_ })
         stagedFiles = @( (Git @('diff', '--cached', '--name-status', '-z')) -split "`0" | Where-Object { $_ })
-        untrackedFiles = $untrackedHashes
+        untrackedCensus = $untrackedCensus; untrackedFiles = $untrackedHashes
         dirtyState = Git @('status', '--porcelain=v1', '-z')
     }
     $bytes = [Text.Encoding]::UTF8.GetBytes(($state | ConvertTo-Json -Depth 10 -Compress))

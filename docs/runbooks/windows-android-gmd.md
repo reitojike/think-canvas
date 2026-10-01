@@ -54,8 +54,12 @@ Full と Focused の引数は同時指定できません。別の Gradle command
   missing なら wrapper を起動せず停止します。wrapper / SDK / JDK の新規 download を検証の一部にしません。
 - fingerprint は Git 自身に `git diff --output=<temp-file>` で unstaged / staged の binary diff
   を書かせ、その file bytes の SHA-256 を取ります。PowerShell pipeline の text を hash しません。
-  changed-file / staged / untracked census、untracked file bytes の SHA-256、HEAD / branch / dirty state
+  changed-file / staged / untracked directory census、untracked source / test / repository configuration
+  file bytes の SHA-256、HEAD / branch / dirty state
   を合成し、実行前後の source state が一致することも確認します。diff 本文は診断に保存しません。
+  hash 対象は app/src、app/schemas、scripts、docs、specs、gradle、.specify、.agents/skills、
+  .github と root の build / wrapper / authority 設定です。別 worktree、Android userdata、
+  個人ファイルの content は読みません。
 
 ## XML gate と診断
 
