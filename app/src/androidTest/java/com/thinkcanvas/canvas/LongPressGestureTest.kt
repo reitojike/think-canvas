@@ -59,6 +59,12 @@ class LongPressGestureTest {
         val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
         val database = CanvasDatabase.open(context)
         try {
+            // board の復元は Compose の idle 管理外の IO を含むため、seed した内容の表示を待つ。
+            composeRule.waitUntil(10_000) {
+                listOf(leftText, rightText).all {
+                    composeRule.onAllNodesWithContentDescription(it).fetchSemanticsNodes().isNotEmpty()
+                }
+            }
             composeRule.waitForIdle()
             Harness(context, scenario, database).block()
         } finally {
