@@ -294,7 +294,6 @@ fun CanvasScreen(
         selectedIds + matchIds, density.density, titleDp, titleLineHeightWorld,
         renderedGeometry.boundsById)
     val latestProjection = rememberUpdatedState(projection)
-    val latestLastBlankTap = rememberUpdatedState(lastBlankTap)
     val latestSearchOpen = rememberUpdatedState(searchOpen)
     val latestAnimation = rememberUpdatedState(viewportAnimation)
     val latestBodyDp = rememberUpdatedState(bodyDp)
@@ -488,13 +487,13 @@ fun CanvasScreen(
         }
     }
 
-    fun tap(point: Offset) {
+    fun tap(point: Offset, eventUptimeMillis: Long?) {
         if (latestDraft.value != null || latestSaveBlocked.value) return
         if (chromeBounds.values.any { it.contains(point) }) return
         val (element, spatial) = hitCanvas(point)
         if (latestInkTool.value != null) return
         if (element == null && spatial == null) {
-            lastBlankTap = SystemClock.uptimeMillis() to point
+            lastBlankTap = eventUptimeMillis?.let { it to point }
             if (latestSelectedIds.value.isNotEmpty()) { selectedId = null; selectedIds = emptySet() }
             else if (!latestSearchOpen.value) {
                 val (x, y) = latestViewport.value.screenToWorld(point.x, point.y)
@@ -644,10 +643,10 @@ fun CanvasScreen(
                 val requestedInk = down.type == PointerType.Stylus || latestInkTool.value != null
                 if (chromeBounds.values.any { it.contains(down.position) }) return@awaitEachGesture
                 latestAnimation.value?.cancel()
-                val previousBlankTap = latestLastBlankTap.value
+                val previousBlankTap = lastBlankTap
                 if (previousBlankTap != null && latestTool.value == SpatialTool.NONE &&
                     latestInkTool.value == null &&
-                    SystemClock.uptimeMillis() - previousBlankTap.first <= doubleTapTimeoutMillis &&
+                    down.uptimeMillis - previousBlankTap.first <= doubleTapTimeoutMillis &&
                     (down.position - previousBlankTap.second).getDistance() <= doubleTapSlop &&
                     hitCanvas(down.position).let { it.first == null && it.second == null } &&
                     canvasSize != IntSize.Zero) {
@@ -770,7 +769,12 @@ fun CanvasScreen(
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 saveSnapshot()
                             }
-                            "tap" -> tap(start)
+                            "tap" -> {
+                                val release = checkNotNull(event.changes.firstOrNull {
+                                    it.id == down.id && it.previousPressed && !it.pressed
+                                }) { "Tap release for active pointer is missing" }
+                                tap(start, release.uptimeMillis)
+                            }
                             "create" -> {
                                 guidance = null
                                 val worldEnd = latestViewport.value.screenToWorld(end.x, end.y)
@@ -1214,7 +1218,7 @@ fun CanvasScreen(
                             stateDescription = if (selected) selectedLabel else unselectedLabel
                             if (elementActionsEnabled) {
                                 onClick(label = if (selected) editLabel else selectLabel) {
-                                    tap(Offset(screenX + 1, screenY + 1))
+                                    tap(Offset(screenX + 1, screenY + 1), null)
                                     true
                                 }
                                 customActions = listOf(
