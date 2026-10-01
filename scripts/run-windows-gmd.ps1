@@ -12,6 +12,9 @@ $repoRoot = $worktree
 $systemRoot = [Environment]::GetFolderPath('Windows')
 $classKey = 'ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class'
 $regexKey = 'ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.tests_regex'
+# Known-good Windows GMD GPU mode, same as .github/workflows/android.yml. The AGP default (auto-no-window)
+# left emulator-5554 offline after boot and timed out the test task on this host.
+$gpuProperty = '-Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect'
 $runtimeEnvironmentKeys = @('Path', 'TEMP', 'TMP', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA',
     'LOCALAPPDATA', 'ProgramData', 'JAVA_HOME', 'ANDROID_HOME', 'ANDROID_SDK_ROOT')
 $environmentConflict = $false
@@ -490,7 +493,8 @@ function Get-GmdArguments {
     return @('-Dfile.encoding=UTF-8', '-Xmx64m', '-Xms64m', '-Dorg.gradle.appname=gradlew', '-classpath',
         (Join-Path $worktree 'gradle/wrapper/gradle-wrapper.jar'), 'org.gradle.wrapper.GradleWrapperMain',
         ':app:pixel7Api37DebugAndroidTest', '--rerun', '--no-daemon', '--offline', '--console=plain',
-        '-Pandroid.builder.sdkDownload=false', '-Porg.gradle.java.installations.auto-download=false', '--init-script', $owned.initPath)
+        '-Pandroid.builder.sdkDownload=false', '-Porg.gradle.java.installations.auto-download=false',
+        $gpuProperty, '--init-script', $owned.initPath)
 }
 
 function Initialize-Run {
@@ -562,6 +566,9 @@ function Verify-StaticChecks {
         -not $psi.Environment.ContainsKey('ORG_GRADLE_PROJECT_arbitrary') -and $psi.Environment['THINKCANVAS_VERSION_CODE'] -eq '1') 'SECRET_DROP'
     Check (@($psi.Environment.Keys | Where-Object { $_ -ieq 'Path' }).Count -eq 1) 'PATH_CASE'
     $script:childEnv = $oldEnv
+    $script:owned = @{ initPath = 'fixture-init.gradle' }; $gmdArgs = @(Get-GmdArguments); $script:owned = $oldOwned
+    Check (@($gmdArgs | Where-Object { $_ -ceq $gpuProperty }).Count -eq 1 -and
+        @($gmdArgs | Where-Object { $_ -like '*emulator.gpu*' }).Count -eq 1) 'GPU_PROPERTY_ONCE'
     $allNames = Get-ExpectedTestNames; Check ($allNames.Count -eq 66) 'SOURCE_CENSUS_66'
     $dist = Get-DistributionSelection ([IO.File]::ReadAllBytes((Join-Path $worktree 'gradle/wrapper/gradle-wrapper.properties')))
     Check ($dist.cacheDirectory.EndsWith('3m7h6ceboy5k31n8kzwzuxssm')) 'WRAPPER_CACHE_KEY'

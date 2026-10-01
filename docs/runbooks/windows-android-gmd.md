@@ -64,7 +64,13 @@ wrapper JAR を Java の `ArgumentList` で直接起動するため、CMD quotin
 `--no-daemon`、`--offline`、SDK/JDK auto-download 禁止を launcher が所有します。
 wrapper URL に対応する canonical distribution の `.zip.ok`、lib、executable を先に確認し、
 missing の場合は download せず停止します。offline は network retrieval を避ける契約であり、
-NIO / default_boot の mitigation とは扱いません。GPU/profile/CI は変更しません。
+NIO / default_boot の mitigation とは扱いません。
+
+Gradle には `-Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect` を必ず 1 回だけ
+渡します。これは Windows GMD の既知の good configuration で、GitHub CI (`android.yml`) と同じです。
+AGP 既定の `-gpu auto-no-window` では、この host で boot 後も emulator が adb `offline` のまま
+test task が timeout しました。別の GPU mode への移行は #52 の scope 外です。profile/CI は
+変更しません。
 
 ## Source/config と result ownership
 
