@@ -93,9 +93,9 @@ jobs:
           "$avdmanager_bin" list device --compact
 
           printf 'GMD definition from current checkout:\n'
-          sed -n '/create("pixel7Api37") {/,/^[[:space:]]*}/p' \
+          sed -n '/create("pixel9Api37") {/,/^[[:space:]]*}/p' \
             app/build.gradle.kts
-          printf 'Expected baseline: pixel_7 / API 37 / google_apis / x86_64\n'
+          printf 'Expected baseline: pixel_9 / API 37 / google_apis / x86_64\n'
 
           for package in \
             platform-tools \
@@ -114,7 +114,7 @@ jobs:
           done
 
       - name: ジェスチャーと保存の実機相当テスト
-        run: ./gradlew :app:pixel7Api37DebugAndroidTest -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
+        run: ./gradlew :app:pixel9Api37DebugAndroidTest -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
       - name: GMD 実行後の環境を記録
         if: always()
         shell: bash
