@@ -2,7 +2,7 @@
 
 **Feature Branch**: `codex/issue-4-ink`
 **Created**: 2026-09-27
-**Status**: 実装準備完了
+**Status**: 実装済み（実機のスタイラス入力・触覚フィードバック確認は後日）
 **Input**: [Issue #4](https://github.com/reitojike/think-canvas/issues/4)、非公開 PRD、HTML モック
 
 ## User Scenarios & Testing
