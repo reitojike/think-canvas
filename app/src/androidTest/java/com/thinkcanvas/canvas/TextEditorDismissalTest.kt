@@ -7,6 +7,10 @@ import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.WindowInsets
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasSetTextAction
@@ -26,6 +30,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.BoardSaveState
 import com.thinkcanvas.BoardSessionViewModel
 import com.thinkcanvas.MainActivity
+import com.thinkcanvas.R
 import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.CanvasDatabase
 import com.thinkcanvas.data.CanvasStore
@@ -80,13 +85,89 @@ class TextEditorDismissalTest {
                 .performTextReplacement(text)
             composeRule.waitForIdle()
         }
-        fun startExisting() {
-            composeRule.onNodeWithContentDescription(original.text).performClick()
-            composeRule.onNodeWithContentDescription(original.text).performClick()
+        fun startExistingEditor() {
+            composeRule.waitForIdle()
+            check(editor.draft.value == null) { "Existing entry requires no active draft" }
+            check(editor.pendingDraftAcknowledgement.value == null)
+            check(sessions.saveStateFor(1L, BoardSnapshot()).value is BoardSaveState.Idle)
+            val target = board.elements.single { it.id == original.id }
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            val selected = context.getString(R.string.selection_state_selected)
+            val unselected = context.getString(R.string.unselected)
+            fun selectionState(): String {
+                val node = composeRule.onAllNodesWithContentDescription(target.text)
+                    .fetchSemanticsNodes().single()
+                val state = node.config.getOrNull(SemanticsProperties.StateDescription)
+                check(state == selected || state == unselected) { "Unknown selection state: $state" }
+                val selectedElements = composeRule.onAllNodes(SemanticsMatcher("Selected text elements") {
+                    it.config.getOrNull(SemanticsProperties.StateDescription) == selected &&
+                        it.config.getOrNull(SemanticsProperties.ContentDescription)
+                            ?.any { label -> board.elements.any { element -> element.text == label } } == true
+                }).fetchSemanticsNodes()
+                check(selectedElements.size == if (state == selected) 1 else 0) {
+                    "Existing entry requires an unambiguous target selection"
+                }
+                return checkNotNull(state)
+            }
+            if (selectionState() == unselected) {
+                composeRule.onNodeWithContentDescription(target.text).performClick()
+                assertEquals(selected, selectionState())
+            }
+            composeRule.onNodeWithContentDescription(target.text).performClick()
+            composeRule.waitUntil(10_000) {
+                val nodes = composeRule.onAllNodesWithContentDescription(existingEditor).fetchSemanticsNodes()
+                editor.draft.value?.id == target.id && nodes.size == 1 &&
+                    nodes.single().config.contains(SemanticsActions.SetText) &&
+                    nodes.single().config.getOrNull(SemanticsProperties.Focused) == true &&
+                    composeRule.onAllNodesWithText("完了").fetchSemanticsNodes().size == 1 &&
+                    composeRule.onAllNodesWithText("やめる").fetchSemanticsNodes().size == 1
+            }
             awaitEditor(existingEditor)
-            composeRule.onNodeWithContentDescription(existingEditor).performTextReplacement("Changed note")
-            composeRule.onNodeWithText("見出し").performClick()
-            composeRule.onNodeWithText("朱").performClick()
+            assertExistingDraft(target)
+        }
+        fun assertExistingDraft(expected: TextElement) {
+            val current = checkNotNull(editor.draft.value)
+            assertEquals(expected.id, current.id)
+            assertEquals(expected.text, current.text)
+            assertEquals(expected.kind, current.kind)
+            assertEquals(expected.color, current.color)
+            assertEquals(expected.x, current.x)
+            assertEquals(expected.y, current.y)
+        }
+        fun assertExistingSelected(expected: TextElement) {
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            val node = composeRule.onAllNodesWithContentDescription(expected.text)
+                .fetchSemanticsNodes().single()
+            assertEquals(context.getString(R.string.selection_state_selected),
+                node.config.getOrNull(SemanticsProperties.StateDescription))
+        }
+        fun prepareExistingDraft(text: String) {
+            composeRule.waitForIdle()
+            awaitEditor(existingEditor)
+            check(editor.pendingDraftAcknowledgement.value == null)
+            check(sessions.saveStateFor(1L, BoardSnapshot()).value is BoardSaveState.Idle)
+            val sessionId = checkNotNull(editor.draft.value).sessionId
+            fun latest(): Draft {
+                val current = checkNotNull(editor.draft.value)
+                assertEquals(original.id, current.id)
+                assertEquals(sessionId, current.sessionId)
+                return current
+            }
+            if (latest().text != text) {
+                composeRule.onNodeWithContentDescription(existingEditor).performTextReplacement(text)
+            }
+            assertEquals(text, latest().text)
+            if (latest().kind != TextKind.TITLE) {
+                composeRule.onNodeWithText("見出し").performClick()
+            }
+            assertEquals(TextKind.TITLE, latest().kind)
+            if (latest().color != TextColor.VERMILION) {
+                composeRule.onNodeWithText("朱").performClick()
+            }
+            val prepared = latest()
+            assertEquals(text, prepared.text)
+            assertEquals(TextKind.TITLE, prepared.kind)
+            assertEquals(TextColor.VERMILION, prepared.color)
         }
         fun outside() = tap(point(.92f, .24f))
         fun assertUnchanged(expectedRedo: Boolean = false) {
@@ -296,7 +377,8 @@ class TextEditorDismissalTest {
 
     @Test fun existingEditOutsideTapCommitsContentKindColorAndPreservesIdentityPosition() = withBoard {
         val saves = trackSaves()
-        startExisting()
+        startExistingEditor()
+        prepareExistingDraft("Changed note")
         outside()
         assertClosed()
         val expected = listOf(original.copy(text = "Changed note",
@@ -443,7 +525,8 @@ class TextEditorDismissalTest {
     }
 
     @Test fun existingDraftSurvivesRecreationThenCanCancelWithoutSave() = withBoard {
-        startExisting()
+        startExistingEditor()
+        prepareExistingDraft("Changed note")
         recreate()
         awaitEditor(existingEditor)
         composeRule.onNodeWithContentDescription(existingEditor).assertTextEquals("Changed note")
@@ -538,7 +621,8 @@ class TextEditorDismissalTest {
         composeRule.onNodeWithText("やめる").performClick()
         assertClosed()
         assertUnchanged()
-        startExisting()
+        startExistingEditor()
+        prepareExistingDraft("Changed note")
         composeRule.onNodeWithText("やめる").performClick()
         assertClosed()
         assertUnchanged()
@@ -547,7 +631,8 @@ class TextEditorDismissalTest {
 
     @Test fun existingEditExplicitDoneMatchesOutsideCompletion() = withBoard {
         val saves = trackSaves()
-        startExisting()
+        startExistingEditor()
+        prepareExistingDraft("Changed note")
         composeRule.onNodeWithText("完了").performClick()
         assertClosed()
         val expected = listOf(original.copy(text = "Changed note",
@@ -558,8 +643,41 @@ class TextEditorDismissalTest {
         reopenSaved(expected)
     }
 
+    @Test fun existingEditorEntryHandlesUnselectedSelectedDoneAndOutsideReentry() = withBoard {
+        val saves = trackSaves()
+        // Fresh unselected entry selects first; completion retains that selection.
+        startExistingEditor()
+        assertExistingDraft(original)
+        prepareExistingDraft("Changed note")
+        composeRule.onNodeWithText("完了").performClick()
+        assertClosed()
+        val expected = listOf(original.copy(text = "Changed note",
+            kind = TextKind.TITLE, color = TextColor.VERMILION))
+        assertSaved(expected)
+        assertEquals(1, saves.get())
+        // Already selected after Done: activation only, using the current text label.
+        assertExistingSelected(expected.single())
+        startExistingEditor()
+        assertExistingDraft(expected.single())
+        composeRule.onNodeWithContentDescription(existingEditor).performTextReplacement("Outside reentry")
+        outside()
+        assertClosed()
+        val outsideExpected = listOf(expected.single().copy(text = "Outside reentry"))
+        assertSaved(outsideExpected)
+        assertEquals(2, saves.get())
+        // Already selected after a valid outside commit: activation only again.
+        assertExistingSelected(outsideExpected.single())
+        startExistingEditor()
+        assertExistingDraft(outsideExpected.single())
+        composeRule.onNodeWithText("やめる").performClick()
+        assertClosed()
+        assertSaved(outsideExpected)
+        assertEquals(2, saves.get())
+    }
+
     @Test fun existingDraftSurvivesRecreationThenOutsideCommits() = withBoard {
-        startExisting()
+        startExistingEditor()
+        prepareExistingDraft("Changed note")
         val before = checkNotNull(editor.draft.value)
         recreate()
         awaitEditor(existingEditor)
@@ -585,8 +703,8 @@ class TextEditorDismissalTest {
             assertUnchanged()
         }
         repeat(2) { index ->
-            startExisting()
-            composeRule.onNodeWithContentDescription(existingEditor).performTextReplacement("   ")
+            startExistingEditor()
+            prepareExistingDraft("   ")
             if (index == 0) outside() else composeRule.onNodeWithText("完了").performClick()
             assertClosed()
             assertUnchanged()
@@ -597,8 +715,8 @@ class TextEditorDismissalTest {
     @Test fun emptyExistingOutsideUsesExistingDoneValidationWithoutDeletingElement() = withBoard {
         val saves = trackSaves()
         repeat(2) { index ->
-            startExisting()
-            composeRule.onNodeWithContentDescription(existingEditor).performTextReplacement("")
+            startExistingEditor()
+            prepareExistingDraft("")
             if (index == 0) outside() else composeRule.onNodeWithText("完了").performClick()
             assertClosed()
             assertUnchanged()
