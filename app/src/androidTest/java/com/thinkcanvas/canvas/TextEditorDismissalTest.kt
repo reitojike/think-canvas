@@ -149,7 +149,7 @@ class TextEditorDismissalTest {
     private fun tap(point: Offset) = gesture(point)
 
     private fun gesture(start: Offset, end: Offset = start, heldMillis: Long = 0,
-                        cancelled: Boolean = false) {
+                        cancelled: Boolean = false, duringPress: (() -> Unit)? = null) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val downTime = SystemClock.uptimeMillis()
         fun send(action: Int, point: Offset) {
@@ -167,6 +167,9 @@ class TextEditorDismissalTest {
         }
         send(MotionEvent.ACTION_DOWN, start)
         Thread.sleep(heldMillis.coerceAtLeast(40))
+        duringPress?.invoke()
+        if (duringPress != null) assertTrue("The input update must fit inside a short tap",
+            SystemClock.uptimeMillis() - downTime < ViewConfiguration.getLongPressTimeout())
         if (start != end) send(MotionEvent.ACTION_MOVE, end)
         send(if (cancelled) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP, end)
         composeRule.waitForIdle()
@@ -195,6 +198,16 @@ class TextEditorDismissalTest {
         assertClosed()
         assertUnchanged()
         assertEquals(0, saves)
+    }
+
+    @Test fun outsideTapStillCancelsWhenTextChangesBetweenDownAndUp() = withBoard {
+        startNew("Before input update")
+        gesture(point(.92f, .24f), duringPress = {
+            composeRule.onNodeWithContentDescription(newEditor)
+                .performTextReplacement("Input update while pressed")
+        })
+        assertClosed()
+        assertUnchanged()
     }
 
     @Test fun existingEditOutsideTapRestoresOriginalContentKindColorAndPosition() = withBoard {

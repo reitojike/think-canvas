@@ -674,7 +674,7 @@ fun CanvasScreen(
                                 nativeEvent.flags and MotionEvent.FLAG_CANCELED != 0
                             if (isTap && !cancelled && event.type == PointerEventType.Release &&
                                 active?.previousPressed == true &&
-                                editorSession.draft.value === activeDraft) latestCancelDraft.value()
+                                editorSession.draft.value?.sessionId == activeDraft.sessionId) latestCancelDraft.value()
                             break
                         }
                     }

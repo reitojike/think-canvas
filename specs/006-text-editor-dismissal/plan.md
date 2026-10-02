@@ -48,3 +48,7 @@ CanvasScreen の draft、pointer admission、BasicTextField focus、chrome bound
 ## 検証で判明した待機の補正
 
 全78件の local GMD で、既存 BoardListScreenTest の明示閉じるテストだけが失敗した。一覧は failure dialog の背面に残るため、一覧 semantics の存在だけでは非同期復帰の完了を証明しない。アプリの動作は変更せず、隣接の system back テストと同様に BoardListActionState.Idle を待ってから一覧復帰と acknowledgement を確認する。対象は app/src/androidTest/java/com/thinkcanvas/board/BoardListScreenTest.kt の1ケースに限る。
+
+## Review convergence: 内容更新と編集セッション
+
+外側 gesture の DOWN/UP 間にも IME の確定や hardware keyboard の入力は届きうる。Draft.copy による内容・種類・色の更新を新しい編集と誤認しないよう、Draft の生成時に sessionId を作り、copy では維持する。新しい Draft を生成したときだけ識別子が変わる。外側 UP は同じ sessionId を照合し、最新 draft を共有 cancel で取り消す。識別子は process 内の editor state だけに存在し、snapshot/history/Room に保存しない。DOWN 後の onValueChange と UP の間隔が long press timeout 未満の回帰テストで確認する。
