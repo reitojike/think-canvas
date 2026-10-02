@@ -31,6 +31,12 @@ android {
                     systemImageSource = "google"
                     require64Bit = true
                 }
+                create("pixel9Api37") {
+                    device = "Pixel 9"
+                    apiLevel = 37
+                    systemImageSource = "google"
+                    require64Bit = true
+                }
             }
         }
     }
