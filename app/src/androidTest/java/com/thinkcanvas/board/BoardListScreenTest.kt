@@ -7,9 +7,11 @@ import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -25,6 +27,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -1137,14 +1140,47 @@ class BoardListScreenTest {
             awaitDescription("共有する案 の共有画像プレビュー")
             awaitText("画像を保存")
             awaitText("ほかのアプリ")
+            // プレビュー枠だけでなく、Bitmap 公開後の描画を確認してから操作する。
+            composeRule.waitUntil(5_000) {
+                !composeRule.onNodeWithText("コピー").fetchSemanticsNode()
+                    .config.contains(SemanticsProperties.Disabled)
+            }
+            composeRule.onNodeWithText("コピー").assertIsEnabled()
+            val firstPreview = composeRule.onNodeWithContentDescription("共有する案 の共有画像プレビュー")
+                .assertIsDisplayed().captureToImage()
+            assertTrue(firstPreview.width > 0 && firstPreview.height > 0)
             composeRule.onNodeWithText("コピー").performClick()
+            composeRule.waitUntil(5_000) {
+                composeRule.onAllNodesWithContentDescription("共有する案 の共有画像プレビュー")
+                    .fetchSemanticsNodes().isEmpty()
+            }
+            composeRule.waitForIdle()
             awaitDescription("共有する案、", substring = true)
+            val returnedCard = composeRule.onNodeWithContentDescription("共有する案、", substring = true)
+                .assertIsDisplayed().captureToImage()
+            assertTrue(returnedCard.width > 0 && returnedCard.height > 0)
             composeRule.onNodeWithContentDescription("共有する案、", substring = true)
                 .performSemanticsAction(SemanticsActions.OnLongClick)
             composeRule.onNodeWithText("画像で共有").performClick()
             awaitDescription("共有する案 の共有画像プレビュー")
+            composeRule.waitUntil(5_000) {
+                !composeRule.onNodeWithText("コピー").fetchSemanticsNode()
+                    .config.contains(SemanticsProperties.Disabled)
+            }
+            composeRule.onNodeWithText("コピー").assertIsEnabled()
+            composeRule.onNodeWithText("画像を保存").assertIsEnabled()
+            composeRule.onNodeWithText("ほかのアプリ").assertIsEnabled()
+            val secondPreview = composeRule.onNodeWithContentDescription("共有する案 の共有画像プレビュー")
+                .assertIsDisplayed().captureToImage()
+            assertEquals(firstPreview.width, secondPreview.width)
+            assertEquals(firstPreview.height, secondPreview.height)
             assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
                 .GLOBAL_ACTION_BACK))
+            composeRule.waitUntil(5_000) {
+                composeRule.onAllNodesWithContentDescription("共有する案 の共有画像プレビュー")
+                    .fetchSemanticsNodes().isEmpty()
+            }
+            composeRule.waitForIdle()
             awaitDescription("共有する案、", substring = true)
             assertEquals(before, runBlocking { database.canvasDao().board(1) })
             assertEquals(otherBefore, runBlocking { database.canvasDao().board(2) })
