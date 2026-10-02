@@ -704,75 +704,78 @@ try {
     $repoRoot = [IO.Path]::GetFullPath((Split-Path -Parent $common))
     $childEnv['GRADLE_USER_HOME'] = Join-Path $repoRoot '.gradle-user'
     $childEnv['ANDROID_USER_HOME'] = Join-Path $childEnv['GRADLE_USER_HOME'] 'android-user'
-    if ($VerifyStatic) { Verify-StaticChecks; $summary.classification = 'WINDOWS_GMD_STATIC_PASS'; $summary.phase = 'static'; exit 0 }
-    if (@($optionFacts | Where-Object { $_.forbidden }).Count) { throw 'FORBIDDEN_JVM_OPTION' }
-    $summary.appliedMitigation = @($appliedMitigation)
-    if ($childEnv.ContainsKey('JAVA_TOOL_OPTIONS')) { $summary.appliedMitigation += 'JAVA_NIO_UNIXDOMAIN_TMPDIR' }
-    [void]$childEnv.Remove($classKey); [void]$childEnv.Remove($regexKey)
-    $names = Get-ExpectedTestNames
-    if ($PSCmdlet.ParameterSetName -eq 'Focused') {
-        Assert-Selector $Test
-        if ($Test -cnotin $names) { throw 'SELECTOR_NOT_IN_SOURCE_CENSUS' }
-        $childEnv[$classKey] = $Test; $ExpectedTestCount = 1; $names = @($Test)
-    } elseif ($names.Count -ne $ExpectedTestCount) { throw 'EXPECTED_COUNT_DIFFERS_FROM_SOURCE' }
-    $summary.expectedTestCount = $ExpectedTestCount
-    Save-Json 'selector.json' @{ classExact = $(if ($Test) { $childEnv[$classKey] -ceq $Test } else { $false })
-        classUnset = -not $childEnv.ContainsKey($classKey); testsRegexUnset = -not $childEnv.ContainsKey($regexKey); expectedNames = $names }
-    $before = Get-SourceSnapshot
-    Save-Json 'source-before.json' $before
-    Save-Json 'provenance.json' @{ head = $before.head; branch = Git @('branch', '--show-current'); worktree = '<worktree>'; repository = '<shared-repo-root>' }
-    $dist = Get-DistributionSelection ([IO.File]::ReadAllBytes((Join-Path $worktree 'gradle/wrapper/gradle-wrapper.properties')))
-    Save-Json 'wrapper-cache.json' @{ distributionUrl = $dist.url; cache = Safe-Path $dist.cacheDirectory; ready = Test-WrapperCache $dist }
-    if (-not (Test-WrapperCache $dist)) { $summary.classification = 'WINDOWS_GMD_WRAPPER_DISTRIBUTION_MISSING'; throw 'WRAPPER_CACHE_MISSING_NO_DOWNLOAD' }
-    $census = Get-ProcessCensus; Save-Json 'process-before.json' $census
-    if ($census.conflict) { throw 'SAME_WORKTREE_ACTIVE_EXECUTION' }
-    $tracking = Join-Path $childEnv['ANDROID_USER_HOME'] 'avd/gradle-managed/active_gradle_devices'
-    $locks = 0
-    if ((Observe-Path $tracking).present) {
-        $text = [IO.File]::ReadAllText($tracking)
-        if ($text -notmatch '^MDLockCount\s+(\d+)\s*$') { throw 'UNKNOWN_GMD_TRACKING_FORMAT' }
-        $locks = [int]$Matches[1]
+    if ($VerifyStatic) {
+        Verify-StaticChecks; $summary.classification = 'WINDOWS_GMD_STATIC_PASS'; $summary.phase = 'static'
+    } else {
+        if (@($optionFacts | Where-Object { $_.forbidden }).Count) { throw 'FORBIDDEN_JVM_OPTION' }
+        $summary.appliedMitigation = @($appliedMitigation)
+        if ($childEnv.ContainsKey('JAVA_TOOL_OPTIONS')) { $summary.appliedMitigation += 'JAVA_NIO_UNIXDOMAIN_TMPDIR' }
+        [void]$childEnv.Remove($classKey); [void]$childEnv.Remove($regexKey)
+        $names = Get-ExpectedTestNames
+        if ($PSCmdlet.ParameterSetName -eq 'Focused') {
+            Assert-Selector $Test
+            if ($Test -cnotin $names) { throw 'SELECTOR_NOT_IN_SOURCE_CENSUS' }
+            $childEnv[$classKey] = $Test; $ExpectedTestCount = 1; $names = @($Test)
+        } elseif ($names.Count -ne $ExpectedTestCount) { throw 'EXPECTED_COUNT_DIFFERS_FROM_SOURCE' }
+        $summary.expectedTestCount = $ExpectedTestCount
+        Save-Json 'selector.json' @{ classExact = $(if ($Test) { $childEnv[$classKey] -ceq $Test } else { $false })
+            classUnset = -not $childEnv.ContainsKey($classKey); testsRegexUnset = -not $childEnv.ContainsKey($regexKey); expectedNames = $names }
+        $before = Get-SourceSnapshot
+        Save-Json 'source-before.json' $before
+        Save-Json 'provenance.json' @{ head = $before.head; branch = Git @('branch', '--show-current'); worktree = '<worktree>'; repository = '<shared-repo-root>' }
+        $dist = Get-DistributionSelection ([IO.File]::ReadAllBytes((Join-Path $worktree 'gradle/wrapper/gradle-wrapper.properties')))
+        Save-Json 'wrapper-cache.json' @{ distributionUrl = $dist.url; cache = Safe-Path $dist.cacheDirectory; ready = Test-WrapperCache $dist }
+        if (-not (Test-WrapperCache $dist)) { $summary.classification = 'WINDOWS_GMD_WRAPPER_DISTRIBUTION_MISSING'; throw 'WRAPPER_CACHE_MISSING_NO_DOWNLOAD' }
+        $census = Get-ProcessCensus; Save-Json 'process-before.json' $census
+        if ($census.conflict) { throw 'SAME_WORKTREE_ACTIVE_EXECUTION' }
+        $tracking = Join-Path $childEnv['ANDROID_USER_HOME'] 'avd/gradle-managed/active_gradle_devices'
+        $locks = 0
+        if ((Observe-Path $tracking).present) {
+            $text = [IO.File]::ReadAllText($tracking)
+            if ($text -notmatch '^MDLockCount\s+(\d+)\s*$') { throw 'UNKNOWN_GMD_TRACKING_FORMAT' }
+            $locks = [int]$Matches[1]
+        }
+        Save-Json 'gmd-state.json' @{ trackingPresent = (Observe-Path $tracking).present; MDLockCount = $locks
+            sidecarPresent = (Observe-Path "$tracking.lock").present; automaticCleanup = $false }
+        if ($locks -ge 4) { throw 'GMD_DEVICE_LIMIT_SATURATED' }
+        Resolve-Runtime
+        if (@(Get-ChildItem -LiteralPath $owned.root -Force).Count) { throw 'OWNED_NAMESPACE_NOT_EMPTY' }
+        $argv = Get-GmdArguments
+        $initHash = (Get-FileHash -LiteralPath $owned.initPath).Hash
+        Save-Json 'invocation.json' @{ executable = Safe-Path $javaExe; argv = @($argv | ForEach-Object { Safe-Path $_ })
+            emptyResultNamespace = $true; initTemplate = 'BuildDirectoryRelocation/v1'; initSha256 = $initHash }
+        Save-Json 'xml-before.json' @()
+        $summary.phase = 'wrapper-start'; $summary.childStartedUtc = [DateTime]::UtcNow.ToString('o')
+        Save-Json 'summary.json' $summary
+        Write-Host "GMD running once; diagnostics: $diagnostics"
+        $g = Invoke-Child $javaExe $argv 'gradle'
+        $summary.childExit = $g.exitCode; $summary.childStartedUtc = $g.startedUtc; $summary.childFinishedUtc = $g.finishedUtc
+        $log = $g.stdout + "`n" + $g.stderr
+        $summary.phase = 'gradle'
+        if ($log -match ':app:pixel7Api37Setup') { $summary.phase = 'gmd-setup' }
+        if ($log -match 'Starting \d+ tests|INSTRUMENTATION_|\d+ tests completed') { $summary.phase = 'instrumentation' }
+        $binding = $log.Contains("WINDOWS_GMD_OUTPUT_BOUND|$($owned.runId)|:app:pixel7Api37DebugAndroidTest")
+        $xml = Read-OwnedXmlResult ([DateTime]::Parse($g.startedUtc).ToUniversalTime()) $binding $ExpectedTestCount $names
+        $summary.xml = $xml
+        Save-Json 'xml-results.json' $xml
+        Save-Json 'ownership.json' @{ runId = $owned.runId; emptyBeforeChild = $true; bindingConfirmed = $binding; ownedXml = $xml.ownershipPassed }
+        $postCensus = Get-ProcessCensus; Save-Json 'process-after.json' $postCensus
+        if ($xml.files.Count) { $summary.phase = 'xml-results' }
+        if ($xml.ownershipPassed -and $xml.tests -gt 0 -and ($xml.failures -or $xml.errors -or $xml.skipped)) {
+            $summary.classification = 'WINDOWS_GMD_TEST_FAILURE'; $summary.reason = $xml.reason
+        } elseif ($log -match 'Timed out trying to check default_boot .* is loadable') {
+            $summary.classification = 'WINDOWS_GMD_DEFAULT_BOOT_TIMEOUT'; $summary.reason = 'DEFAULT_BOOT_NOT_LOADABLE'
+        } elseif ($log -match 'Could not acquire device lock|Failed to setup|pixel7Api37Setup FAILED') {
+            $summary.classification = 'WINDOWS_GMD_SETUP_FAILURE'; $summary.reason = 'GMD_SETUP_FAILED'
+        } elseif ($log -match 'WINDOWS_GMD_OUTPUT_BINDING_FAILURE|WINDOWS_GMD_OWNERSHIP_TOPOLOGY') {
+            $summary.classification = 'WINDOWS_GMD_RESULT_OWNERSHIP_FAILURE'; $summary.reason = 'TASK_OUTPUT_BINDING_FAILED'
+        } elseif ($g.exitCode -ne 0) {
+            $summary.classification = 'WINDOWS_GMD_GRADLE_FAILURE'; $summary.reason = 'CHILD_NONZERO_EXIT'
+        } elseif (-not $xml.eligible) {
+            $summary.classification = $xml.classification; $summary.reason = $xml.reason
+        } else { $summary.classification = 'WINDOWS_GMD_PASS'; $summary.reason = 'FRESH_EXACT_XML' }
+        if ($postCensus.conflict) { $summary.classification = 'WINDOWS_GMD_RESULT_OWNERSHIP_FAILURE'; $summary.reason = 'OVERLAPPING_ACTIVE_EXECUTION' }
     }
-    Save-Json 'gmd-state.json' @{ trackingPresent = (Observe-Path $tracking).present; MDLockCount = $locks
-        sidecarPresent = (Observe-Path "$tracking.lock").present; automaticCleanup = $false }
-    if ($locks -ge 4) { throw 'GMD_DEVICE_LIMIT_SATURATED' }
-    Resolve-Runtime
-    if (@(Get-ChildItem -LiteralPath $owned.root -Force).Count) { throw 'OWNED_NAMESPACE_NOT_EMPTY' }
-    $argv = Get-GmdArguments
-    $initHash = (Get-FileHash -LiteralPath $owned.initPath).Hash
-    Save-Json 'invocation.json' @{ executable = Safe-Path $javaExe; argv = @($argv | ForEach-Object { Safe-Path $_ })
-        emptyResultNamespace = $true; initTemplate = 'BuildDirectoryRelocation/v1'; initSha256 = $initHash }
-    Save-Json 'xml-before.json' @()
-    $summary.phase = 'wrapper-start'; $summary.childStartedUtc = [DateTime]::UtcNow.ToString('o')
-    Save-Json 'summary.json' $summary
-    Write-Host "GMD running once; diagnostics: $diagnostics"
-    $g = Invoke-Child $javaExe $argv 'gradle'
-    $summary.childExit = $g.exitCode; $summary.childStartedUtc = $g.startedUtc; $summary.childFinishedUtc = $g.finishedUtc
-    $log = $g.stdout + "`n" + $g.stderr
-    $summary.phase = 'gradle'
-    if ($log -match ':app:pixel7Api37Setup') { $summary.phase = 'gmd-setup' }
-    if ($log -match 'Starting \d+ tests|INSTRUMENTATION_|\d+ tests completed') { $summary.phase = 'instrumentation' }
-    $binding = $log.Contains("WINDOWS_GMD_OUTPUT_BOUND|$($owned.runId)|:app:pixel7Api37DebugAndroidTest")
-    $xml = Read-OwnedXmlResult ([DateTime]::Parse($g.startedUtc).ToUniversalTime()) $binding $ExpectedTestCount $names
-    $summary.xml = $xml
-    Save-Json 'xml-results.json' $xml
-    Save-Json 'ownership.json' @{ runId = $owned.runId; emptyBeforeChild = $true; bindingConfirmed = $binding; ownedXml = $xml.ownershipPassed }
-    $postCensus = Get-ProcessCensus; Save-Json 'process-after.json' $postCensus
-    if ($xml.files.Count) { $summary.phase = 'xml-results' }
-    if ($xml.ownershipPassed -and $xml.tests -gt 0 -and ($xml.failures -or $xml.errors -or $xml.skipped)) {
-        $summary.classification = 'WINDOWS_GMD_TEST_FAILURE'; $summary.reason = $xml.reason
-    } elseif ($log -match 'Timed out trying to check default_boot .* is loadable') {
-        $summary.classification = 'WINDOWS_GMD_DEFAULT_BOOT_TIMEOUT'; $summary.reason = 'DEFAULT_BOOT_NOT_LOADABLE'
-    } elseif ($log -match 'Could not acquire device lock|Failed to setup|pixel7Api37Setup FAILED') {
-        $summary.classification = 'WINDOWS_GMD_SETUP_FAILURE'; $summary.reason = 'GMD_SETUP_FAILED'
-    } elseif ($log -match 'WINDOWS_GMD_OUTPUT_BINDING_FAILURE|WINDOWS_GMD_OWNERSHIP_TOPOLOGY') {
-        $summary.classification = 'WINDOWS_GMD_RESULT_OWNERSHIP_FAILURE'; $summary.reason = 'TASK_OUTPUT_BINDING_FAILED'
-    } elseif ($g.exitCode -ne 0) {
-        $summary.classification = 'WINDOWS_GMD_GRADLE_FAILURE'; $summary.reason = 'CHILD_NONZERO_EXIT'
-    } elseif (-not $xml.eligible) {
-        $summary.classification = $xml.classification; $summary.reason = $xml.reason
-    } else { $summary.classification = 'WINDOWS_GMD_PASS'; $summary.reason = 'FRESH_EXACT_XML' }
-    if ($postCensus.conflict) { $summary.classification = 'WINDOWS_GMD_RESULT_OWNERSHIP_FAILURE'; $summary.reason = 'OVERLAPPING_ACTIVE_EXECUTION' }
 } catch {
     # Exceptions are fixed reason codes; never persist free-form exceptions or config.
     $reason = $_.Exception.Message
@@ -800,5 +803,5 @@ try {
 Write-Output $summary.classification
 Write-Output "Reason: $($summary.reason)"
 Write-Output "Diagnostics: $diagnostics"
-if ($summary.classification -eq 'WINDOWS_GMD_PASS') { exit 0 }
+if ($summary.classification -in @('WINDOWS_GMD_PASS', 'WINDOWS_GMD_STATIC_PASS')) { exit 0 }
 exit 1
