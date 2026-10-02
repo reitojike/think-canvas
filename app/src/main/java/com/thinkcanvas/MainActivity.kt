@@ -105,7 +105,6 @@ class MainActivity : ComponentActivity() {
                     try {
                         ImageDelivery.writeDocument(this@MainActivity, uri,
                             withContext(Dispatchers.IO) { pendingDocument.readBytes() })
-                        shareDialog.value?.bitmap?.takeUnless(Bitmap::isRecycled)?.recycle()
                         shareDialog.value = null
                         notice("画像を保存しました")
                     } catch (error: Exception) {
@@ -126,7 +125,7 @@ class MainActivity : ComponentActivity() {
         }
 
         fun dismissShare() {
-            shareDialog.value?.bitmap?.takeUnless(Bitmap::isRecycled)?.recycle()
+            // 公開済み Bitmap は Compose の描画が参照し得るため、解放は GC に任せる。
             shareDialog.value = null
         }
 
@@ -144,6 +143,7 @@ class MainActivity : ComponentActivity() {
                     }
                     if (shareDialog.value?.requestId == request)
                         shareDialog.value = ShareDialogState(request, title, bitmap)
+                    // この render 結果は shareDialog に公開されていない。
                     else bitmap.recycle()
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -350,7 +350,7 @@ class MainActivity : ComponentActivity() {
                 val shareTypography = ExportTypography.from(LocalDensity.current,
                     LocalTextStyle.current)
                 androidx.compose.runtime.DisposableEffect(Unit) {
-                    onDispose { shareDialog.value?.bitmap?.takeUnless(Bitmap::isRecycled)?.recycle() }
+                    onDispose { dismissShare() }
                 }
                 when (val current = page.value) {
                     Page.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

@@ -1,59 +1,46 @@
-name: Android checks
+name: Android Ubuntu 26.04 canary
 
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: 'Full 40-character lowercase commit SHA to test (no branch names)'
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
-  android:
-    name: lint・test・build・公開境界
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '25'
-      - uses: android-actions/setup-android@v4
-        with:
-          log-accepted-android-sdk-licenses: false
-      - name: Android SDK 37
-        run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
-      - uses: gradle/actions/setup-gradle@v6
-        with:
-          cache-provider: basic
-      - name: Android lint
-        run: ./gradlew :app:lintDebug --no-daemon
-      - name: Room schema の差分確認
-        run: |
-          ./gradlew :app:kspDebugKotlin --no-daemon
-          git diff --exit-code -- app/schemas
-          test -z "$(git ls-files --others --exclude-standard app/schemas)"
-      - name: 単体テスト
-        run: ./gradlew :app:testDebugUnitTest --no-daemon
-      - name: デバッグビルド
-        run: ./gradlew :app:assembleDebug --no-daemon
-      - name: PR のデバッグ APK を保存
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v7
-        with:
-          name: think-canvas-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 7
-      - name: 公開情報境界
-        shell: pwsh
-        run: ./scripts/check-public-boundary.ps1
-
   managed-device:
-    name: Android 17 Gradle Managed Device
-    runs-on: ubuntu-24.04
+    name: Ubuntu 26.04 Pixel 7 GMD canary
+    runs-on: ubuntu-26.04
+    env:
+      TARGET_SHA: ${{ inputs.target_sha }}
     steps:
+      - name: 要求された source と run を記録・検証
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'requested_target_sha=%s\nworkflow_sha=%s\nrun_id=%s\nrun_attempt=%s\n' \
+            "$TARGET_SHA" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+          if [[ ! "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            printf 'target_sha must be a full 40-character lowercase commit SHA.\n' >&2
+            exit 1
+          fi
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target_sha }}
+      - name: checkout SHA を記録・照合
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          printf 'actual_checkout_sha=%s\n' "$actual_sha"
+          if [[ "$actual_sha" != "$TARGET_SHA" ]]; then
+            printf 'Checkout SHA does not match requested target_sha.\n' >&2
+            exit 1
+          fi
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -76,6 +63,8 @@ jobs:
           printf 'census_phase=before_gmd\n'
           printf 'run_id=%s\nrun_attempt=%s\nworkflow_sha=%s\n' \
             "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_SHA"
+          printf 'requested_target_sha=%s\nactual_checkout_sha=%s\n' \
+            "$TARGET_SHA" "$(git rev-parse HEAD)"
 
           cat /etc/os-release
           printf 'ImageOS=%s\nImageVersion=%s\n' \
@@ -142,7 +131,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: android-17-gmd-test-results
+          name: android-26-pixel7-gmd-test-results
           path: |
             app/build/reports/androidTests/managedDevice/
             app/build/outputs/androidTest-results/managedDevice/
