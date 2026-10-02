@@ -1,6 +1,7 @@
 package com.thinkcanvas.canvas
 
 import android.os.SystemClock
+import android.view.MotionEvent
 import androidx.activity.compose.BackHandler
 import com.thinkcanvas.board.fittedViewport
 import com.thinkcanvas.board.RegionLabelSize
@@ -65,11 +66,13 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -114,19 +117,11 @@ private val muted = Color(0xFF8D8882)
 private val outline = Color(0xFFE8E6E2)
 private val toolbar = Color(0xFFF3F2EF)
 
-private data class Draft(
-    val id: String?,
-    val x: Float,
-    val y: Float,
-    val text: String = "",
-    val kind: TextKind = TextKind.BODY,
-    val color: TextColor = TextColor.INK,
-)
-
 @Composable
 fun CanvasScreen(
     board: BoardState,
     boardName: String,
+    editorSession: TextEditorSession,
     saveState: StateFlow<BoardSaveState>,
     onRequestSave: (BoardSnapshot) -> BoardSaveAcknowledgement?,
     onRetrySave: () -> Unit,
@@ -149,15 +144,15 @@ fun CanvasScreen(
     var regionNameId by remember { mutableStateOf<String?>(null) }
     var regionName by remember { mutableStateOf("") }
     var guidance by remember { mutableStateOf<String?>(null) }
-    var draft by remember { mutableStateOf<Draft?>(null) }
+    var draft by editorSession.draft
     var movePreview by remember { mutableStateOf<Pair<Set<String>, WorldPoint>?>(null) }
     var handlePreview by remember { mutableStateOf<BoardSnapshot?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
-    var pendingDraftAcknowledgement by remember { mutableStateOf<BoardSaveAcknowledgement?>(null) }
+    var pendingDraftAcknowledgement by editorSession.pendingDraftAcknowledgement
     val currentSaveState by saveState.collectAsState()
     val saving = currentSaveState is BoardSaveState.Running
     val saveFailed = currentSaveState is BoardSaveState.Failed
-    var pendingNewElementId by remember { mutableStateOf<String?>(null) }
+    var pendingNewElementId by editorSession.pendingNewElementId
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var searchPosition by remember { mutableStateOf(0) }
@@ -165,10 +160,13 @@ fun CanvasScreen(
     var viewportAnimation by remember { mutableStateOf<Job?>(null) }
     val elementSizes = remember { mutableStateMapOf<String, IntSize>() }
     val chromeBounds = remember { mutableStateMapOf<String, Rect>() }
+    var textEditorBounds by remember { mutableStateOf<Rect?>(null) }
+    var editorToolbarBounds by remember { mutableStateOf<Rect?>(null) }
     val uiScope = rememberCoroutineScope()
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
     val regionNameFocusRequester = remember { FocusRequester() }
@@ -304,12 +302,24 @@ fun CanvasScreen(
     val latestDraft = rememberUpdatedState(draft)
     val latestSaveBlocked = rememberUpdatedState(saving || saveFailed)
 
+    fun closeDraft() {
+        focusManager.clearFocus(force = true)
+        keyboard?.hide()
+        draft = null
+        lastBlankTap = null
+    }
+
+    fun cancelDraft() {
+        if (saveState.value != BoardSaveState.Idle || pendingDraftAcknowledgement != null) return
+        closeDraft()
+    }
+    val latestCancelDraft = rememberUpdatedState({ cancelDraft() })
+
     LaunchedEffect(pendingDraftAcknowledgement) {
         val acknowledgement = pendingDraftAcknowledgement ?: return@LaunchedEffect
         acknowledgement.await()
         if (pendingDraftAcknowledgement === acknowledgement) {
-            draft = null
-            keyboard?.hide()
+            closeDraft()
             pendingNewElementId = null
             pendingDraftAcknowledgement = null
         }
@@ -557,8 +567,7 @@ fun CanvasScreen(
         } else board.edit(current.id, current.text, current.kind, current.color)
         if (changed) saveSnapshot(closeDraft = true)
         else {
-            draft = null
-            keyboard?.hide()
+            closeDraft()
         }
     }
 
@@ -636,23 +645,60 @@ fun CanvasScreen(
                         }
                     },
                 )
+            }.pointerInput(board, editorSession) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    val activeDraft = editorSession.draft.value ?: return@awaitEachGesture
+                    val fieldBounds = textEditorBounds ?: return@awaitEachGesture
+                    val toolbarBounds = editorToolbarBounds ?: return@awaitEachGesture
+                    if (fieldBounds.contains(down.position) || toolbarBounds.contains(down.position))
+                        return@awaitEachGesture
+                    // Dismiss-only: keep this whole gesture away from children and canvas tools.
+                    down.consume()
+                    var isTap = true
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val active = event.changes.firstOrNull { it.id == down.id }
+                        if (event.changes.size != 1 || active == null ||
+                            (active.position - down.position).getDistance() > touchSlop ||
+                            active.uptimeMillis - down.uptimeMillis >= longPressMillis ||
+                            active.position.x !in 0f..size.width.toFloat() ||
+                            active.position.y !in 0f..size.height.toFloat()) isTap = false
+                        event.changes.forEach { it.consume() }
+                        if (event.changes.none { it.pressed }) {
+                            // Compose cancellation can synthesize a release without a native event.
+                            // Android also marks canceled pointer-up events with FLAG_CANCELED.
+                            val nativeEvent = event.motionEvent
+                            val cancelled = nativeEvent == null ||
+                                nativeEvent.actionMasked == MotionEvent.ACTION_CANCEL ||
+                                nativeEvent.flags and MotionEvent.FLAG_CANCELED != 0
+                            if (isTap && !cancelled && event.type == PointerEventType.Release &&
+                                active?.previousPressed == true &&
+                                editorSession.draft.value === activeDraft) latestCancelDraft.value()
+                            break
+                        }
+                    }
+                }
             }.pointerInput(board) {
             awaitEachGesture {
                 try {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                // An outside dismissal must never enter the existing blank-double-tap path.
+                // Keep the original double tap at the initial blank point inside the new field.
+                if (latestDraft.value != null && textEditorBounds?.contains(down.position) != true)
+                    return@awaitEachGesture
                 val requestedInk = down.type == PointerType.Stylus || latestInkTool.value != null
                 if (chromeBounds.values.any { it.contains(down.position) }) return@awaitEachGesture
                 latestAnimation.value?.cancel()
                 val previousBlankTap = lastBlankTap
-                if (previousBlankTap != null && latestTool.value == SpatialTool.NONE &&
+                if (previousBlankTap != null && !latestSaveBlocked.value &&
+                    pendingDraftAcknowledgement == null && latestTool.value == SpatialTool.NONE &&
                     latestInkTool.value == null &&
                     down.uptimeMillis - previousBlankTap.first <= doubleTapTimeoutMillis &&
                     (down.position - previousBlankTap.second).getDistance() <= doubleTapSlop &&
                     hitCanvas(down.position).let { it.first == null && it.second == null } &&
                     canvasSize != IntSize.Zero) {
-                    draft = null
-                    keyboard?.hide()
-                    lastBlankTap = null
+                    closeDraft()
                     animateViewport(latestViewport.value.doubleTapZoom(down.position.x, down.position.y,
                         latestBodyDp.value, canvasSize.width.toFloat(), canvasSize.height.toFloat()))
                     down.consume()
@@ -1258,6 +1304,9 @@ fun CanvasScreen(
         }
 
         draft?.let { current ->
+            DisposableEffect(editorSession) {
+                onDispose { textEditorBounds = null; editorToolbarBounds = null }
+            }
             val (screenX, screenY) = viewport.worldToScreen(current.x, current.y)
             BasicTextField(
                 value = current.text,
@@ -1280,6 +1329,7 @@ fun CanvasScreen(
                     .heightIn(max = 150.dp)
                     .background(vermilion.copy(alpha = 0.07f), RoundedCornerShape(3.dp))
                     .drawBehind { drawLine(vermilion, Offset(0f, size.height), Offset(size.width, size.height), 1.dp.toPx()) }
+                    .onGloballyPositioned { textEditorBounds = it.boundsInParent() }
                     .padding(horizontal = 4.dp, vertical = 3.dp)
                     .focusRequester(focusRequester)
                     .semantics { contentDescription = if (current.id == null) newTextLabel else editTextLabel },
@@ -1613,6 +1663,7 @@ fun CanvasScreen(
         } else {
             Row(
                 modifier = Modifier.align(Alignment.BottomCenter).imePadding().fillMaxWidth().height(54.dp)
+                    .onGloballyPositioned { editorToolbarBounds = it.boundsInParent() }
                     .background(toolbar)
                     .drawBehind { drawLine(outline, Offset.Zero, Offset(size.width, 0f), 1.dp.toPx()) }
                     .padding(horizontal = 8.dp),
@@ -1632,7 +1683,7 @@ fun CanvasScreen(
                     )
                 }
                 EditorOption(stringResource(R.string.cancel_short), false, false, enabled = editingEnabled) {
-                    if (!saving && !saveFailed) { draft = null; keyboard?.hide() }
+                    cancelDraft()
                 }
                 EditorOption(stringResource(if (saveFailed) R.string.retry else R.string.done), false, true, enabled = !saving) { commitDraft() }
             }

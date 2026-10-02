@@ -638,6 +638,7 @@ class BoardListScreenTest {
             awaitText("明示閉じるの確認")
             assertTrue(vm.state.value is BoardListActionState.Failed)
             composeRule.onNodeWithText("閉じる").performClick()
+            composeRule.waitUntil(5_000) { vm.state.value == BoardListActionState.Idle }
             awaitDescription("閉じて復旧、", substring = true)
             assertEquals(BoardListActionState.Idle, vm.state.value)
         } finally { scenario.close() }
