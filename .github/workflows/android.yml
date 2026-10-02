@@ -113,11 +113,6 @@ jobs:
             fi
           done
 
-          if [[ -x "$ANDROID_HOME/emulator/emulator" ]]; then
-            "$ANDROID_HOME/emulator/emulator" -version
-          else
-            printf 'Emulator binary: NOT_INSTALLED_AT_THIS_PHASE\n'
-          fi
       - name: ジェスチャーと保存の実機相当テスト
         run: ./gradlew :app:pixel7Api37DebugAndroidTest -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
       - name: GMD 実行後の環境を記録
@@ -143,11 +138,6 @@ jobs:
             fi
           done
 
-          if [[ -x "$ANDROID_HOME/emulator/emulator" ]]; then
-            "$ANDROID_HOME/emulator/emulator" -version
-          else
-            printf 'Emulator binary: NOT_INSTALLED_AT_THIS_PHASE\n'
-          fi
       - name: Android 17 GMD 診断結果を保存
         if: always()
         uses: actions/upload-artifact@v7
