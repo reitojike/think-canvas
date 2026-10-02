@@ -1,4 +1,4 @@
-# 仕様品質チェックリスト: テキスト入力の外側取り消し
+# 仕様品質チェックリスト: テキスト入力の外側確定・終了
 
 **目的**: 実装前の要件の明確さ・整合性の検証
 **作成日**: 2026-10-02
@@ -32,3 +32,5 @@
 ## レビュー記録
 
 外側の空白・要素・旧 chrome、入力欄・toolbar、focus と再生成、running/failed/retry を要件品質の観点で照合した。実装完了の主張ではない。
+
+Correction #2: fresh Issue #71 の empty new / non-empty / existing edit、explicit Done/Cancel、DOWN/UP latest state、Running/Failed/retry を再照合した。16基準に未解決の要件 ambiguity はない。旧 cancel 契約を supersede し、実装成功の主張とは区別する。

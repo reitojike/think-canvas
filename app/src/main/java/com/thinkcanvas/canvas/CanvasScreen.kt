@@ -313,7 +313,6 @@ fun CanvasScreen(
         if (saveState.value != BoardSaveState.Idle || pendingDraftAcknowledgement != null) return
         closeDraft()
     }
-    val latestCancelDraft = rememberUpdatedState({ cancelDraft() })
 
     LaunchedEffect(pendingDraftAcknowledgement) {
         val acknowledgement = pendingDraftAcknowledgement ?: return@LaunchedEffect
@@ -571,6 +570,14 @@ fun CanvasScreen(
         }
     }
 
+    fun finalizeDraft() {
+        if (saveState.value != BoardSaveState.Idle || pendingDraftAcknowledgement != null) return
+        val current = draft ?: return
+        if (current.id == null && current.text.isEmpty()) cancelDraft()
+        else commitDraft()
+    }
+    val latestFinalizeDraft = rememberUpdatedState({ finalizeDraft() })
+
     LaunchedEffect(draft?.id, draft?.x, draft?.y) {
         if (draft != null) {
             focusRequester.requestFocus()
@@ -653,7 +660,7 @@ fun CanvasScreen(
                     val toolbarBounds = editorToolbarBounds ?: return@awaitEachGesture
                     if (fieldBounds.contains(down.position) || toolbarBounds.contains(down.position))
                         return@awaitEachGesture
-                    // Dismiss-only: keep this whole gesture away from children and canvas tools.
+                    // Finalize-only: keep this whole gesture away from children and canvas tools.
                     down.consume()
                     var isTap = true
                     while (true) {
@@ -674,7 +681,7 @@ fun CanvasScreen(
                                 nativeEvent.flags and MotionEvent.FLAG_CANCELED != 0
                             if (isTap && !cancelled && event.type == PointerEventType.Release &&
                                 active?.previousPressed == true &&
-                                editorSession.draft.value?.sessionId == activeDraft.sessionId) latestCancelDraft.value()
+                                editorSession.draft.value?.sessionId == activeDraft.sessionId) latestFinalizeDraft.value()
                             break
                         }
                     }

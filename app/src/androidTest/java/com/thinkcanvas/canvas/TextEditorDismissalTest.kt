@@ -36,6 +36,8 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -71,8 +73,8 @@ class TextEditorDismissalTest {
                 .fetchSemanticsNode().boundsInWindow
             return bounds.center + Offset(origin[0].toFloat(), origin[1].toFloat())
         }
-        fun startNew(text: String = "") {
-            tap(point(.1f, .23f))
+        fun startNew(text: String = "", y: Float = .23f) {
+            tap(point(.1f, y))
             awaitEditor(newEditor)
             if (text.isNotEmpty()) composeRule.onNodeWithContentDescription(newEditor)
                 .performTextReplacement(text)
@@ -87,17 +89,20 @@ class TextEditorDismissalTest {
             composeRule.onNodeWithText("朱").performClick()
         }
         fun outside() = tap(point(.92f, .24f))
-        fun assertUnchanged() {
+        fun assertUnchanged(expectedRedo: Boolean = false) {
             assertEquals(listOf(original), board.elements)
             assertEquals(listOf(original), rows().map { it.toModel() })
             assertFalse(board.canUndo)
+            assertEquals(expectedRedo, board.canRedo)
         }
         fun assertClosed() {
             composeRule.waitUntil(5_000) {
-                composeRule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isEmpty()
+                // Running removes editable semantics before the save acknowledgement closes chrome.
+                composeRule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isEmpty() &&
+                    composeRule.onAllNodesWithText("完了").fetchSemanticsNodes().isEmpty() &&
+                    composeRule.onAllNodesWithText("やめる").fetchSemanticsNodes().isEmpty() &&
+                    composeRule.onAllNodesWithText("再試行").fetchSemanticsNodes().isEmpty()
             }
-            assertTrue(composeRule.onAllNodesWithText("完了").fetchSemanticsNodes().isEmpty())
-            assertTrue(composeRule.onAllNodesWithText("やめる").fetchSemanticsNodes().isEmpty())
             assertTrue(composeRule.onAllNodes(hasSetTextAction() and isFocused())
                 .fetchSemanticsNodes().isEmpty())
             composeRule.waitUntil(5_000) {
@@ -106,6 +111,52 @@ class TextEditorDismissalTest {
                     visible = it.window.decorView.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true
                 }
                 !visible
+            }
+        }
+        val editor get() = sessions.textEditorFor(1L, BoardSnapshot())
+        fun trackSaves(): AtomicInteger {
+            val count = AtomicInteger()
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            sessions.setSaveOperation { id, snapshot ->
+                count.incrementAndGet()
+                CanvasStore.get(context).save(id, snapshot)
+            }
+            return count
+        }
+        fun assertSaved(expected: List<TextElement>) {
+            assertEquals(expected, board.elements)
+            composeRule.waitUntil(5_000) {
+                rows().map { it.toModel() }.sortedBy { it.id } == expected.sortedBy { it.id }
+            }
+        }
+        fun assertOneHistoryChange(expected: List<TextElement>) {
+            scenario.onActivity {
+                assertTrue(board.canUndo)
+                assertFalse(board.canRedo)
+                assertTrue(board.undo())
+                assertEquals(listOf(original), board.elements)
+                assertFalse(board.canUndo)
+                assertTrue(board.canRedo)
+                assertTrue(board.redo())
+                assertEquals(expected, board.elements)
+                assertFalse(board.canRedo)
+            }
+        }
+        fun reopenSaved(expected: List<TextElement>) {
+            scenario.close()
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            val reopened = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
+            try {
+                composeRule.waitUntil(10_000) {
+                    composeRule.onAllNodesWithContentDescription(expected.last().text)
+                        .fetchSemanticsNodes().isNotEmpty()
+                }
+                reopened.onActivity {
+                    val fresh = ViewModelProvider(it)[BoardSessionViewModel::class.java]
+                    assertEquals(expected, fresh.stateFor(1L, BoardSnapshot()).elements)
+                }
+            } finally {
+                reopened.close()
             }
         }
         fun recreate() {
@@ -176,62 +227,105 @@ class TextEditorDismissalTest {
     }
 
     @Test fun emptyDraftOutsideTapClosesWithoutCreatingAndNextTapStartsDraft() = withBoard {
+        val saves = trackSaves()
+        // A discard must preserve redo as well as undo, even when redo is available.
+        scenario.onActivity {
+            board.move(original.id, original.x + 10f, original.y)
+            board.undo()
+        }
         startNew()
         outside()
         assertClosed()
-        assertUnchanged()
+        assertUnchanged(expectedRedo = true)
         startNew()
         composeRule.onNodeWithText("やめる").performClick()
         assertClosed()
-        assertUnchanged()
+        assertUnchanged(expectedRedo = true)
+        assertEquals(0, saves.get())
     }
 
-    @Test fun nonEmptyDraftAndExplicitCancelDoNotSave() = withBoard {
-        var saves = 0
-        sessions.setSaveOperation { _, _ -> saves++; CompletableDeferred(Unit) }
-        startNew("Never saved")
+    @Test fun nonEmptyDraftOutsideCommitsOnceWithWorldPositionKindColorAndReopen() = withBoard {
+        val saves = trackSaves()
+        startNew("Saved outside")
+        composeRule.onNodeWithText("見出し").performClick()
+        composeRule.onNodeWithText("朱").performClick()
+        val draft = checkNotNull(editor.draft.value)
         outside()
         assertClosed()
-        assertUnchanged()
-        startNew("Explicit cancel")
-        composeRule.onNodeWithText("やめる").performClick()
+        val created = board.elements.single { it.id != original.id }
+        assertEquals(TextElement(id = created.id, text = draft.text, kind = draft.kind,
+            color = draft.color, x = draft.x, y = draft.y), created)
+        val expected = listOf(original, created)
+        assertSaved(expected)
+        assertEquals(1, saves.get())
+        // The consumed completion cannot start a second draft; a separate blank tap can.
+        startNew(y = .6f)
+        outside()
         assertClosed()
-        assertUnchanged()
-        assertEquals(0, saves)
+        assertSaved(expected)
+        assertOneHistoryChange(expected)
+        assertEquals(1, saves.get())
+        reopenSaved(expected)
     }
 
-    @Test fun outsideTapStillCancelsWhenTextChangesBetweenDownAndUp() = withBoard {
-        startNew("Before input update")
+    @Test fun outsideTapCommitsLatestInputWhenEmptyDraftChangesBetweenDownAndUp() = withBoard {
+        val saves = trackSaves()
+        startNew()
+        val sessionId = checkNotNull(editor.draft.value).sessionId
         gesture(point(.92f, .24f), duringPress = {
             composeRule.onNodeWithContentDescription(newEditor)
                 .performTextReplacement("Input update while pressed")
+            assertEquals(sessionId, checkNotNull(editor.draft.value).sessionId)
         })
         assertClosed()
-        assertUnchanged()
+        val created = board.elements.single { it.id != original.id }
+        assertEquals("Input update while pressed", created.text)
+        assertSaved(listOf(original, created))
+        assertEquals(1, saves.get())
+        startNew("Before second update", y = .6f)
+        gesture(point(.92f, .24f), duringPress = {
+            composeRule.onNodeWithContentDescription(newEditor)
+                .performTextReplacement("Latest non-empty update")
+        })
+        assertClosed()
+        assertEquals("Latest non-empty update", board.elements.last().text)
+        assertSaved(board.elements)
+        assertEquals(3, board.elements.size)
+        assertEquals(2, saves.get())
     }
 
-    @Test fun existingEditOutsideTapRestoresOriginalContentKindColorAndPosition() = withBoard {
+    @Test fun existingEditOutsideTapCommitsContentKindColorAndPreservesIdentityPosition() = withBoard {
+        val saves = trackSaves()
         startExisting()
         outside()
         assertClosed()
-        assertUnchanged()
+        val expected = listOf(original.copy(text = "Changed note",
+            kind = TextKind.TITLE, color = TextColor.VERMILION))
+        assertSaved(expected)
+        assertOneHistoryChange(expected)
+        assertEquals(1, saves.get())
+        reopenSaved(expected)
     }
 
-    @Test fun existingElementTapOnlyDismissesAndFormerChromeIsNotBlocked() = withBoard {
+    @Test fun existingElementTapOnlyFinalizesAndFormerChromeIsNotBlocked() = withBoard {
+        val saves = trackSaves()
         val formerControl = center("ボード内を検索")
-        startNew("Uncommitted")
+        startNew("Saved first")
         tap(center(original.text))
         assertClosed()
-        assertUnchanged()
-        composeRule.onNodeWithContentDescription(original.text)
-            .assertExists()
-        // If the dismissal had also selected the element this blank tap would only deselect.
-        startNew("Second draft")
+        assertEquals(original, board.elements.single { it.id == original.id })
+        // Forwarded selection would make this independent blank tap only deselect.
+        startNew("Saved second", y = .6f)
         tap(formerControl)
         assertClosed()
-        assertUnchanged()
-        // The former editor/toolbar bounds must no longer block normal admission.
-        startNew()
+        assertEquals(3, board.elements.size)
+        assertSaved(board.elements)
+        assertEquals(2, saves.get())
+        // Neither the former editor bounds nor search action survives completion.
+        startNew(y = .8f)
+        composeRule.onNodeWithText("やめる").performClick()
+        assertClosed()
+        assertEquals(2, saves.get())
     }
 
     @Test fun insideFieldToolbarAndDoneKeepTheirActions() = withBoard {
@@ -269,16 +363,25 @@ class TextEditorDismissalTest {
     }
 
     @Test fun nearbyOutsideTapIsConsumedBeforeBlankDoubleTapZoom() = withBoard {
+        val saves = trackSaves()
         val initial = point(.1f, .23f)
         val originalCenter = center(original.text)
         tap(initial)
         awaitEditor(newEditor)
-        // Outside the field's left edge, still within the platform double-tap distance.
+        // Keep the original empty-draft zoom regression.
         tap(initial - Offset(8f, 0f))
         assertClosed()
         assertEquals(originalCenter, center(original.text))
         assertUnchanged()
-        startNew()
+        val next = point(.1f, .6f)
+        startNew("Near outside", y = .6f)
+        tap(next - Offset(8f, 0f))
+        assertClosed()
+        assertEquals(originalCenter, center(original.text))
+        assertEquals(2, board.elements.size)
+        assertSaved(board.elements)
+        assertEquals(1, saves.get())
+        startNew(y = .8f)
     }
 
     @Test fun outsideTwoFingerGestureKeepsDraft() = withBoard {
@@ -315,8 +418,10 @@ class TextEditorDismissalTest {
         startNew("Keep draft")
         composeRule.onNodeWithText("見出し").performClick()
         composeRule.onNodeWithText("朱").performClick()
+        val before = checkNotNull(editor.draft.value)
         recreate()
         awaitEditor(newEditor)
+        assertEquals(before, editor.draft.value)
         composeRule.onNodeWithContentDescription(newEditor).assertTextEquals("Keep draft")
         scenario.moveToState(Lifecycle.State.CREATED)
         scenario.moveToState(Lifecycle.State.RESUMED)
@@ -325,6 +430,7 @@ class TextEditorDismissalTest {
             android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription(newEditor).assertTextEquals("Keep draft")
+        assertEquals(before, editor.draft.value)
         assertUnchanged()
         composeRule.onNodeWithText("完了").performClick()
         assertClosed()
@@ -332,6 +438,8 @@ class TextEditorDismissalTest {
         val created = rows().single { it.id != original.id }.toModel()
         assertEquals(TextKind.TITLE, created.kind)
         assertEquals(TextColor.VERMILION, created.color)
+        assertEquals(before.x, created.x)
+        assertEquals(before.y, created.y)
     }
 
     @Test fun existingDraftSurvivesRecreationThenCanCancelWithoutSave() = withBoard {
@@ -339,7 +447,7 @@ class TextEditorDismissalTest {
         recreate()
         awaitEditor(existingEditor)
         composeRule.onNodeWithContentDescription(existingEditor).assertTextEquals("Changed note")
-        outside()
+        composeRule.onNodeWithText("やめる").performClick()
         assertClosed()
         assertUnchanged()
     }
@@ -351,22 +459,28 @@ class TextEditorDismissalTest {
         lateinit var requested: BoardSnapshot
         sessions.setSaveOperation { _, snapshot -> saves++; requested = snapshot; gate }
         startNew("Save once")
-        composeRule.onNodeWithText("完了").performClick()
+        outside()
         composeRule.waitUntil(5_000) {
             sessions.saveStateFor(1L, BoardSnapshot()).value is BoardSaveState.Running
         }
+        val acknowledgement = checkNotNull(editor.pendingDraftAcknowledgement.value)
         outside()
         awaitEditor(newEditor)
+        assertSame(acknowledgement, editor.pendingDraftAcknowledgement.value)
         recreate()
         awaitEditor(newEditor)
+        assertSame(acknowledgement, editor.pendingDraftAcknowledgement.value)
         outside()
         awaitEditor(newEditor)
+        assertSame(acknowledgement, editor.pendingDraftAcknowledgement.value)
+        assertEquals(1, saves)
         runBlocking { CanvasStore.get(context).save(1L, requested).await() }
         gate.complete(Unit)
         assertClosed()
         assertEquals(1, saves)
         assertEquals(2, rows().size)
         assertEquals(2, board.elements.size)
+        assertOneHistoryChange(board.elements)
     }
 
     @Test fun failedSaveOutsideTapAndRecreationKeepRetryWithoutDuplicateElement() = withBoard {
@@ -375,7 +489,7 @@ class TextEditorDismissalTest {
         var saves = 0
         sessions.setSaveOperation { _, _ -> saves++; gate }
         startNew("Retry once")
-        composeRule.onNodeWithText("完了").performClick()
+        outside()
         composeRule.waitUntil(5_000) {
             sessions.saveStateFor(1L, BoardSnapshot()).value is BoardSaveState.Running
         }
@@ -383,13 +497,18 @@ class TextEditorDismissalTest {
         composeRule.waitUntil(5_000) {
             sessions.saveStateFor(1L, BoardSnapshot()).value is BoardSaveState.Failed
         }
+        val acknowledgement = checkNotNull(editor.pendingDraftAcknowledgement.value)
         outside()
         awaitEditor(newEditor)
+        assertSame(acknowledgement, editor.pendingDraftAcknowledgement.value)
         recreate()
         awaitEditor(newEditor)
+        assertSame(acknowledgement, editor.pendingDraftAcknowledgement.value)
         composeRule.onNodeWithContentDescription(newEditor).assertTextEquals("Retry once")
         outside()
         awaitEditor(newEditor)
+        assertSame(acknowledgement, editor.pendingDraftAcknowledgement.value)
+        assertEquals(1, saves)
         sessions.setSaveOperation { id, snapshot -> saves++; CanvasStore.get(context).save(id, snapshot) }
         composeRule.onNodeWithText("再試行").performClick()
         assertClosed()
@@ -397,5 +516,93 @@ class TextEditorDismissalTest {
         assertEquals(2, board.elements.size)
         assertEquals(2, rows().size)
         assertEquals(1, rows().count { it.text == "Retry once" })
+        assertOneHistoryChange(board.elements)
+    }
+
+    @Test fun outsideTapDiscardsLatestEmptyInputBetweenDownAndUp() = withBoard {
+        val saves = trackSaves()
+        startNew("Removed while pressed")
+        val sessionId = checkNotNull(editor.draft.value).sessionId
+        gesture(point(.92f, .24f), duringPress = {
+            composeRule.onNodeWithContentDescription(newEditor).performTextReplacement("")
+            assertEquals(sessionId, checkNotNull(editor.draft.value).sessionId)
+        })
+        assertClosed()
+        assertUnchanged()
+        assertEquals(0, saves.get())
+    }
+
+    @Test fun explicitCancelDiscardsNewAndExistingEditsWithoutSaving() = withBoard {
+        val saves = trackSaves()
+        startNew("Explicit cancel")
+        composeRule.onNodeWithText("やめる").performClick()
+        assertClosed()
+        assertUnchanged()
+        startExisting()
+        composeRule.onNodeWithText("やめる").performClick()
+        assertClosed()
+        assertUnchanged()
+        assertEquals(0, saves.get())
+    }
+
+    @Test fun existingEditExplicitDoneMatchesOutsideCompletion() = withBoard {
+        val saves = trackSaves()
+        startExisting()
+        composeRule.onNodeWithText("完了").performClick()
+        assertClosed()
+        val expected = listOf(original.copy(text = "Changed note",
+            kind = TextKind.TITLE, color = TextColor.VERMILION))
+        assertSaved(expected)
+        assertOneHistoryChange(expected)
+        assertEquals(1, saves.get())
+        reopenSaved(expected)
+    }
+
+    @Test fun existingDraftSurvivesRecreationThenOutsideCommits() = withBoard {
+        startExisting()
+        val before = checkNotNull(editor.draft.value)
+        recreate()
+        awaitEditor(existingEditor)
+        assertEquals(before, editor.draft.value)
+        assertUnchanged()
+        val saves = trackSaves()
+        outside()
+        assertClosed()
+        val expected = listOf(original.copy(text = before.text,
+            kind = before.kind, color = before.color))
+        assertSaved(expected)
+        assertOneHistoryChange(expected)
+        assertEquals(1, saves.get())
+        reopenSaved(expected)
+    }
+
+    @Test fun whitespaceOutsideUsesExistingDoneValidationForNewAndExistingDrafts() = withBoard {
+        val saves = trackSaves()
+        repeat(2) { index ->
+            startNew("   ")
+            if (index == 0) outside() else composeRule.onNodeWithText("完了").performClick()
+            assertClosed()
+            assertUnchanged()
+        }
+        repeat(2) { index ->
+            startExisting()
+            composeRule.onNodeWithContentDescription(existingEditor).performTextReplacement("   ")
+            if (index == 0) outside() else composeRule.onNodeWithText("完了").performClick()
+            assertClosed()
+            assertUnchanged()
+        }
+        assertEquals(0, saves.get())
+    }
+
+    @Test fun emptyExistingOutsideUsesExistingDoneValidationWithoutDeletingElement() = withBoard {
+        val saves = trackSaves()
+        repeat(2) { index ->
+            startExisting()
+            composeRule.onNodeWithContentDescription(existingEditor).performTextReplacement("")
+            if (index == 0) outside() else composeRule.onNodeWithText("完了").performClick()
+            assertClosed()
+            assertUnchanged()
+        }
+        assertEquals(0, saves.get())
     }
 }
