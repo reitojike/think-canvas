@@ -1,5 +1,8 @@
 # Android 実機確認
 
+Windows ローカルの Android 17 Gradle Managed Device test は
+[Windows GMD 検証](windows-android-gmd.md) の共通 launcher を使います。
+
 ## 配布経路
 
 | 目的 | 経路 | applicationId |
