@@ -2,7 +2,7 @@
 
 **Feature Branch**: `codex/issue-6-board-lifecycle`
 **Created**: 2026-09-27
-**Status**: Draft
+**Status**: 実装済み
 **Input**: [Issue #6](https://github.com/reitojike/think-canvas/issues/6)、非公開 PRD、HTML モック
 
 ## User Scenarios & Testing
