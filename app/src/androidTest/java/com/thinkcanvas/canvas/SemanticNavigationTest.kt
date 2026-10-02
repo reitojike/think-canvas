@@ -25,6 +25,7 @@ import androidx.test.espresso.ViewAction
 import androidx.test.espresso.matcher.ViewMatchers.isRoot
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.MainActivity
+import com.thinkcanvas.GmdDiagnostic
 import com.thinkcanvas.data.CanvasDatabase
 import com.thinkcanvas.data.TextElementRow
 import com.thinkcanvas.data.SpatialElementRow
@@ -41,6 +42,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class SemanticNavigationTest {
     @get:Rule val composeRule = createEmptyComposeRule()
+    private var diagnostic: GmdDiagnostic? = null
     @Test fun openingFitKeepsFarBodyOnlyExtentAfterBodyBecomesHidden() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -254,11 +256,23 @@ class SemanticNavigationTest {
         attempts: Int = 40, pollMillis: Long = 100,
     ): AccessibilityNodeInfo {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        repeat(attempts) {
+        val diag = diagnostic.takeIf { prefix == "1件目、全2件" }
+        diag?.event("count_await_start", "prefix=$prefix attempts=$attempts poll_ms=$pollMillis")
+        repeat(attempts) { poll ->
             instrumentation.waitForIdleSync()
-            findA11y(instrumentation.uiAutomation.rootInActiveWindow, prefix, clickable)
-                ?.let { return it }
+            val root = instrumentation.uiAutomation.rootInActiveWindow
+            val found = findA11y(root, prefix, clickable)
+            if (diag != null && (poll == 0 || poll % 10 == 9 || found != null)) diag.safely("poll") {
+                diag.event("count_poll", "poll=$poll ${diag.rootState(root)} first_match_count=${if (found == null) 0 else 1}")
+            }
+            found?.let {
+                diag?.event("count_found", "poll=$poll")
+                return it
+            }
             Thread.sleep(pollMillis)
+        }
+        if (diag != null) diag.safely("count_failure") {
+            diag.event("count_await_exhausted", "prefix=$prefix")
         }
         error("Accessibility node が見つかりません: $prefix")
     }
@@ -311,8 +325,11 @@ class SemanticNavigationTest {
 
     // Layer B: run the app's SetText semantics action; the platform tree checks the result.
     private fun replaceSearchTextViaSemantics(term: String) {
+        diagnostic?.event("set_text_before", "fixture_query=$term")
         composeRule.onNode(hasSetTextAction()).performTextReplacement(term)
+        diagnostic?.event("set_text_return", "fixture_query=$term")
         composeRule.waitForIdle()
+        diagnostic?.event("existing_idle_return", "fixture_query=$term")
     }
 
     // One deterministic touchscreen double-tap: a single injectMotionEventSequence with DOWN/UP at 0/40/80/120ms.
@@ -361,6 +378,8 @@ class SemanticNavigationTest {
     }
 
     @Test fun farRegionFitsAndSearchFindsSavedText() {
+        val diag = GmdDiagnostic("SemanticNavigationTest#farRegionFitsAndSearchFindsSavedText")
+        diagnostic = diag
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val body = TextElement(id = "search-body",
             text = "Idea note\nMore detail\nAnother line", x = 450f, y = 1040f)
@@ -391,6 +410,7 @@ class SemanticNavigationTest {
             activateViaSemantics("ボード内を検索")
             awaitA11y("ボード内を探す")
             assertA11ySetTextActionable()
+            diag.event("search_ui_open_complete")
             replaceSearchTextViaSemantics("Idea")
             awaitA11y("1件目、全2件")
             awaitDescription("Idea note", substring = true) // 遠景で隠れる本文も検索中は見える
@@ -429,6 +449,18 @@ class SemanticNavigationTest {
                 assertEquals(2, runBlocking { persisted.canvasDao().elements(1).size })
                 assertEquals(1, runBlocking { persisted.canvasDao().spatialElements(1).size })
             } finally { persisted.close() }
-        } finally { scenario.close() }
+            diag.event("original_test_pass")
+        } catch (original: Throwable) {
+            diag.event("original_failure", "type=${original.javaClass.simpleName} message=${original.message}")
+            // 元の oracle が失敗した後だけ dump。追加 wait / refresh / 救済は行わない。
+            diag.safely("failure_platform") {
+                diag.dumpPlatform(InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow,
+                    "1件目、全2件")
+            }
+            diag.dumpCompose()
+            throw original
+        } finally {
+            try { scenario.close() } finally { diagnostic = null; diag.end() }
+        }
     }
 }

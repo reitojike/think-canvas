@@ -40,6 +40,7 @@ import com.thinkcanvas.BoardListActionOutcome
 import com.thinkcanvas.BoardListActionState
 import com.thinkcanvas.BoardListActionViewModel
 import com.thinkcanvas.MainActivity
+import com.thinkcanvas.GmdDiagnostic
 import com.thinkcanvas.canvas.BoardSnapshot
 import com.thinkcanvas.canvas.BoardState
 import com.thinkcanvas.canvas.TextColor
@@ -54,6 +55,7 @@ import com.thinkcanvas.data.SpatialElementRow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -469,6 +471,7 @@ class BoardListScreenTest {
     }
 
     @Test fun renameReloadsTheListAfterActivityRecreation() {
+        val diag = GmdDiagnostic("BoardListScreenTest#renameReloadsTheListAfterActivityRecreation")
         seed(listOf(BoardRow(11, "変更前", 10)))
         val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
         lateinit var vm: BoardListActionViewModel
@@ -476,11 +479,23 @@ class BoardListScreenTest {
         val started = CompletableDeferred<BoardListAction>()
         val release = CompletableDeferred<Unit>()
         var calls = 0
+        fun scalars(event: String) = diag.safely(event) {
+            diag.event(event, "${diag.activityState()} vm=${GmdDiagnostic.identity(vm)}" +
+                " vm_state=${vm.state.value} calls=$calls started=${started.isCompleted} release=${release.isCompleted}")
+        }
         vm.execute = { action ->
+            diag.event("execute_enter", "action=$action vm=${GmdDiagnostic.identity(vm)} calls_before=$calls")
+            scalars("execute_activity")
             calls++
+            diag.event("calls_incremented", "calls_after=$calls")
+            diag.event("started_complete_before", "started=${started.isCompleted}")
             started.complete(action)
+            diag.event("started_complete_return", "started=${started.isCompleted}")
             release.await()
-            commitListAction(action)
+            diag.event("release_await_return")
+            val outcome = commitListAction(action)
+            diag.event("dao_complete", "outcome=$outcome")
+            outcome
         }
         try {
             awaitDescription("変更前、", substring = true)
@@ -490,20 +505,43 @@ class BoardListScreenTest {
             val nameField = composeRule.onNode(hasSetTextAction())
             nameField.performTextClearance()
             nameField.performTextInput("変更後")
+            scalars("save_before_state")
+            diag.renameUiState("save_before_ui")
+            diag.safely("save_before_root") { diag.event("save_before_root", diag.rootState(automation.rootInActiveWindow)) }
+            diag.event("save_click_before")
             composeRule.onNodeWithText("保存").performClick()
-            runBlocking { withTimeout(5_000) {
-                assertEquals(BoardListAction.Rename(11, "変更後"), started.await())
-            } }
+            diag.event("save_click_return")
+            scalars("started_await_begin")
+            try {
+                runBlocking { withTimeout(5_000) {
+                    assertEquals(BoardListAction.Rename(11, "変更後"), started.await())
+                } }
+            } catch (original: TimeoutCancellationException) {
+                diag.event("original_started_timeout", "type=${original.javaClass.simpleName}")
+                scalars("timeout_state")
+                diag.safely("timeout_platform") { diag.dumpPlatform(automation.rootInActiveWindow, "保存") }
+                diag.renameUiState("timeout_ui")
+                diag.dumpCompose()
+                throw original
+            }
+            scalars("started_await_return")
+            scalars("recreation_before")
             scenario.recreate()
+            scalars("recreation_return")
             assertFalse(vm.start(BoardListAction.Rename(11, "変更後")))
             release.complete(Unit)
+            scalars("release_complete_return")
             awaitDescription("変更後、", substring = true)
+            scalars("renamed_board_visible")
             composeRule.waitUntil(5_000) {
                 composeRule.onAllNodesWithContentDescription("変更前、", substring = true)
                     .fetchSemanticsNodes().isEmpty()
             }
             assertEquals(1, calls)
-        } finally { scenario.close() }
+            diag.event("original_test_pass")
+        } finally {
+            try { scenario.close() } finally { diag.end() }
+        }
     }
 
     @Test fun duplicateReloadsExactlyOneCopyAfterActivityRecreation() {
