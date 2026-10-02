@@ -1,9 +1,56 @@
 # ThinkCanvas
 
-ThinkCanvas は Android 向けのローカルファーストな思考キャンバスです。
-[#2 Canvas Foundation](https://github.com/reitojike/think-canvas/issues/2) では、最初のボードに
-テキストを配置・編集し、パン・ズーム、選択・移動、Undo/Redo を行える基礎を実装します。
-確定済み要素は Room 3 で端末内に保存します。
+ThinkCanvas は Android 向けのローカルファーストな思考キャンバスです。テキストや手書き、
+図形・囲み・矢印を自由に置き、配置に込めた意味を保ちながら考えを組み替えられます。
+複数のボードを管理し、検索で見返し、必要な範囲を画像として持ち出せます。
+ボードと要素は Room 3 で端末内に保存し、記録・閲覧・編集・保存はアカウントや AI、通信なしで完結します。
+
+## 現在の状態
+
+[初期構築 #1](https://github.com/reitojike/think-canvas/issues/1) と Spec 001〜005 の実装、
+[初期ロードマップ #7](https://github.com/reitojike/think-canvas/issues/7) は完了しています。
+現在は日常利用での検証（dogfooding）と、使い勝手の改善を進める段階です。
+
+| 実装済みの仕様 | 完了 Issue | 公開仕様 |
+| --- | --- | --- |
+| Spec 001: Canvas Foundation | [#2](https://github.com/reitojike/think-canvas/issues/2) | [spec](specs/001-canvas-foundation/spec.md) |
+| Spec 002: Spatial Organization | [#3](https://github.com/reitojike/think-canvas/issues/3) | [spec](specs/002-spatial-organization/spec.md) |
+| Spec 003: Ink & Stylus | [#4](https://github.com/reitojike/think-canvas/issues/4) | [spec](specs/003-ink-stylus/spec.md) |
+| Spec 004: Semantic Navigation | [#5](https://github.com/reitojike/think-canvas/issues/5) | [spec](specs/004-semantic-navigation/spec.md) |
+| Spec 005: Board Lifecycle | [#6](https://github.com/reitojike/think-canvas/issues/6) | [spec](specs/005-board-lifecycle/spec.md) |
+
+## 利用できる主な機能
+
+- テキストの作成・編集、見出し／本文と墨色／朱色の切り替え。
+- パン・ピンチズーム、要素の選択・移動、Undo/Redo。表示の移動や倍率変更では保存された配置を変えません。
+- 四角・丸・名前付き囲みの作成・サイズ変更、囲みと中身の移動、矢印の接続・曲げ・反転、
+  複数選択とまとめて移動、空白の長押しドラッグによる余白挿入。
+- Jetpack Ink によるペン／マーカーの手書きとスタイラス入力。手書きも選択・移動・削除・保存できます。
+- Semantic Zoom による近・中・遠の表示、囲みへのフィット、ボード内のテキスト・囲み名の検索と結果の前後移動。
+- 最終編集順のボード一覧とサムネイル、作成・再開・名前変更・複製・削除、最後に開いたボードの復元。
+- 初回の空ボードでの操作案内と、一覧の「使い方」からの再表示。
+- ボード全体または選択範囲の画像プレビュー、端末への画像保存、コピー、Android 共有メニューへの受け渡し。
+- ボードと要素のローカル専用保存。内容と位置関係を保って再起動後に復元します。
+
+現在の対象外は、クラウド同期・端末間同期、リアルタイム共同編集、AI による自動整理、
+キャンバスへの画像要素の追加、手書き認識・図形の自動補正です。自動整列・グリッド吸着・
+自動分類は行いません。画像の書き出しは利用できますが、画像を要素として取り込む機能はありません。
+
+## APK 配布と実機確認
+
+[Android 実機確認 runbook](docs/runbooks/device-verification.md) に配布と確認の手順をまとめています。
+
+- **PR debug APK**: PR の [Android checks](https://github.com/reitojike/think-canvas/actions/workflows/android.yml)
+  から `think-canvas-debug-apk` artifact（7 日保存）を zip で取得します。
+  applicationId は `com.thinkcanvas.internal.debug` です。詳しくは [配布経路](docs/runbooks/device-verification.md#配布経路) を参照してください。
+- **署名済み internal APK**: 継続利用・更新確認には [Releases](https://github.com/reitojike/think-canvas/releases)
+  の pre-release にある `think-canvas.apk`（`com.thinkcanvas.internal`）を使います。
+  作成は `main` から手動実行する Internal APK release と [pre-release の作成手順](docs/runbooks/device-verification.md#pre-release-を作る) に従います。
+- **実機確認**: 初回インストール、Obtainium、更新後のボード保持の確認は
+  [端末での確認手順](docs/runbooks/device-verification.md#端末で確認する) を参照してください。
+
+debug APK と internal APK は applicationId と署名が異なり、端末上で併存できます。
+相互に上書き更新はできません。
 
 ## 開発環境
 
@@ -11,6 +58,13 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 - JDK 25
 - インターネット接続（初回の Gradle と Android 依存関係の取得に必要）
 - Spec Kit の操作には Python 環境と `uv` が必要です
+
+`compileSdk` / `targetSdk` は Android 17 / API 37、`minSdk` は API 26 です。
+[Android checks](.github/workflows/android.yml) は Ubuntu 26.04 / JDK 25 で lint・単体テスト・
+debug build・Room schema の差分・公開情報境界を確認します。必須の Gradle Managed Device
+（GMD）は Pixel 9 / Android 17（API 37、`google_apis`、`x86_64`）で、
+`:app:pixel9Api37DebugAndroidTest` を実行します。
+Windows ローカルの GMD 検証は [Windows GMD 検証](docs/runbooks/windows-android-gmd.md) を参照してください。
 
 プラグインとライブラリの版数は [root の Gradle 設定](build.gradle.kts) と
 [app の Gradle 設定](app/build.gradle.kts)、Gradle の版数は
@@ -30,9 +84,6 @@ Android Studio が作成する `local.properties` は追跡しません。コマ
 macOS / Linux では各 Gradle コマンドの先頭を `./gradlew` に置き換えます。ビルド成果物は
 `app/build/outputs/apk/debug/` に作成されます。
 
-PR の一時 APK と署名済み internal APK の実機配布は
-[Android 実機確認](docs/runbooks/device-verification.md) にまとめています。
-
 ## Spec Kit
 
 Spec Kit は **v1.0.12** に固定しています。Codex skills integration は `.agents/skills/`、
@@ -50,8 +101,8 @@ uvx --from specify-cli==1.0.12 specify init --here --force --integration codex -
 Constitution は [`.specify/memory/constitution.md`](.specify/memory/constitution.md) にあります。
 開発と PR レビューの手順は [`docs/runbooks/change-review.md`](docs/runbooks/change-review.md)
 にまとめています。`AGENTS.md` はこれらの判断基準を案内します。
-Codex では `$speckit-constitution` などの skill 名を使います。#2 の成果物は
-[`specs/001-canvas-foundation/`](specs/001-canvas-foundation/) にあります。
+Codex では `$speckit-constitution` などの skill 名を使います。各機能の成果物は
+[`specs/`](specs/) 内にあり、公開仕様は上の「現在の状態」から参照できます。
 `$speckit-specify` → `$speckit-clarify` → `$speckit-plan` → `$speckit-checklist` →
 `$speckit-tasks` → `$speckit-analyze` → `$speckit-implement` → `$speckit-converge`
 の順に進め、設計判断をその機能の成果物に残します。
@@ -74,8 +125,3 @@ git status --short
 
 チェックは典型的なパターンの検出補助です。新しい名前の秘密情報や、文章に混ざった
 非公開情報まで自動的に判定するものではありません。
-
-## #1 の初期構築
-
-Kotlin、Compose、Gradle wrapper と起動できる最小アプリを用意しました。#1 では
-キャンバスや保存モデルを先取りせず、#2 の仕様に基づいて追加しています。Ink は後続の仕様で扱います。
