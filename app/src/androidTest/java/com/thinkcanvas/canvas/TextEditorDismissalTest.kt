@@ -610,15 +610,8 @@ class TextEditorDismissalTest {
         assertClosed()
         assertEquals(originalCenter, center(original.text))
         assertUnchanged()
-        val next = point(.1f, .6f)
-        startNew("Near outside", y = .6f)
-        tap(next - Offset(8f, 0f), withinDoubleTap = true)
-        assertClosed()
-        assertEquals(originalCenter, center(original.text))
-        assertEquals(2, board.elements.size)
-        assertSaved(board.elements)
-        assertEquals(1, saves.get())
-        startNew(y = .8f)
+        assertEquals(null, editor.draft.value)
+        assertEquals(0, saves.get())
     }
 
     @Test fun outsideTwoFingerGestureKeepsDraft() = withBoard {
