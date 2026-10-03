@@ -2,7 +2,7 @@
 
 **Feature Branch**: `codex/issue-71-text-dismiss`
 **Created**: 2026-10-02
-**Status**: Draft（merge までは現行仕様を置き換えない）
+**Status**: 実装済み（実機確認項目あり）
 **Input**: [Issue #71](https://github.com/reitojike/think-canvas/issues/71) と [Product decision update](https://github.com/reitojike/think-canvas/issues/71#issuecomment-5954690450)。外側タップは空の新規入力を無保存で終了し、入力済み・既存編集を現在の「完了」の契約で確定する。
 
 ## User Scenarios & Testing

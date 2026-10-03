@@ -4,7 +4,7 @@ JDK 25、Android SDK API 37 と emulator を用意する。
 
 ```powershell
 .\gradlew.bat :app:lintDebug :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
-pwsh -File scripts/run-windows-gmd.ps1 -ExpectedTestCount 85
+pwsh -File scripts/run-windows-gmd.ps1 -ExpectedTestCount 87
 pwsh -File scripts/check-public-boundary.ps1
 git diff --check
 ```
