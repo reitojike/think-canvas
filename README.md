@@ -21,6 +21,7 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 | Spec 005: Board Lifecycle | [#6](https://github.com/reitojike/think-canvas/issues/6) | [spec](specs/005-board-lifecycle/spec.md) |
 | Spec 006: Text Editor Dismissal | [#71](https://github.com/reitojike/think-canvas/issues/71) | [spec](specs/006-text-editor-dismissal/spec.md) |
 | Spec 007: Neutral Canvas Interaction | [#73](https://github.com/reitojike/think-canvas/issues/73) | [spec](specs/007-neutral-canvas-interaction/spec.md) |
+| Spec 008: Drag Edge Auto-Pan | [#78](https://github.com/reitojike/think-canvas/issues/78) | [spec](specs/008-drag-edge-auto-pan/spec.md) |
 
 ## 利用できる主な機能
 
@@ -32,6 +33,7 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
   複数選択とまとめて移動、空白の長押しドラッグによる余白挿入。
 - Jetpack Ink によるペン／マーカーの手書きとスタイラス入力。手書きも選択・移動・削除・保存できます。
 - Semantic Zoom による近・中・遠の表示、囲みへのフィット、ボード内のテキスト・囲み名の検索と結果の前後移動。
+- 現在の検索結果または選択範囲が完全に画面外になると、画面端の方向表示から戻れます。複数選択は1まとまり、同じ単一対象は統合し、必要時だけ最大2個を表示します。対象と検証範囲は[Spec009](specs/009-offscreen-direction-indicators/spec.md)を参照してください。
 - 最終編集順のボード一覧とサムネイル、作成・再開・名前変更・複製・削除、最後に開いたボードの復元。
 - 初回の空ボードでの操作案内と、一覧の「使い方」からの再表示。
 - ボード全体または選択範囲の画像プレビュー、端末への画像保存、コピー、Android 共有メニューへの受け渡し。

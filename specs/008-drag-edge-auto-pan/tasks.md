@@ -37,8 +37,8 @@
 ## Phase 6: 検証とdelivery
 
 - [x] T012 specs/008-drag-edge-auto-pan/tasks.mdにconvergeでbuildable残差を追記し、README.mdとquickstart.mdのfeature/検証案内を同期する。
-- [ ] T013 app/のlint/unit/debug/androidTest build、schema/public/diff、標準launcherのfocused、final-head full source/CI XML censusを検証し、specs/008-drag-edge-auto-pan/quickstart.mdへ記録する。
-- [ ] T014 GitHub PRのfinal-head CI/canonical review/base/threadを収束し、merge後のIssue #78最新ACを逐条判定する。specs/008-drag-edge-auto-pan/quickstart.mdからdelivery証跡へ到達できるようにする。
+- [x] T013 app/のlint/unit/debug/androidTest build、schema/public/diff、標準launcherのfocused、final-head full source/CI XML censusを検証し、specs/008-drag-edge-auto-pan/quickstart.mdへ記録する。
+- [x] T014 GitHub PRのfinal-head CI/canonical review/base/threadを収束し、merge後のIssue #78最新ACを逐条判定する。specs/008-drag-edge-auto-pan/quickstart.mdからdelivery証跡へ到達できるようにする。
 
 ## 依存・並列・実装戦略
 
