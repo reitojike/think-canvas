@@ -21,7 +21,7 @@ git diff --check
 6. full source censusとfresh CI XMLをidentity/count/failure/error/skippedで照合し、Spec006/007と既存native gesture/accessibilityを維持する。
 7. current-head canonical review、最新base、outdatedを含むthread0、実際のmergeとlatest Issue78 ACをProcess36で収束する。物理端末の横断UXはparent81で別記録する。
 
-focusedはcandidateごとに一回、失敗は原因分類とcheckpointを行いblind rerunしない。最終headのCI・reviewとprototypeは未収束。物理端末の横断UXはparent81で扱う。
+focusedはcandidateごとに一回、失敗は原因分類とcheckpointを行いblind rerunしない。prototypeは下記planの比較でAを採用した。最終headのCI・review・deliveryは[PR87](https://github.com/reitojike/think-canvas/pull/87)と[Issue78](https://github.com/reitojike/think-canvas/issues/78)の最新証跡で判定する。物理端末の横断UXはparent81で扱う。
 
 ## 実装中の検証記録
 
@@ -34,3 +34,6 @@ focusedはcandidateごとに一回、失敗は原因分類とcheckpointを行い
 - A/B比較は`boundedProfilesCarryBeyondViewportAndStopBeforeDrop`と`boundedProfilesKeepMultiSelectionTogetherOnDrop`。結果JSONをtest storageと`EdgeAutoPanPrototype` logcatへ記録する。CI artifactの`logcat-com.thinkcanvas.canvas.EdgeAutoPanTest-<method>.txt`からmodel/density/移動量/offset/停止/saveの値を再読できる。操作成功は人間の片手操作・物理端末の快適さの判定とは区別する。
 - T015〜T017の実装後にconvergeを再実行し、10 FR・4 SC・12操作条件・設計6項目・Constitution5原則と全17 taskを照合した。追加のbuildable残差は0件、tasks.mdは変更しなかった。prototypeの採否とdelivery検証は既存のT007/T013/T014で未完了として管理する。
 - 下位モデルのread-only点検で、15%のFAR表示では非選択BODYの参照要素が消えることを確認し、独立した固定参照をTITLEにした。選択対象や移動契約は変えない。修正後のlint/unit104件/debug/androidTest build、公開境界186ファイル、schema/diffが成功した。
+- 固定head `dbc6770`のA/B単要素比較はrun `20261003T161351Z-1bbf80cd4d6e4f10a0bdc50c4a3e08c0`で1/0/0/0。Pixel7/API37、canvas 1080×2201px、density 2.625、180 frame保持の右/下/角6行で、Aのpanは各軸2593px、Bは3938px。offset誤差はA 0px、B最大1px、中央停止drift 0、save各1回、preview/commit・Room・Undo/Redoを照合。sourceUnchanged/owned XML true、介入0、XML SHA256 `66F566919F3E49496CCC6ED9E41C1BD097783842B89D067E8A62D1F096233784`。採用判断はPixel9の比較結果も読んで行う。
+- 同じheadのnative pinch→15%/300%→移動はrun `20261003T161847Z-4221313acd2c450f9529032c5ad2cbd6`で1/0/0/0。pointer offset、中央停止、preview/commit一致、一回save・Room・Undo/Redoが成功。sourceUnchanged/owned XML true、介入0、XML SHA256 `DB4CCD1FB38A4321F2AFFD1D856EEE8F703A58273AC664093B3B6CFAA5D691CE`。
+- [CI 37136065497](https://github.com/reitojike/think-canvas/actions/runs/37136065497)、head `dbc6770`はlint/unit/build/public成功、Pixel9 fresh XMLは128/1/0/0、missing/extra/duplicate=0、XML SHA256 `DE3A740522AF8B10D01C671A358876CD0554F1A85C5D18C882987C9FA82E5076`。既存110件、A/B比較、倍率両端、他の停止/保存回帰は成功。唯一の失敗はstylus切替のfixtureがfinger DOWN後にMotionEvent sourceをTOUCHSCREENからSTYLUSへ変え、InputDispatcherが`Canceling stream: last source was TOUCHSCREEN`/`dropping inconsistent event`として後続を捨てたため。sourceは開始時のTOUCHSCREENに固定し、追加pointerのtoolTypeだけをSTYLUSにするbounded補正とした。production・保存・座標の変更はない。修正後focusedとfinal-head CIが揃うまでfull greenと扱わない。

@@ -18,7 +18,7 @@
 
 - [x] T005 [US1] app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktにmanual frame clockのstationary pointer、finger offset、固定要素pan、release前BoardState不変、UP位置の回帰を追加する。
 - [x] T006 [US1] app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktにrestricted pointer scope外のframe処理を追加し、move/MOVE handleのpreview・releaseを一つのworld anchor差分へ統合する。frameでは既存viewport/previewのみ、releaseではmoveSelection/saveSnapshotを一回呼ぶ。
-- [ ] T007 [US1] Pixel9相当でA/B profileの右/下/角/中央復帰/dropを比較し、specs/008-drag-edge-auto-pan/plan.mdへ採用値・操作・結果・物理端末の限界を記録する。製品判断が必要ならPOへエスカレーションし停止する。
+- [x] T007 [US1] Pixel9相当でA/B profileの右/下/角/中央復帰/dropを比較し、specs/008-drag-edge-auto-pan/plan.mdへ採用値・操作・結果・物理端末の限界を記録する。製品判断が必要ならPOへエスカレーションし停止する。
 
 ## Phase 4: US2 相対配置と履歴
 
@@ -36,7 +36,7 @@
 
 ## Phase 6: 検証とdelivery
 
-- [ ] T012 specs/008-drag-edge-auto-pan/tasks.mdにconvergeでbuildable残差を追記し、README.mdとquickstart.mdのfeature/検証案内を同期する。
+- [x] T012 specs/008-drag-edge-auto-pan/tasks.mdにconvergeでbuildable残差を追記し、README.mdとquickstart.mdのfeature/検証案内を同期する。
 - [ ] T013 app/のlint/unit/debug/androidTest build、schema/public/diff、標準launcherのfocused、final-head full source/CI XML censusを検証し、specs/008-drag-edge-auto-pan/quickstart.mdへ記録する。
 - [ ] T014 GitHub PRのfinal-head CI/canonical review/base/threadを収束し、merge後のIssue #78最新ACを逐条判定する。specs/008-drag-edge-auto-pan/quickstart.mdからdelivery証跡へ到達できるようにする。
 

@@ -108,7 +108,9 @@ class EdgeAutoPanTest {
                 } }
                 val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action,
                     positions.size, properties, coords, 0, 0, 1f, 1f, 0, 0,
-                    if (stylus) InputDevice.SOURCE_STYLUS else InputDevice.SOURCE_TOUCHSCREEN, 0)
+                    // This gesture begins with a finger DOWN; keep its native stream source stable.
+                    // The added pointer's toolType carries the stylus takeover to Compose.
+                    InputDevice.SOURCE_TOUCHSCREEN, 0)
                 try {
                     if (activity == null) {
                         assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))

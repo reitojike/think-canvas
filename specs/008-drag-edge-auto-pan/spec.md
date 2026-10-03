@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-03
 
-**Status**: 実装・検証中（#73のmerge済みpointer契約を再確認済み。CI・review・prototypeは未収束）
+**Status**: 実装済み（prototype A採用。final-head CI・review・merge/closureはPR87とIssue78の最新証跡で判定）
 
 **Input**: Issue #78 / Roadmap #81。既存の要素移動中に画面端でviewportを自動panし、指を離さず遠くへ運べるようにする。
 

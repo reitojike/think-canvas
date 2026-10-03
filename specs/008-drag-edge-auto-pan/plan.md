@@ -85,3 +85,18 @@ finite censusの対象10 familyは計画時と同じ。現行primitiveは`invali
 - save回数は既存`BoardSessionViewModel.setSaveOperation`で数え、処理は同じ`CanvasStore.get(context).save`へ委譲する。testの独自保存pathを作らない。画面位置・BoardSnapshot・Room・一回Undo/Redoを照合する。
 
 開始時analyzeは10 FR・4 SC・全US scenarioと14 taskを再照合。対象2 family・PO stop・final CI/review/closureに未対応なし。Constitution5原則に違反なし、CRITICAL/HIGH 0。prototype速度の採否と物理端末の横断UXは未検証として保持する。
+
+## Bounded prototypeの採用判断（2026-10-04）
+
+[CI 37136065497](https://github.com/reitojike/think-canvas/actions/runs/37136065497)のPixel9/API37、canvas 1080×2219px、density 2.625で比較した。右/下/角で成立したmoveを端の3px内側に180 frame保持し、中央へ戻して停止を確認してからdropする。別の比較ではtext・shape・自由矢印のmulti-selectionを90 frame保持して中央dropした。保存は実際のCanvasStore/Roomへ委譲し、一回Undo/Redoも照合した。
+
+| 候補 | band / axis最大速度 | 単要素の各axis移動量 | pointer offset最大誤差 | multi右pan | 中央停止drift / save |
+| --- | --- | --- | --- | --- | --- |
+| A | 48dp / 360dp毎秒 | 2593px | 0px | 1296px | 0px / 各1回 |
+| B | 64dp / 540dp毎秒 | 3938px | 1px | 1969px | 0px / 各1回 |
+
+両候補は一回のdragでcanvas幅・高さを超え、中央停止・preview/commit・Room・相対配置・一回保存/Undoを満たした。**AをDefaultとして採用**する。Aでも目標距離を満たし、Bより通常drag用の中央範囲が広く、最大速度を低く保てるためである。bandは各寸法の1/4以下、quadratic曲線、frame dt最大50msを維持する。数値は調整可能な実装値であり、製品conceptや利用者settingsにはしない。
+
+結果はartifactの2つの`EdgeAutoPanPrototype` logcat JSONから再読できる。artifact id11279135006、digest `sha256:9bcd804a941a06c351c72a233d8d99cf965079bb7f3e095072a8a487e521bfc8`。run/head/branchを照合しexpired=false、XMLは128件すべて実行、missing/extra/duplicate/skipped=0。run全体はstylus fixtureのsource不整合で1件失敗しており、full required greenとは扱わない。上記2比較のtestcaseは成功し、採用判断はその実測値に基づく。Pixel7の同じ操作でも移動量と停止/saveが一致した。
+
+これはemulatorのbounded操作・測定結果である。物理Pixel9/9aの片手操作、疲労・快適さ、large font、TalkBack、IME製品差の横断dogfoodingは親#81で未確認として残す。現時点の採用は同じ責務・契約内の調整であり、新しい製品scopeのPO判断は発生していない。
