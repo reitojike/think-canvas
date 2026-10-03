@@ -55,3 +55,8 @@ custom checklistはreviewer-ownedの未査読markerを維持する。利用者�
 ## Phase 8: Convergence
 
 - [x] T018 app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktのstylus takeover保存検証を、短い線の経過時間だけInkのFloat秒往復を考慮した1ms以内の比較にし、world座標・点数・種類・ID・開始終了metadata・一回save/Undoは厳密に照合する。native source固定後のowned focusedで実測した253→252ms以外の差を許さず、保存実装は変更しない。FR-008/010、SC-004、T010の目的を超える整数時間の完全一致assertを補正する（unrequested）。
+
+## Phase 9: Convergence
+
+- [x] T019 HIGH: app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktのnativeCancel行は中央停止後ではなくedge稼働中にCANCELし、30 frame停止・Board/Room/Undo/save不変と独立した次のnative panを照合する。成功UP行の中央復帰/確定比較は保持する。FR-007、SC-003、T010（partial）。
+- [x] T020 MEDIUM: app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktのstylus保存比較で空のInkElement/InkStrokeをcopyせず、非空モデルのid/kind/inputType/startedAt/endedAtを直接比較する。point数・world座標厳密、経過時間だけ1ms以内・単調性、一回save/Undoと他content保持を維持する。FR-010、T018（contradicts）。

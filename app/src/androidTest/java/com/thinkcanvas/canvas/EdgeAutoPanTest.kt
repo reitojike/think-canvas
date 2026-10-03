@@ -234,26 +234,34 @@ class EdgeAutoPanTest {
                 assertEquals("UP前の内容", initial, board.snapshot())
                 assertEquals(0, saves.get())
                 assertFalse(board.canUndo)
-                // Return to the central stop band, then retain the move until release.
-                val center = area.center
-                send(MotionEvent.ACTION_MOVE, center, downTime)
-                frames(4)
-                val stopped = position(fixed.text)
-                frames(20)
-                assertEquals(stopped, position(fixed.text))
-                finalPreview = position(moving.text)
-                send(if (cancel) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP, center, downTime)
-                terminalSent = true
-                frames(3)
+                if (cancel) {
+                    // Cancel while the edge ticker is running, before returning to the center.
+                    val stopped = position(fixed.text)
+                    send(MotionEvent.ACTION_CANCEL, edge, downTime)
+                    terminalSent = true
+                    frames(30)
+                    assertEquals(stopped, position(fixed.text))
+                } else {
+                    // Return to the central stop band, then retain the move until release.
+                    val center = area.center
+                    send(MotionEvent.ACTION_MOVE, center, downTime)
+                    frames(4)
+                    val stopped = position(fixed.text)
+                    frames(20)
+                    assertEquals(stopped, position(fixed.text))
+                    finalPreview = position(moving.text)
+                    send(MotionEvent.ACTION_UP, center, downTime)
+                    terminalSent = true
+                    frames(3)
+                }
             } finally {
                 if (!terminalSent) send(MotionEvent.ACTION_CANCEL, edge, downTime)
                 composeRule.mainClock.autoAdvance = true
             }
             composeRule.waitForIdle()
             if (cancel) {
-                assertEquals(initial, board.snapshot())
-                assertEquals(0, saves.get())
-                assertFalse(board.canUndo)
+                assertUnchanged(initial)
+                assertNextPanWorks()
             } else {
                 composeRule.waitUntil(10_000) {
                     saves.get() == 1 && sessions.saveStateFor(1L, BoardSnapshot()).value == BoardSaveState.Idle &&
@@ -389,10 +397,14 @@ class EdgeAutoPanTest {
         assertEquals(before, stored.copy(ink = emptyList()))
         val liveInk = board.ink.single()
         val storedInk = stored.ink.single()
-        assertEquals(liveInk.copy(strokes = emptyList()), storedInk.copy(strokes = emptyList()))
+        assertEquals(liveInk.id, storedInk.id)
+        assertEquals(liveInk.kind, storedInk.kind)
         val liveStroke = liveInk.strokes.single()
         val storedStroke = storedInk.strokes.single()
-        assertEquals(liveStroke.copy(points = emptyList()), storedStroke.copy(points = emptyList()))
+        assertEquals(liveStroke.id, storedStroke.id)
+        assertEquals(liveStroke.inputType, storedStroke.inputType)
+        assertEquals(liveStroke.startedAt, storedStroke.startedAt)
+        assertEquals(liveStroke.endedAt, storedStroke.endedAt)
         assertTrue(liveStroke.points.size >= 2)
         assertEquals(liveStroke.points.size, storedStroke.points.size)
         liveStroke.points.zip(storedStroke.points).forEach { (expected, actual) ->
