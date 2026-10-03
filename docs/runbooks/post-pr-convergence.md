@@ -50,9 +50,10 @@ checkpoint では、関連する画面、モデル、保存、テストなどの
 
 - `BOUNDED_CORRECTION`: 同じ authority と responsibility のまま、有限な surface に閉じ、
   scope drift がなく、同じ PR で扱う方が review と rollback の境界が明瞭な場合です。
-  checkpoint で correction scope を明示してから、**同じ PR を bounded に再開してよい**ものとします。
-  これは correction ceiling の解除ではありません。新しい material family や scope drift が出たら
-  再び `HOLD` します。
+  checkpoint で correction scope を明示してから、**同じ PR を追加 1 round だけ bounded に
+  再開してよい**ものとします。再検証後に material correction がまだ必要なら、同じ family で
+  あっても実装を続けず再び `HOLD` し、次の checkpoint なしに第 4・第 5 round へ進みません。
+  新しい material family や scope drift が出た場合も同様に `HOLD` します。
 - `FOLLOW_UP`: 現在の PR が本来の contract を満たしたまま切り離せる別 responsibility で、
   独立した delivery value、owner、review boundary、または rollback boundary を持つ場合です。
   follow-up Issue / PR に分離し、現在の PR に抱え込ませません。
