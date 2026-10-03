@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
@@ -608,6 +609,103 @@ class NeutralInteractionTest {
         tapCanvas(.78f, .74f)
         waitEditor("新しいテキスト")
         assertEquals(1, board.shapes.size)
+    }
+
+    @Test fun backBeforeSelectionPreviewRejectsOldTapMoveAndResize() = withBoard {
+        for (label in listOf(note.text, "要素を移動", "移動", "サイズ変更")) {
+            if (label == note.text || label == "要素を移動") {
+                composeRule.onNodeWithContentDescription(note.text).performClick()
+            } else {
+                val target = composeRule.onAllNodesWithContentDescription("囲み: Cluster")
+                    .fetchSemanticsNodes().single { it.config.contains(SemanticsActions.CustomActions) }
+                composeRule.runOnUiThread { assertTrue(target.config[SemanticsActions.OnClick].action!!()) }
+            }
+            composeRule.waitForIdle()
+            val point = composeRule.onNodeWithContentDescription(label).fetchSemanticsNode().boundsInWindow.center
+            stalePointerAfterBack(point, move = label != note.text)
+            assertEquals(null, editor.draft.value)
+            assertEquals("未選択",
+                composeRule.onNodeWithContentDescription(note.text).fetchSemanticsNode().config
+                    .getOrNull(SemanticsProperties.StateDescription))
+            assertEquals(0, composeRule.onAllNodesWithContentDescription("移動").fetchSemanticsNodes().size)
+            assertOriginalContent()
+        }
+        tapCanvas(.78f, .74f)
+        waitEditor("新しいテキスト")
+    }
+
+    @Test fun backBeforeCanvasTapClosesMenuSearchAndExpandedToolsWithoutForwarding() = withBoard {
+        for (stage in listOf("menu", "search", "expanded")) {
+            when (stage) {
+                "menu" -> composeRule.onNodeWithContentDescription(note.text)
+                    .performTouchInput { longClick() }
+                "search" -> composeRule.onNodeWithContentDescription("ボード内を検索").performClick()
+                else -> composeRule.onNodeWithContentDescription("図形ツールを開く").performClick()
+            }
+            composeRule.waitForIdle()
+            hideImeIfVisible()
+            val bounds = composeRule.onNodeWithContentDescription("キャンバス")
+                .fetchSemanticsNode().boundsInWindow
+            stalePointerAfterBack(Offset(bounds.left + bounds.width * .78f,
+                bounds.top + bounds.height * .74f), move = false)
+            assertEquals(null, editor.draft.value)
+            val closedLabel = when (stage) { "menu" -> "削除"; "search" -> "ボード内を探す"; else -> "ペン" }
+            assertEquals(0, composeRule.onAllNodesWithContentDescription(closedLabel).fetchSemanticsNodes().size)
+            assertOriginalContent()
+        }
+        tapCanvas(.78f, .74f)
+        waitEditor("新しいテキスト")
+    }
+
+    @Test fun backDuringOutsideDownKeepsChangedDraftInConfirmationWithoutCommitting() = withBoard {
+        startNew("Keep the pending outside tap")
+        hideImeIfVisible()
+        val bounds = composeRule.onNodeWithContentDescription("キャンバス")
+            .fetchSemanticsNode().boundsInWindow
+        stalePointerAfterBack(Offset(bounds.left + bounds.width * .78f,
+            bounds.top + bounds.height * .74f), move = false)
+        assertDiscardDialog()
+        assertEquals("Keep the pending outside tap", editor.draft.value?.text)
+        assertOriginalContent()
+        continueEditing()
+        assertEquals("Keep the pending outside tap", editor.draft.value?.text)
+    }
+
+    private fun Harness.assertOriginalContent() {
+        assertEquals(BoardSnapshot(listOf(note), listOf(region)), board.snapshot())
+        assertEquals(listOf(note), rows().map { it.toModel() })
+        assertEquals(listOf(region), shapes().map { it.toModel() })
+        assertFalse(board.canUndo)
+        assertCanvasStillOpen()
+    }
+
+    private fun Harness.stalePointerAfterBack(local: Offset, move: Boolean) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val origin = IntArray(2)
+        scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
+        val screen = local + Offset(origin[0].toFloat(), origin[1].toFloat())
+        val downTime = SystemClock.uptimeMillis()
+        fun send(action: Int, point: Offset, activity: MainActivity? = null) {
+            val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, point.x, point.y, 0)
+            event.source = InputDevice.SOURCE_TOUCHSCREEN
+            try {
+                if (activity == null) assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
+                else assertTrue(activity.dispatchTouchEvent(event))
+            } finally { event.recycle() }
+        }
+        try {
+            send(MotionEvent.ACTION_DOWN, screen)
+            composeRule.waitForIdle()
+            scenario.onActivity {
+                it.onBackPressedDispatcher.onBackPressed()
+                // No recomposition/idle between Back and the stale MOVE/UP.
+                if (move) send(MotionEvent.ACTION_MOVE, local + Offset(90f, 90f), it)
+                send(MotionEvent.ACTION_UP, if (move) local + Offset(90f, 90f) else local, it)
+            }
+        } finally {
+            send(MotionEvent.ACTION_CANCEL, screen)
+        }
+        composeRule.waitForIdle()
     }
 
     private fun Harness.verifyPreviewCancellation(toolLabel: String) {

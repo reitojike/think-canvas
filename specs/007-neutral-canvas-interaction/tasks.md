@@ -35,3 +35,7 @@ T001→T002→T003/T004→US1→US2→検証・converge。US1はeditorからの�
 - [x] T012 CRITICAL: app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktのDOWN admissionと全event/Releaseでlive gesture generationを照合し、recomposition前の終了後UPによる確定を拒否する。app/src/androidTest/java/com/thinkcanvas/canvas/NeutralInteractionTest.ktでBackと古いUPを同一UI turnでdispatchし、修正前failure・修正後無確定を確認する。FR-006/008、US2/AC4（contradicts）。
 - [x] T013 CRITICAL: app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktのtext/region自動focusを破棄確認中は抑制し、確認解除時だけ編集へ復帰する。app/src/androidTest/java/com/thinkcanvas/canvas/NeutralInteractionTest.ktでtext/region確認の再生成後に背後editorが非focusであること、IMEを強制hideせず一回のBackで確認を閉じ入力を保持することを検証する。FR-007、US1再生成（contradicts）。
 - [x] T014: app/src/androidTest/java/com/thinkcanvas/canvas/NeutralInteractionTest.ktのnew/existing/region entryとContinue/dialog Back/outside resumeで、editor focus・Activity window focus・active input connection・IME visible/bottomを同じreadiness helperで待つ。次のhideより後にIMEが表示される競合をfixtureで防ぎ、再生成確認の非focus・一回Back・Board/Room保持assertを維持する。US1 continuationの検証不足（missing）。
+
+## Phase 7: Convergence
+
+- [ ] T015 CRITICAL: app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktでIME/確認/editor/menu/search/tool/expanded/selection/listの受理Backによるpointer continuationを同期に失効させ、preview前DOWNも古いMOVE/UPから確定させない。Initial passのtext outside loopもDOWN/live世代を照合する。app/src/androidTest/java/com/thinkcanvas/canvas/NeutralInteractionTest.ktでpreview前のtext/grip/MOVE/resize、menu/search/expanded、outside-confirmをBackとMOVE/UP同一UI turnで検証し、priority・入力/選択/Room/Undo・次の操作を維持する。FR-006/007/008、US1/AC3、US2/AC4（contradicts）。
