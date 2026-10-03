@@ -415,18 +415,24 @@ class OffscreenIndicatorsTest {
                     val acknowledgement = sessions.requestSave(1L, initial)
                     assertEquals(BoardSaveState.Idle, sessions.saveStateFor(1L, initial).value)
                     editor.pendingDraftAcknowledgement.value = acknowledgement
+                    assertNotNull(editor.pendingDraftAcknowledgement.value)
                 }
                 stale.invoke()
             }
             composeRule.waitForIdle()
             assertEquals(camera, position(reference.text))
-            assertEquals(0, indicators().size)
+            assertEquals(if (removed) 0 else 1, indicators().size)
             assertEquals(0, saves.get())
             assertEquals(initial, saved())
             if (removed) {
                 composeRule.runOnUiThread { assertTrue(board.undo()) }
                 assertEquals(initial, board.snapshot())
-            } else unchanged()
+            } else {
+                assertNull(editor.pendingDraftAcknowledgement.value)
+                click("選択対象、")
+                assertEquals(0, indicators().size)
+                unchanged()
+            }
         }
     }
 }

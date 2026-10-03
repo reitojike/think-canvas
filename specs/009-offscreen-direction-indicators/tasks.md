@@ -55,3 +55,7 @@ T001→T002→T003/T004→US1→US2→US3→T011→T012→T013。pure unit file�
 ## Phase 8: Convergence
 
 - [x] T016 MEDIUM: app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktの表示guardにtoolsExpandedを含め、app/src/androidTest/java/com/thinkcanvas/canvas/OffscreenIndicatorsTest.ktでパレット展開中0・Backで閉じた後の再表示・既存tool選択中抑止を確認する。FR-007、US3/AC2、plan:入力寿命（partial）。
+
+## Phase 9: CI correction / checkpoint
+
+- [x] T017 app/src/androidTest/java/com/thinkcanvas/canvas/OffscreenIndicatorsTest.ktの即完了ack caseを、same-turn stale action拒否、ack解除後marker復帰と最新action成功に補正する。削除caseはmarker0を維持する。既存保存lifecycle・production source・scopeは変更しない。PR88 issuecomment-5974469986の有限checkpointに基づく追加1 round。FR-006/007、T015。
