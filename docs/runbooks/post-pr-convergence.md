@@ -33,13 +33,40 @@ CI、review、base、thread の証跡が missing、pending、unknown、stale、f
 
 ## 補正の上限
 
-レビュー指摘を受けた bounded correction は原則 2 回までです。3 回目が必要になった時点で
-`HOLD` にし、指摘を一件ずつ直し続けません。2 回未満でも、同じ semantic family の指摘が
-繰り返される場合は早めに切り替えます。family は同じ authority または contract を共有する
-問題群です。例として、描画座標、semantics と操作可否、保存と retry の lifecycle、gesture の
-競合があります。
+レビュー指摘を受けた bounded correction は原則 **2 round まで**です。ここでいう round は
+review request、commit、finding の件数ではなく、material finding または同じ semantic family に
+対して実装範囲を固定し、その範囲を一度補正して再検証する単位です。correction count を回避する
+ために finding を細分化したり、review request を繰り返したりしてはいけません。
 
-切り替え時は、関連する画面、モデル、保存、テストなどの surface を有限集合として列挙し、
-family 全体の completeness を read-only で確認します。結果を PR に記録し、
-`BOUNDED_CORRECTION`、`FOLLOW_UP`、`REBUILD_REQUIRED`、`NO_CHANGE` のいずれかを判断して
-から実装範囲を固定します。finding の分割やレビュー依頼の反復で補正回数を回避しません。
+3 round 目の補正が必要になった時点で、実装を続ける前に必ず `HOLD` し、family-level
+completeness checkpoint を行います。2 round 未満でも、同じ semantic family の指摘が繰り返される
+場合は早めに切り替えてかまいません。family は同じ authority または contract を共有する問題群です。
+例として、描画座標、semantics と操作可否、保存と retry の lifecycle、gesture の競合があります。
+
+checkpoint では、関連する画面、モデル、保存、テストなどの surface を有限集合として列挙し、
+個別 finding の修正ではなく family 全体の completeness と、現在の design authority が維持されて
+いるかを read-only で確認します。その結果から、correction 回数ではなく
+**responsibility / authority / review boundary / rollbackability** を基準に、次のいずれかを選びます。
+
+- `BOUNDED_CORRECTION`: 同じ authority と responsibility のまま、有限な surface に閉じ、
+  scope drift がなく、同じ PR で扱う方が review と rollback の境界が明瞭な場合です。
+  checkpoint で correction scope を明示してから、**同じ PR を bounded に再開してよい**ものとします。
+  これは correction ceiling の解除ではありません。新しい material family や scope drift が出たら
+  再び `HOLD` します。
+- `FOLLOW_UP`: 現在の PR が本来の contract を満たしたまま切り離せる別 responsibility で、
+  独立した delivery value、owner、review boundary、または rollback boundary を持つ場合です。
+  follow-up Issue / PR に分離し、現在の PR に抱え込ませません。
+- `REBUILD_REQUIRED`: design / architecture authority や responsibility の置き方そのものが崩れ、
+  同じ PR への追加補正では reviewability や rollbackability を保てない場合です。現在の PR は
+  evidence / reference として freeze し、設計を決め直して clean baseline から別 PR で作り直します。
+- `NO_CHANGE`: finding が成立しない、既に満たされている、または code / docs change が不要な場合です。
+
+**「3回目だから」という理由だけで新しい Issue、branch、stacked PR を必須にしてはいけません。**
+逆に、同じ PR で直せるという理由だけで別 responsibility や design rebuild を押し込んでも
+いけません。carrier の分離は correction number ではなく、上記の responsibility と境界で決めます。
+
+correction / checkpoint 中に canonical review を round ごとに反復することは原則としません。
+補正が収束した final candidate head を freeze し、その head の required CI を確認してから、
+最終 gate として canonical review を依頼します。final review 後に head が変わった場合は、
+古い CI / review evidence を再利用しません。CI failure も green を引くために blind rerun せず、
+原因を分類して Task Contract とこの checkpoint rule に従います。
