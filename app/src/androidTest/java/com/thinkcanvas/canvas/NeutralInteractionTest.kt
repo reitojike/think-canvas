@@ -581,7 +581,7 @@ class NeutralInteractionTest {
         val y = origin[1] + local.y
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val downTime = SystemClock.uptimeMillis()
-        fun send(action: Int, px: Float, py: Float) {
+        fun send(action: Int, px: Float, py: Float, activity: MainActivity? = null) {
             val props = arrayOf(MotionEvent.PointerProperties().apply {
                 id = 0; toolType = MotionEvent.TOOL_TYPE_FINGER
             })
@@ -590,7 +590,10 @@ class NeutralInteractionTest {
             })
             val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action,
                 1, props, coords, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
-            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
+            try {
+                if (activity == null) assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
+                else assertTrue(activity.dispatchTouchEvent(event))
+            }
             finally { event.recycle() }
         }
         var downSent = false
@@ -599,9 +602,15 @@ class NeutralInteractionTest {
             send(MotionEvent.ACTION_DOWN, x, y)
             downSent = true
             send(MotionEvent.ACTION_MOVE, x + 45f, y + 45f)
-            scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             composeRule.waitForIdle()
-            send(MotionEvent.ACTION_UP, x + 90f, y + 90f)
+            scenario.onActivity {
+                it.onBackPressedDispatcher.onBackPressed()
+                // Dispatch through the Activity in the same UI turn: key cancellation
+                // cannot run before this release. Coordinates are window-local here.
+                send(MotionEvent.ACTION_UP, local.x + 90f, local.y + 90f, it)
+            }
+            // Clear the native input dispatcher's DOWN; the UI received its UP above.
+            send(MotionEvent.ACTION_CANCEL, x + 90f, y + 90f)
             terminalSent = true
         } finally {
             if (downSent && !terminalSent) {

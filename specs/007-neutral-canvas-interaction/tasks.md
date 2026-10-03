@@ -29,3 +29,7 @@
 ## 依存・実装戦略
 
 T001→T002→T003/T004→US1→US2→検証・converge。US1はeditorからの無保存close、US2はtoolからの復帰を独立に検証できる。テストsuiteとCanvasScreenの作業は別ファイルで並行可能だがGradle実行は一つにする。custom checklistはreviewer-ownedの未査読状態を保持し、利用者の「提案した挙動で進める」という実装許可に従い進める。
+
+## Phase 6: Convergence
+
+- [ ] T012 CRITICAL: app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktのDOWN admissionと全event/Releaseでlive gesture generationを照合し、recomposition前の終了後UPによる確定を拒否する。app/src/androidTest/java/com/thinkcanvas/canvas/NeutralInteractionTest.ktでBackと古いUPを同一UI turnでdispatchし、修正前failure・修正後無確定を確認する。FR-006/008、US2/AC4（contradicts）。
