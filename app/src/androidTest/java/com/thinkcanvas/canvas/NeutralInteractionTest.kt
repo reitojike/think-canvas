@@ -8,6 +8,7 @@ import android.view.WindowInsets
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
@@ -504,52 +505,15 @@ class NeutralInteractionTest {
         composeRule.onNodeWithContentDescription("図形ツールを開く").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("ペン").performClick()
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val metrics = instrumentation.targetContext.resources.displayMetrics
         fun draw(offset: Float) {
+            composeRule.waitForIdle()
             val expectedCount = runBlocking { database.canvasDao().inkStrokes(1L).size } + 1
-            val downTime = SystemClock.uptimeMillis()
-            val points = listOf(
-                (metrics.widthPixels * .22f + offset) to (metrics.heightPixels * .38f),
-                (metrics.widthPixels * .26f + offset) to (metrics.heightPixels * .42f),
-                (metrics.widthPixels * .30f + offset) to (metrics.heightPixels * .46f),
-            )
-            var downSent = false
-            var terminalSent = false
-            try {
-                points.forEachIndexed { index, (x, y) ->
-                    val properties = arrayOf(MotionEvent.PointerProperties().apply {
-                        id = 0; toolType = MotionEvent.TOOL_TYPE_FINGER
-                    })
-                    val coordinates = arrayOf(MotionEvent.PointerCoords().apply {
-                        this.x = x; this.y = y; pressure = 1f; size = 1f
-                    })
-                    val action = when (index) {
-                        0 -> MotionEvent.ACTION_DOWN
-                        points.lastIndex -> MotionEvent.ACTION_UP
-                        else -> MotionEvent.ACTION_MOVE
-                    }
-                    val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action,
-                        1, properties, coordinates, 0, 0, 1f, 1f, 0, 0,
-                        InputDevice.SOURCE_TOUCHSCREEN, 0)
-                    try {
-                        val accepted = instrumentation.uiAutomation.injectInputEvent(event, true)
-                        assertTrue(accepted)
-                        if (action == MotionEvent.ACTION_DOWN) downSent = accepted
-                        if (action == MotionEvent.ACTION_UP) terminalSent = true
-                    } finally { event.recycle() }
-                }
-            } catch (failure: Throwable) {
-                if (downSent && !terminalSent) {
-                    try {
-                        val point = points.last()
-                        val cancel = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(),
-                            MotionEvent.ACTION_CANCEL, point.first, point.second, 0)
-                        try { instrumentation.uiAutomation.injectInputEvent(cancel, true) }
-                        finally { cancel.recycle() }
-                    } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
-                }
-                throw failure
+            val canvas = composeRule.onNodeWithContentDescription("キャンバス")
+            val bounds = canvas.fetchSemanticsNode().boundsInRoot
+            canvas.performTouchInput {
+                swipe(androidx.compose.ui.geometry.Offset(bounds.width * .22f + offset, bounds.height * .38f),
+                    androidx.compose.ui.geometry.Offset(bounds.width * .30f + offset, bounds.height * .46f),
+                    durationMillis = 200)
             }
             composeRule.waitUntil(10_000) {
                 runBlocking { database.canvasDao().inkStrokes(1L).size == expectedCount } &&
@@ -574,6 +538,8 @@ class NeutralInteractionTest {
             .fetchSemanticsNodes().isNotEmpty())
         back()
         assertCanvasStillOpen()
+        tapCanvas()
+        waitEditor("新しいテキスト")
     }
 
     @Test fun staleDiscardConfirmationCannotCancelReplacementSession() = withBoard {
