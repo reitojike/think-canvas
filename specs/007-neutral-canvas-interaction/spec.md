@@ -2,7 +2,7 @@
 
 **Feature Branch**: `codex/issue-73-neutral-state`
 **Created**: 2026-10-03
-**Status**: 設計確定・実装中
+**Status**: 実装済み（実機確認項目あり。merge後に現行仕様として扱う）
 **Input**: [Issue #73](https://github.com/reitojike/think-canvas/issues/73)、親 [#81](https://github.com/reitojike/think-canvas/issues/81)。先行する #71 / Spec 006 は実装・merge・完了済み。
 
 ## Clarifications
@@ -54,7 +54,7 @@
 
 - **FR-001**: 通常状態は未確定editor・armed creation tool・wet preview・不要なIME/focus・旧chrome hit targetを持たず、tap/pan/zoom/selectionを受理する。確定した選択とcontextual actionsは保持してよい。
 - **FR-002**: IME非表示のBackで、未入力新規・変更なし既存の編集は無保存で閉じる。変更ありは破棄確認し、明示「破棄する」だけが未確定変更を破棄する。
-- **FR-003**: 「編集を続ける」・確認のBack・外側dismissは編集を保持する。確認後の破棄は同じ編集sessionだけに適用する。
+- **FR-003**: 「編集を続ける」・確認のBack・外側dismissは編集を保持する。確認表示時は入力focus・IMEを解除し、未確定内容は保持する。確認後の破棄は同じ編集sessionだけに適用する。
 - **FR-004**: Spec 006の外側タップ・Done・明示Cancel・validation・save/ack/retryを維持する。Backは今回のPO判断により追加する終了操作であり、外側タップとは意味を分ける。
 - **FR-005**: 四角・丸・囲み・矢印・lassoは既存のone-shot完了と選択を維持する。囲み名入力は作成ツールとは別のeditorとする。
 - **FR-006**: inkは連続描画を維持し、Back・明示終了で未確定strokeを取り消す。作成・移動・resize等のpreviewも終了後に古いgestureから確定しない。

@@ -338,7 +338,10 @@ fun CanvasScreen(
 
     fun requestEditorExit(target: String, changed: Boolean, close: () -> Unit) {
         if (exitBlocked()) return
-        if (changed) discardTarget = target else close()
+        if (changed) {
+            clearEditorFocus()
+            discardTarget = target
+        } else close()
     }
 
     fun clearInteractionPreviews() {

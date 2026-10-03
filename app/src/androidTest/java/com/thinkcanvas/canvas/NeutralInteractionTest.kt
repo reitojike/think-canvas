@@ -22,6 +22,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.espresso.Espresso
+import androidx.test.espresso.matcher.RootMatchers.isDialog
+import androidx.test.espresso.matcher.ViewMatchers.isRoot
 import com.thinkcanvas.BoardSaveState
 import com.thinkcanvas.BoardSessionViewModel
 import com.thinkcanvas.MainActivity
@@ -63,8 +66,18 @@ class NeutralInteractionTest {
             composeRule.waitForIdle()
         }
         fun dialogBack() {
-            // Dialog owns Back. The underlying Activity's IME insets may be stale
-            // while its window is unfocused, so do not dispatch a preliminary Back.
+            // Read the focused dialog window, not the underlying Activity's insets.
+            Espresso.closeSoftKeyboard()
+            composeRule.waitUntil(5_000) {
+                var hidden = false
+                Espresso.onView(isRoot()).inRoot(isDialog()).check { view, failure ->
+                    if (failure != null) throw failure
+                    val insets = checkNotNull(view.rootWindowInsets)
+                    hidden = !insets.isVisible(WindowInsets.Type.ime()) &&
+                        insets.getInsets(WindowInsets.Type.ime()).bottom == 0
+                }
+                hidden
+            }
             InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(
                 android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
             composeRule.waitUntil(5_000) {
@@ -87,17 +100,17 @@ class NeutralInteractionTest {
             composeRule.waitForIdle()
         }
         fun hideImeIfVisible() {
-            val instrumentation = InstrumentationRegistry.getInstrumentation()
-            fun visible(): Boolean {
-                var shown = false
+            Espresso.closeSoftKeyboard()
+            composeRule.waitUntil(5_000) {
+                var hidden = false
                 scenario.onActivity {
-                    shown = it.window.decorView.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true
+                    val insets = checkNotNull(it.window.decorView.rootWindowInsets)
+                    hidden = !insets.isVisible(WindowInsets.Type.ime()) &&
+                        insets.getInsets(WindowInsets.Type.ime()).bottom == 0
                 }
-                return shown
+                hidden
             }
-            if (visible()) instrumentation.uiAutomation.performGlobalAction(
-                android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
-            composeRule.waitUntil(5_000) { !visible() }
+            composeRule.waitForIdle()
         }
         fun waitEditor(label: String) {
             composeRule.waitUntil(10_000) {
@@ -129,8 +142,9 @@ class NeutralInteractionTest {
             waitEditor("テキストを編集")
         }
         fun renameRegion() {
-            val actions = composeRule.onNodeWithContentDescription("囲み: Cluster")
-                .fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            val actions = composeRule.onAllNodesWithContentDescription("囲み: Cluster")
+                .fetchSemanticsNodes().single { it.config.contains(SemanticsActions.CustomActions) }
+                .config[SemanticsActions.CustomActions]
             val rename = actions.first { it.label == "囲みの名前を編集" }
             composeRule.runOnUiThread { assertTrue(rename.action()) }
             waitEditor("囲みの名前")
@@ -144,6 +158,10 @@ class NeutralInteractionTest {
                 .fetchSemanticsNodes().size)
         }
         fun assertDiscardDialog() {
+            composeRule.waitUntil(5_000) {
+                composeRule.onAllNodesWithText("編集内容を破棄しますか？")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
             composeRule.onNodeWithText("編集内容を破棄しますか？").assertExists()
             composeRule.onNodeWithText("破棄する").assertExists()
             composeRule.onNodeWithText("編集を続ける").assertExists()
@@ -490,6 +508,7 @@ class NeutralInteractionTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val metrics = instrumentation.targetContext.resources.displayMetrics
         fun draw(offset: Float) {
+            val expectedCount = runBlocking { database.canvasDao().inkStrokes(1L).size } + 1
             val downTime = SystemClock.uptimeMillis()
             val points = listOf(
                 (metrics.widthPixels * .22f + offset) to (metrics.heightPixels * .38f),
@@ -533,6 +552,11 @@ class NeutralInteractionTest {
                 }
                 throw failure
             }
+            composeRule.waitUntil(10_000) {
+                runBlocking { database.canvasDao().inkStrokes(1L).size == expectedCount } &&
+                    sessions.saveStateFor(1L, BoardSnapshot()).value is BoardSaveState.Idle
+            }
+            composeRule.waitForIdle()
         }
         draw(0f)
         draw(70f)
