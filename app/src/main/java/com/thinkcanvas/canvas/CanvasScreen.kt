@@ -353,17 +353,30 @@ fun CanvasScreen(
         inkPreview = null
     }
 
-    fun finishToolInteraction(clearGuidance: Boolean = true) {
-        // Cancel the local gesture continuation before a later UP can commit.
+    fun invalidatePointerContinuation() {
+        // Back can arrive after DOWN, before a preview exists or recomposition runs.
         gestureGeneration++
+        lastBlankTap = null
+    }
+
+    fun clearToolInteraction(clearGuidance: Boolean) {
         clearInteractionPreviews()
         tool = SpatialTool.NONE
         inkTool = null
         toolsExpanded = false
         if (clearGuidance) guidance = null
-        lastBlankTap = null
         chromeBounds.remove("ink")
         if (clearGuidance) chromeBounds.remove("guidance")
+    }
+
+    fun finishToolInteraction(clearGuidance: Boolean = true) {
+        invalidatePointerContinuation()
+        clearToolInteraction(clearGuidance)
+    }
+
+    fun dismissDiscardConfirmation() {
+        invalidatePointerContinuation()
+        discardTarget = null
     }
 
     fun cancelDraft() {
@@ -440,10 +453,13 @@ fun CanvasScreen(
 
     BackHandler {
         if (imeBottom > 0) {
+            invalidatePointerContinuation()
             keyboard?.hide()
         } else if (!exitBlocked()) {
             val currentDraft = editorSession.draft.value
             val currentRegion = editorSession.regionNameDraft.value
+            // Preserve preview/selection until the existing priority chooses one stage.
+            invalidatePointerContinuation()
             when {
                 discardTarget != null -> discardTarget = null
                 currentDraft != null -> requestEditorExit("text:${currentDraft.sessionId}",
@@ -460,7 +476,7 @@ fun CanvasScreen(
                 }
                 tool != SpatialTool.NONE || inkTool != null || spatialPreview != null ||
                     inkPreview != null || movePreview != null || handlePreview != null ||
-                    gapPreview != null || lassoPoints.isNotEmpty() -> finishToolInteraction()
+                    gapPreview != null || lassoPoints.isNotEmpty() -> clearToolInteraction(true)
                 toolsExpanded -> toolsExpanded = false
                 selectedIds.isNotEmpty() -> {
                     selectedId = null; selectedIds = emptySet(); guidance = null
@@ -741,9 +757,14 @@ fun CanvasScreen(
                         }
                     },
                 )
-            }.pointerInput(board, editorSession) {
+            }.pointerInput(board, editorSession, pointerGeneration) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    val admittedGeneration = gestureGeneration
+                    if (admittedGeneration != pointerGeneration) {
+                        down.consume()
+                        return@awaitEachGesture
+                    }
                     val activeDraft = editorSession.draft.value ?: return@awaitEachGesture
                     val fieldBounds = textEditorBounds ?: return@awaitEachGesture
                     val toolbarBounds = editorToolbarBounds ?: return@awaitEachGesture
@@ -754,6 +775,10 @@ fun CanvasScreen(
                     var isTap = true
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (gestureGeneration != admittedGeneration) {
+                            event.changes.forEach { it.consume() }
+                            break
+                        }
                         val active = event.changes.firstOrNull { it.id == down.id }
                         if (event.changes.size != 1 || active == null ||
                             (active.position - down.position).getDistance() > touchSlop ||
@@ -1793,7 +1818,7 @@ fun CanvasScreen(
         if (discardTarget != null && discardTarget == currentEditorTarget) {
             val target = discardTarget
             AlertDialog(
-                onDismissRequest = { discardTarget = null },
+                onDismissRequest = { dismissDiscardConfirmation() },
                 title = { Text(stringResource(R.string.discard_edit_title)) },
                 confirmButton = {
                     TextButton(enabled = !exitBlocked(), onClick = {
@@ -1806,7 +1831,7 @@ fun CanvasScreen(
                     }) { Text(stringResource(R.string.discard_edit)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { discardTarget = null }) {
+                    TextButton(onClick = { dismissDiscardConfirmation() }) {
                         Text(stringResource(R.string.continue_edit))
                     }
                 },

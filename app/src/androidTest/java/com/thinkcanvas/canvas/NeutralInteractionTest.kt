@@ -105,10 +105,9 @@ class NeutralInteractionTest {
             composeRule.waitForIdle()
             waitEditorReady()
         }
-        fun waitEditorReady() {
-            val label = editor.draft.value?.let {
+        fun waitEditorReady(label: String = editor.draft.value?.let {
                 if (it.id == null) "新しいテキスト" else "テキストを編集"
-            } ?: "囲みの名前"
+            } ?: "囲みの名前") {
             composeRule.waitUntil(10_000) {
                 val nodes = composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes()
                 val focused = nodes.singleOrNull()?.config?.getOrNull(SemanticsProperties.Focused) == true
@@ -643,6 +642,7 @@ class NeutralInteractionTest {
                 else -> composeRule.onNodeWithContentDescription("図形ツールを開く").performClick()
             }
             composeRule.waitForIdle()
+            if (stage == "search") waitEditorReady("ボード内を探す")
             hideImeIfVisible()
             val bounds = composeRule.onNodeWithContentDescription("キャンバス")
                 .fetchSemanticsNode().boundsInWindow
