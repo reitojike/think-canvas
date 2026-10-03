@@ -57,7 +57,7 @@
 - **FR-005**: 入力欄内と編集ツールバーは通常どおり操作できる。表示中の bounds を用い、旧 bounds が後の操作を遮らない。
 - **FR-006**: focus loss、Activity recreation、configuration/lifecycle transition、再描画、IME 内部 transition のみを終了の契機にしない。同じ process の再生成では draft を保持する。
 - **FR-007**: Running/Failed/pending acknowledgement では外側 finalization と explicit cancel を拒否する。同じ保存所有者・対象要求・既存 retry を維持し、外側タップで重複要求や自動 retry を始めない。
-- **FR-008**: 非タップの外側 gesture は終了しない。DOWN/UP 間の文字更新を同じ編集として扱い、UP 時点の最新内容を用いる。通常操作、TalkBack、toolbar の accessibility action、system back、ボード移動の既存契約を維持する。
+- **FR-008**: 非タップの外側 gesture は終了しない。DOWN/UP 間の文字更新を同じ編集として扱い、UP 時点の最新内容を用いる。通常操作、TalkBack、toolbar の accessibility action、ボード移動の保存契約を維持する。system Backによる編集終了は [Spec 007](../007-neutral-canvas-interaction/spec.md) の破棄確認に従い、外側タップの確定とは区別する。IMEを閉じるだけでは入力を保持する。
 
 ### Key Entities
 

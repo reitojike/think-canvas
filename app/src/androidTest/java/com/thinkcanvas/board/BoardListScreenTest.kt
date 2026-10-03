@@ -24,6 +24,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.semantics.SemanticsActions
@@ -923,12 +925,24 @@ class BoardListScreenTest {
             awaitText("‹ 編集中")
             tapCanvasCenter()
             awaitDescription("新しいテキスト")
-            repeat(2) {
-                assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
-                    .GLOBAL_ACTION_BACK))
-                composeRule.waitForIdle()
-                awaitDescription("新しいテキスト")
+            composeRule.onNodeWithContentDescription("新しいテキスト").performTextReplacement("未確定")
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            composeRule.waitUntil(5_000) {
+                var hidden = false
+                scenario.onActivity {
+                    val insets = checkNotNull(it.window.decorView.rootWindowInsets)
+                    hidden = !insets.isVisible(android.view.WindowInsets.Type.ime()) &&
+                        insets.getInsets(android.view.WindowInsets.Type.ime()).bottom == 0
+                }
+                hidden
             }
+            composeRule.waitForIdle()
+            assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
+                .GLOBAL_ACTION_BACK))
+            awaitText("編集内容を破棄しますか？")
+            composeRule.onNodeWithText("編集を続ける").performClick()
+            awaitDescription("新しいテキスト")
+            composeRule.onNodeWithContentDescription("新しいテキスト").assertTextEquals("未確定")
             scenario.onActivity { assertTrue(!it.isFinishing) }
         } finally { scenario.close() }
     }
