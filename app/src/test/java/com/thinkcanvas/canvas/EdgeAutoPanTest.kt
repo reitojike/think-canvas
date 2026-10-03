@@ -185,7 +185,25 @@ class EdgeAutoPanTest {
         cases.forEach { (scale, expected, viewport) ->
             val screenAnchor = viewport.worldToScreen(anchor.x, anchor.y)
             val pointer = Offset(screenAnchor.first + 15f, screenAnchor.second - 30f)
-            assertEquals("scale=$scale", expected, worldDragDelta(viewport, anchor, pointer))
+            val actual = worldDragDelta(viewport, anchor, pointer)
+            assertEquals("scale=$scale x", expected.x, actual.x, .001f)
+            assertEquals("scale=$scale y", expected.y, actual.y, .001f)
+        }
+    }
+
+    @Test
+    fun equalElapsedTimePartitionsProduceTheSameCameraTravelBelowTheFrameCap() {
+        val whole = edgeAutoPanFrameSeconds(48_000_000L) * 360f
+        val partitioned = List(3) { edgeAutoPanFrameSeconds(16_000_000L) * 360f }.sum()
+        assertEquals(17.28f, whole, .001f)
+        assertEquals(whole, partitioned, .001f)
+    }
+
+    @Test
+    fun profilesRejectNonFiniteAndNonPositiveParameters() {
+        listOf(0f, -1f, Float.NaN, Float.POSITIVE_INFINITY).forEach {
+            org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { EdgeAutoPanProfile(it, 360f) }
+            org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { EdgeAutoPanProfile(48f, it) }
         }
     }
 }

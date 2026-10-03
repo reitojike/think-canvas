@@ -51,6 +51,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -110,6 +112,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.thinkcanvas.BoardSaveState
 import com.thinkcanvas.BoardSaveAcknowledgement
 
@@ -130,6 +136,7 @@ fun CanvasScreen(
     onRetrySave: () -> Unit,
     onOpenList: () -> Unit,
     onShareSelection: (Set<String>) -> Unit,
+    edgeAutoPanProfile: EdgeAutoPanProfile = EdgeAutoPanProfile.Default,
 ) {
     var viewport by remember { mutableStateOf(Viewport()) }
     var initialFitApplied by remember(board) { mutableStateOf(false) }
@@ -152,6 +159,7 @@ fun CanvasScreen(
     var guidance by remember { mutableStateOf<String?>(null) }
     var draft by editorSession.draft
     var movePreview by remember { mutableStateOf<Pair<Set<String>, WorldPoint>?>(null) }
+    var moveOwner by remember { mutableStateOf<MoveDragSession?>(null) }
     var handlePreview by remember { mutableStateOf<BoardSnapshot?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var pendingDraftAcknowledgement by editorSession.pendingDraftAcknowledgement
@@ -356,7 +364,70 @@ fun CanvasScreen(
     fun invalidatePointerContinuation() {
         // Back can arrive after DOWN, before a preview exists or recomposition runs.
         gestureGeneration++
+        moveOwner = null
         lastBlankTap = null
+    }
+
+    fun moveIsLive(owner: MoveDragSession): Boolean = moveOwner === owner &&
+        gestureGeneration == owner.generation && !exitBlocked() && owner.hasSameContent(board) &&
+        editorSession.draft.value == null && editorSession.regionNameDraft.value == null &&
+        discardTarget == null && attachmentEditor == null && menuTarget == null && !searchOpen
+
+    fun cancelMove(owner: MoveDragSession) {
+        if (moveOwner === owner) {
+            invalidatePointerContinuation()
+            movePreview = null
+        }
+    }
+
+    // A frame waiter must live outside the restricted AwaitPointerEventScope.
+    LaunchedEffect(moveOwner, edgeAutoPanProfile, density.density, canvasSize) {
+        val owner = moveOwner ?: return@LaunchedEffect
+        snapshotFlow {
+            edgeAutoPanVelocity(owner.pointer, canvasSize, density.density, edgeAutoPanProfile) != Offset.Zero
+        }.collectLatest { atEdge ->
+            if (atEdge) {
+                var previousFrame: Long? = null
+                while (moveIsLive(owner)) {
+                    withFrameNanos { frame ->
+                        // Queued frames can arrive before coroutine cancellation/recomposition.
+                        if (moveIsLive(owner)) {
+                            val velocity = edgeAutoPanVelocity(owner.pointer, canvasSize,
+                                density.density, edgeAutoPanProfile)
+                            val seconds = previousFrame?.let { edgeAutoPanFrameSeconds(frame - it) } ?: 0f
+                            previousFrame = frame
+                            if (velocity != Offset.Zero && seconds > 0f) {
+                                viewport = viewport.pan(velocity.x * seconds, velocity.y * seconds)
+                                movePreview = owner.ids to worldDragDelta(viewport, owner.anchor, owner.pointer)
+                            }
+                        }
+                    }
+                }
+                cancelMove(owner)
+            }
+        }
+    }
+
+    // Observe guards even while the pointer is in the central, non-ticking band.
+    LaunchedEffect(currentSaveState, pendingDraftAcknowledgement, draft, regionDraft,
+        board.elements, board.shapes, board.arrows, board.ink, discardTarget, attachmentEditor,
+        menuTarget, searchOpen) {
+        moveOwner?.let { if (!moveIsLive(it)) cancelMove(it) }
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(board, lifecycleOwner, edgeAutoPanProfile, density.density) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                invalidatePointerContinuation()
+                clearInteractionPreviews()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            invalidatePointerContinuation()
+            clearInteractionPreviews()
+        }
     }
 
     fun clearToolInteraction(clearGuidance: Boolean) {
@@ -802,6 +873,7 @@ fun CanvasScreen(
                 }
             }.pointerInput(board, pointerGeneration) {
             awaitEachGesture {
+                var gestureMove: MoveDragSession? = null
                 try {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val admittedGeneration = gestureGeneration
@@ -892,6 +964,8 @@ fun CanvasScreen(
                 }
                 val activeId = targetId
                 val gestureSnapshot = latestSnapshot.value
+                val moveIds = if (activeId in latestSelectedIds.value) latestSelectedIds.value.toSet()
+                    else activeId?.let { setOf(it) }.orEmpty()
                 var mode = when {
                     drawingKind != null -> "ink"
                     activeTool == SpatialTool.LASSO -> "lasso"
@@ -900,7 +974,16 @@ fun CanvasScreen(
                     selectedGrip -> "move"
                     else -> "tap"
                 }
-                val startWorld = latestViewport.value.screenToWorld(start.x, start.y).let { WorldPoint(it.first, it.second) }
+                val startWorld = viewport.screenToWorld(start.x, start.y).let { WorldPoint(it.first, it.second) }
+                fun previewMove(pointer: Offset) {
+                    if (!dragAdmitted || moveIds.isEmpty()) return
+                    val owner = gestureMove ?: MoveDragSession(moveIds, startWorld, admittedGeneration,
+                        gestureSnapshot, pointer).also { gestureMove = it; moveOwner = it }
+                    if (moveIsLive(owner)) {
+                        owner.pointer = pointer
+                        movePreview = owner.ids to worldDragDelta(viewport, owner.anchor, pointer)
+                    } else cancelMove(owner)
+                }
                 if (mode == "ink") inkPreview = InkPreview(drawingKind!!, drawingInput, drawingPoints)
                 if (mode == "lasso") lassoPoints = listOf(startWorld)
                 while (true) {
@@ -910,6 +993,11 @@ fun CanvasScreen(
                     } else if (mode == "tap" && remaining <= 0) null
                     else awaitPointerEvent()
                     if (gestureGeneration != admittedGeneration) {
+                        event?.changes?.forEach { it.consume() }
+                        break
+                    }
+                    if (gestureMove?.let { !moveIsLive(it) } == true) {
+                        gestureMove?.let(::cancelMove)
                         event?.changes?.forEach { it.consume() }
                         break
                     }
@@ -926,6 +1014,12 @@ fun CanvasScreen(
                     val activeReleased = mode == "ink" && event.changes.any { it.id == drawingPointer && !it.pressed }
                     if (pressed.isEmpty() || activeReleased) {
                         if (event.type != PointerEventType.Release) break
+                        if (mode == "move" || mode == "longPressPending" ||
+                            mode == "handle" && handle == HandleKind.MOVE) {
+                            val native = event.motionEvent
+                            if (exitBlocked() || native == null || native.actionMasked == MotionEvent.ACTION_CANCEL ||
+                                native.flags and MotionEvent.FLAG_CANCELED != 0) break
+                        }
                         end = event.changes.firstOrNull { it.id == drawingPointer }?.position
                             ?: event.changes.firstOrNull()?.position ?: end
                         when (mode) {
@@ -1005,12 +1099,13 @@ fun CanvasScreen(
                                 finishToolInteraction(clearGuidance = false)
                             }
                             "move", "longPressPending" -> if (activeId != null) {
-                                val dx = (end.x - start.x) / latestViewport.value.scale
-                                val dy = (end.y - start.y) / latestViewport.value.scale
                                 if (dragAdmitted) {
-                                    val ids = if (activeId in latestSelectedIds.value) latestSelectedIds.value else setOf(activeId)
+                                    val owner = gestureMove ?: break
+                                    if (!moveIsLive(owner)) break
+                                    val delta = worldDragDelta(viewport, owner.anchor, end)
+                                    moveOwner = null
                                     val beforeSnapshot = board.snapshot()
-                                    if (board.moveSelection(ids, dx, dy)) {
+                                    if (board.moveSelection(owner.ids, delta.x, delta.y)) {
                                         val afterSnapshot = board.snapshot()
                                         val changedIds = (beforeSnapshot.texts.zip(afterSnapshot.texts)
                                             .filter { (old, new) -> old != new }.map { it.first.id } +
@@ -1044,11 +1139,13 @@ fun CanvasScreen(
                             } else guidance = null
                             "handle" -> if (activeId != null && handle != null) {
                                 val changed = when (handle) {
-                                    HandleKind.MOVE -> board.moveSelection(
-                                        if (activeId in latestSelectedIds.value) latestSelectedIds.value else setOf(activeId),
-                                        (end.x - start.x) / latestViewport.value.scale,
-                                        (end.y - start.y) / latestViewport.value.scale,
-                                    )
+                                    HandleKind.MOVE -> {
+                                        val owner = gestureMove
+                                        if (owner != null && !moveIsLive(owner)) break
+                                        val delta = worldDragDelta(viewport, startWorld, end)
+                                        moveOwner = null
+                                        board.moveSelection(owner?.ids ?: moveIds, delta.x, delta.y)
+                                    }
                                     else -> board.apply(previewHandle(gestureSnapshot, activeId, handle, end))
                                 }
                                 if (changed) {
@@ -1079,6 +1176,10 @@ fun CanvasScreen(
                     }
                     val activeStylus = pressed.firstOrNull { it.type == PointerType.Stylus }
                     if (activeStylus != null && drawingInput != InkInputType.STYLUS) {
+                        if (moveOwner === gestureMove) moveOwner = null
+                        gestureMove = null
+                        movePreview = null
+                        handlePreview = null
                         mode = "ink"
                         drawingKind = InkKind.PEN
                         drawingInput = InkInputType.STYLUS
@@ -1088,6 +1189,8 @@ fun CanvasScreen(
                             activeStylus.position.x, activeStylus.position.y).let { (x, y) -> InkPoint(x, y, 0L) })
                         inkPreview = InkPreview(InkKind.PEN, InkInputType.STYLUS, drawingPoints)
                     } else if (pressed.size >= 2 && activeStylus == null) {
+                        if (moveOwner === gestureMove) moveOwner = null
+                        gestureMove = null
                         mode = "zoom"
                         inkPreview = null
                         movePreview = null
@@ -1117,6 +1220,8 @@ fun CanvasScreen(
                         if (mode == "move" && !dragAdmitted && (change.position - start).getDistance() > touchSlop) {
                             dragAdmitted = true
                         }
+                        if (mode == "handle" && handle == HandleKind.MOVE &&
+                            (change.position - start).getDistance() > touchSlop) dragAdmitted = true
                         if (mode == "longPressPending" && (change.position - start).getDistance() > touchSlop) {
                             dragAdmitted = true
                             if (activeId == null) {
@@ -1139,19 +1244,11 @@ fun CanvasScreen(
                             }
                             "pan" -> viewport = latestViewport.value.pan(delta.x, delta.y)
                             "move" -> if (activeId != null) {
-                                val dx = (change.position.x - start.x) / latestViewport.value.scale
-                                val dy = (change.position.y - start.y) / latestViewport.value.scale
-                                val ids = if (activeId in latestSelectedIds.value) latestSelectedIds.value else setOf(activeId)
-                                movePreview = ids to WorldPoint(dx, dy)
+                                previewMove(change.position)
                             }
                             "handle" -> if (activeId != null && handle != null) {
                                 if (handle == HandleKind.MOVE) {
-                                    val ids = if (activeId in latestSelectedIds.value)
-                                        latestSelectedIds.value else setOf(activeId)
-                                    movePreview = ids to WorldPoint(
-                                        (end.x - start.x) / latestViewport.value.scale,
-                                        (end.y - start.y) / latestViewport.value.scale,
-                                    )
+                                    previewMove(end)
                                 } else handlePreview = previewHandle(gestureSnapshot, activeId, handle, end)
                             }
                             "create" -> {
@@ -1173,6 +1270,7 @@ fun CanvasScreen(
                     if (mode != "tap") event.changes.forEach { it.consume() }
                 }
                 } finally {
+                    if (moveOwner === gestureMove) moveOwner = null
                     clearInteractionPreviews()
                 }
             }

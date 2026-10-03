@@ -45,6 +45,8 @@ class EdgeAutoPanTest {
             .fetchSemanticsNode().boundsInWindow
         fun bounds(label: String) = composeRule.onNodeWithContentDescription(label)
             .fetchSemanticsNode().boundsInWindow
+        fun position(label: String) = composeRule.onNodeWithContentDescription(label)
+            .fetchSemanticsNode().positionInWindow
         fun frames(count: Int) { repeat(count) { composeRule.mainClock.advanceTimeByFrame() } }
         fun send(action: Int, point: Offset, downTime: Long) {
             val origin = IntArray(2)
@@ -61,18 +63,20 @@ class EdgeAutoPanTest {
             val area = canvas
             val edge = Offset(area.right - 3f, area.top + area.height * .45f)
             val initial = board.snapshot()
-            val fixedBefore = bounds(fixed.text).topLeft
+            val fixedBefore = position(fixed.text)
             val downTime = SystemClock.uptimeMillis()
+            var terminalSent = false
+            var finalPreview = Offset.Zero
             composeRule.mainClock.autoAdvance = false
             try {
                 send(MotionEvent.ACTION_DOWN, start, downTime)
                 frames(2)
                 send(MotionEvent.ACTION_MOVE, edge, downTime)
                 frames(4)
-                val targetBefore = bounds(moving.text).topLeft
+                val targetBefore = position(moving.text)
                 frames(90)
-                val targetAfter = bounds(moving.text).topLeft
-                val fixedAfter = bounds(fixed.text).topLeft
+                val targetAfter = position(moving.text)
+                val fixedAfter = position(fixed.text)
                 assertTrue("静止した指の保持中にもcameraが進む", fixedAfter.x < fixedBefore.x - 100f)
                 assertEquals("finger offset x", targetBefore.x, targetAfter.x, 3f)
                 assertEquals("finger offset y", targetBefore.y, targetAfter.y, 3f)
@@ -83,13 +87,15 @@ class EdgeAutoPanTest {
                 val center = area.center
                 send(MotionEvent.ACTION_MOVE, center, downTime)
                 frames(4)
-                val stopped = bounds(fixed.text).topLeft
+                val stopped = position(fixed.text)
                 frames(20)
-                assertEquals(stopped, bounds(fixed.text).topLeft)
+                assertEquals(stopped, position(fixed.text))
+                finalPreview = position(moving.text)
                 send(if (cancel) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP, center, downTime)
+                terminalSent = true
                 frames(3)
             } finally {
-                send(MotionEvent.ACTION_CANCEL, edge, downTime)
+                if (!terminalSent) send(MotionEvent.ACTION_CANCEL, edge, downTime)
                 composeRule.mainClock.autoAdvance = true
             }
             composeRule.waitForIdle()
@@ -98,8 +104,14 @@ class EdgeAutoPanTest {
                 assertEquals(0, saves.get())
                 assertFalse(board.canUndo)
             } else {
-                composeRule.waitUntil(10_000) { sessions.saveStateFor(1L, BoardSnapshot()).value == BoardSaveState.Idle }
+                composeRule.waitUntil(10_000) {
+                    saves.get() == 1 && sessions.saveStateFor(1L, BoardSnapshot()).value == BoardSaveState.Idle &&
+                        runBlocking { database.canvasDao().elements(1L).map { it.toModel() } } == board.elements
+                }
                 val after = board.snapshot()
+                val committedPosition = position(moving.text)
+                assertEquals("preview→commit x", finalPreview.x, committedPosition.x, 2f)
+                assertEquals("preview→commit y", finalPreview.y, committedPosition.y, 2f)
                 assertNotEquals(initial, after)
                 assertEquals(fixed, after.texts.single { it.id == fixed.id })
                 assertEquals(1, saves.get())
