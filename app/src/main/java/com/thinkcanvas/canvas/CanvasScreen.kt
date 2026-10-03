@@ -34,10 +34,12 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -49,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -132,17 +135,20 @@ fun CanvasScreen(
     var initialFitApplied by remember(board) { mutableStateOf(false) }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var tool by remember { mutableStateOf(SpatialTool.NONE) }
-    var inkTool by remember { mutableStateOf<InkKind?>(null) }
+    var tool by rememberSaveable { mutableStateOf(SpatialTool.NONE) }
+    var inkTool by rememberSaveable { mutableStateOf<InkKind?>(null) }
     var inkPreview by remember { mutableStateOf<InkPreview?>(null) }
-    var toolsExpanded by remember { mutableStateOf(false) }
+    var toolsExpanded by rememberSaveable { mutableStateOf(false) }
     var spatialPreview by remember { mutableStateOf<SpatialPreview?>(null) }
     var lassoPoints by remember { mutableStateOf<List<WorldPoint>>(emptyList()) }
     var gapPreview by remember { mutableStateOf<Pair<WorldPoint, WorldPoint>?>(null) }
     var menuTarget by remember { mutableStateOf<String?>(null) }
     var attachmentEditor by remember { mutableStateOf<Pair<String, HandleKind>?>(null) }
-    var regionNameId by remember { mutableStateOf<String?>(null) }
-    var regionName by remember { mutableStateOf("") }
+    var regionDraft by editorSession.regionNameDraft
+    val regionNameId = regionDraft?.id
+    val regionName = regionDraft?.name.orEmpty()
+    var discardTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var gestureGeneration by remember { mutableStateOf(0) }
     var guidance by remember { mutableStateOf<String?>(null) }
     var draft by editorSession.draft
     var movePreview by remember { mutableStateOf<Pair<Set<String>, WorldPoint>?>(null) }
@@ -193,7 +199,7 @@ fun CanvasScreen(
     val rawSearchMatches = if (searchOpen) board.snapshot().searchCanvas(searchQuery) else emptyList()
     val matchIds = rawSearchMatches.map { it.id }.toSet()
     val snapshot = board.snapshot()
-    val keptIds = selectedIds + matchIds
+    val keptIds = selectedIds + matchIds + listOfNotNull(regionNameId)
     val initialProjection = snapshot.semanticProjection(viewport.scale, bodyDp,
         keptIds, density.density, titleDp, titleLineHeightWorld)
     val boundaryShapes = snapshot.shapes.filter { initialProjection.visible(it.id) }
@@ -289,7 +295,7 @@ fun CanvasScreen(
     }
     val currentMatch = searchMatches.getOrNull(searchPosition)
     val projection = board.snapshot().semanticProjection(viewport.scale, bodyDp,
-        selectedIds + matchIds, density.density, titleDp, titleLineHeightWorld,
+        keptIds, density.density, titleDp, titleLineHeightWorld,
         renderedGeometry.boundsById)
     val latestProjection = rememberUpdatedState(projection)
     val latestSearchOpen = rememberUpdatedState(searchOpen)
@@ -302,11 +308,59 @@ fun CanvasScreen(
     val latestDraft = rememberUpdatedState(draft)
     val latestSaveBlocked = rememberUpdatedState(saving || saveFailed)
 
-    fun closeDraft() {
+    fun clearEditorFocus() {
         focusManager.clearFocus(force = true)
         keyboard?.hide()
-        draft = null
         lastBlankTap = null
+    }
+
+    fun closeDraft() {
+        clearEditorFocus()
+        textEditorBounds = null
+        editorToolbarBounds = null
+        discardTarget = null
+        draft = null
+    }
+
+    fun openRegionName(id: String, name: String) {
+        regionDraft = RegionNameDraft(id, name)
+    }
+
+    fun closeRegionName() {
+        clearEditorFocus()
+        chromeBounds.remove("regionName")
+        regionDraft = null
+        discardTarget = null
+    }
+
+    fun exitBlocked(): Boolean = saveState.value != BoardSaveState.Idle ||
+        editorSession.pendingDraftAcknowledgement.value != null
+
+    fun requestEditorExit(target: String, changed: Boolean, close: () -> Unit) {
+        if (exitBlocked()) return
+        if (changed) discardTarget = target else close()
+    }
+
+    fun clearInteractionPreviews() {
+        movePreview = null
+        handlePreview = null
+        spatialPreview = null
+        gapPreview = null
+        lassoPoints = emptyList()
+        inkPreview = null
+    }
+
+    fun finishToolInteraction(clearGuidance: Boolean = true) {
+        // Cancel the local gesture continuation before a later UP can commit.
+        gestureGeneration++
+        clearInteractionPreviews()
+        tool = SpatialTool.NONE
+        inkTool = null
+        toolsExpanded = false
+        if (clearGuidance) guidance = null
+        lastBlankTap = null
+        chromeBounds.remove("ink")
+        if (clearGuidance) chromeBounds.remove("guidance")
     }
 
     fun cancelDraft() {
@@ -382,7 +436,35 @@ fun CanvasScreen(
     }
 
     BackHandler {
-        if (!saving && !saveFailed && draft == null && regionNameId == null) onOpenList()
+        if (imeBottom > 0) {
+            keyboard?.hide()
+        } else if (!exitBlocked()) {
+            val currentDraft = editorSession.draft.value
+            val currentRegion = editorSession.regionNameDraft.value
+            when {
+                discardTarget != null -> discardTarget = null
+                currentDraft != null -> requestEditorExit("text:${currentDraft.sessionId}",
+                    currentDraft.hasUncommittedChanges(board.elements.firstOrNull { it.id == currentDraft.id }),
+                    ::closeDraft)
+                currentRegion != null -> requestEditorExit("region:${currentRegion.sessionId}",
+                    currentRegion.hasUncommittedChanges, ::closeRegionName)
+                menuTarget != null -> { menuTarget = null; chromeBounds.remove("menu") }
+                searchOpen -> {
+                    searchOpen = false; searchQuery = ""; searchPosition = 0
+                    viewportAnimation?.cancel()
+                    clearEditorFocus()
+                    chromeBounds.remove("search")
+                }
+                tool != SpatialTool.NONE || inkTool != null || spatialPreview != null ||
+                    inkPreview != null || movePreview != null || handlePreview != null ||
+                    gapPreview != null || lassoPoints.isNotEmpty() -> finishToolInteraction()
+                toolsExpanded -> toolsExpanded = false
+                selectedIds.isNotEmpty() -> {
+                    selectedId = null; selectedIds = emptySet(); guidance = null
+                }
+                else -> onOpenList()
+            }
+        }
     }
 
     fun hitTest(point: Offset): TextElement? {
@@ -519,8 +601,7 @@ fun CanvasScreen(
             if (latestSelectedIds.value.size > 1 && spatial in latestSelectedIds.value) {
                 selectedIds = latestSelectedIds.value - spatial
             } else if (spatial in latestSelectedIds.value && board.shapes.any { it.id == spatial && it.kind == ShapeKind.REGION }) {
-                regionNameId = spatial
-                regionName = board.shapes.first { it.id == spatial }.name
+                openRegionName(spatial, board.shapes.first { it.id == spatial }.name)
             } else { selectedId = null; selectedIds = setOf(spatial) }
         } else if (element != null && latestSelectedIds.value.size > 1 && element.id in latestSelectedIds.value) {
             lastBlankTap = null
@@ -596,13 +677,17 @@ fun CanvasScreen(
 
     LaunchedEffect(menuTarget) { if (menuTarget == null) chromeBounds.remove("menu") }
     LaunchedEffect(regionNameId) { if (regionNameId == null) chromeBounds.remove("regionName") }
+    LaunchedEffect(discardTarget, draft?.sessionId, regionDraft?.sessionId) {
+        val currentTarget = draft?.let { "text:${it.sessionId}" }
+            ?: regionDraft?.let { "region:${it.sessionId}" }
+        if (discardTarget != null && discardTarget != currentTarget) discardTarget = null
+    }
     LaunchedEffect(projection.hidden, menuTarget, attachmentEditor, regionNameId) {
         if (menuTarget?.let { !projection.visible(it) } == true) menuTarget = null
         if (attachmentEditor?.first?.let { !projection.visible(it) } == true)
             attachmentEditor = null
         if (regionNameId?.let { !projection.visible(it) } == true) {
-            regionNameId = null
-            keyboard?.hide()
+            closeRegionName()
         }
     }
     LaunchedEffect(regionNameId) {
@@ -686,7 +771,7 @@ fun CanvasScreen(
                         }
                     }
                 }
-            }.pointerInput(board) {
+            }.pointerInput(board, gestureGeneration) {
             awaitEachGesture {
                 try {
                 val down = awaitFirstDown(requireUnconsumed = false)
@@ -852,7 +937,7 @@ fun CanvasScreen(
                                             width, height)
                                         selectedIds = setOf(shape.id)
                                         selectedId = null
-                                        if (kind == ShapeKind.REGION) { regionNameId = shape.id; regionName = "" }
+                                        if (kind == ShapeKind.REGION) openRegionName(shape.id, "")
                                         true
                                     }
                                     SpatialTool.ARROW -> if (distance >= touchSlop) {
@@ -868,7 +953,7 @@ fun CanvasScreen(
                                     else -> false
                                 }
                                 if (created) saveSnapshot()
-                                tool = SpatialTool.NONE
+                                finishToolInteraction(clearGuidance = false)
                             }
                             "lasso" -> {
                                 val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
@@ -879,7 +964,7 @@ fun CanvasScreen(
                                         latestViewport.value.scale)
                                 selectedId = selectedIds.singleOrNull()?.takeIf { id -> board.elements.any { it.id == id } }
                                 guidance = "${selectedIds.size}個を選択"
-                                tool = SpatialTool.NONE
+                                finishToolInteraction(clearGuidance = false)
                             }
                             "move", "longPressPending" -> if (activeId != null) {
                                 val dx = (end.x - start.x) / latestViewport.value.scale
@@ -1050,12 +1135,7 @@ fun CanvasScreen(
                     if (mode != "tap") event.changes.forEach { it.consume() }
                 }
                 } finally {
-                    movePreview = null
-                    handlePreview = null
-                    spatialPreview = null
-                    gapPreview = null
-                    lassoPoints = emptyList()
-                    inkPreview = null
+                    clearInteractionPreviews()
                 }
             }
         },
@@ -1096,7 +1176,7 @@ fun CanvasScreen(
         val displayGeometry = displaySnapshot.resolveRenderedGeometry(displayTextBounds,
             viewport.scale, density.density)
         val displayProjection = displaySnapshot.semanticProjection(viewport.scale, bodyDp,
-            selectedIds + matchIds + movingIds, density.density, titleDp, titleLineHeightWorld,
+            keptIds + movingIds, density.density, titleDp, titleLineHeightWorld,
             displayGeometry.boundsById)
         val displayBoundaryShapes = displaySnapshot.shapes.filter { displayProjection.visible(it.id) }
         InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.MARKER,
@@ -1162,8 +1242,7 @@ fun CanvasScreen(
             onRename = { id ->
                 val shape = board.shapes.firstOrNull { it.id == id && it.kind == ShapeKind.REGION }
                 if (shape == null || saving || saveFailed) false else {
-                    regionNameId = id
-                    regionName = shape.name
+                    openRegionName(id, shape.name)
                     true
                 }
             },
@@ -1425,9 +1504,9 @@ fun CanvasScreen(
             ) { Text("‹ $boardName", color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
 
             if (inkTool == null) IconButton(onClick = {
+                finishToolInteraction()
                 searchOpen = true; searchQuery = ""; searchPosition = 0
-                selectedId = null; selectedIds = emptySet(); tool = SpatialTool.NONE
-                toolsExpanded = false
+                selectedId = null; selectedIds = emptySet()
             }, modifier = Modifier.align(Alignment.TopEnd).padding(end = 14.dp, top = 8.dp)
                 .size(44.dp).background(Color.White, CircleShape).pillBorder(22f)
                 .onGloballyPositioned { chromeBounds["searchButton"] = it.boundsInParent() }
@@ -1448,7 +1527,7 @@ fun CanvasScreen(
                     EditorOption("マーカー", inkTool == InkKind.MARKER, true, !saving && !saveFailed) {
                         inkTool = InkKind.MARKER
                     }
-                    EditorOption("やめる", false, false, true) { inkTool = null }
+                    EditorOption("やめる", false, false, true) { finishToolInteraction() }
                 }
             } else chromeBounds.remove("ink")
 
@@ -1499,8 +1578,12 @@ fun CanvasScreen(
                 SpatialTools(tool, toolsExpanded, !saving && !saveFailed,
                     onExpand = {
                         if (tool == SpatialTool.NONE) toolsExpanded = !toolsExpanded
-                        else { tool = SpatialTool.NONE; toolsExpanded = false }
-                    }, onSelect = { tool = it; toolsExpanded = false; guidance = "${it.label}を配置" },
+                        else finishToolInteraction()
+                    }, onSelect = {
+                        finishToolInteraction()
+                        tool = it
+                        guidance = "${it.label}を配置"
+                    },
                     onAccessibleAction = { item ->
                         if (saving || saveFailed || canvasSize == IntSize.Zero) false else {
                             val (x, y) = viewport.screenToWorld(
@@ -1517,7 +1600,7 @@ fun CanvasScreen(
                                     val shape = board.addShape(kind, x - width / 2f, y - height / 2f, width, height)
                                     selectedIds = setOf(shape.id)
                                     selectedId = null
-                                    if (kind == ShapeKind.REGION) { regionNameId = shape.id; regionName = "" }
+                                    if (kind == ShapeKind.REGION) openRegionName(shape.id, "")
                                     saveSnapshot()
                                     true
                                 }
@@ -1546,13 +1629,12 @@ fun CanvasScreen(
                                 }
                                 SpatialTool.NONE -> false
                             }
-                            if (created) { tool = SpatialTool.NONE; toolsExpanded = false }
+                            if (created) finishToolInteraction(clearGuidance = false)
                             created
                         }
                     }, onInkSelect = { kind ->
+                        finishToolInteraction()
                         inkTool = kind
-                        tool = SpatialTool.NONE
-                        toolsExpanded = false
                         selectedIds = emptySet()
                         selectedId = null
                     })
@@ -1624,8 +1706,7 @@ fun CanvasScreen(
                         }
                         if (board.shapes.any { it.id == id && it.kind == ShapeKind.REGION }) {
                             EditorOption(stringResource(R.string.menu_name), false, false, enabled = !saving && !saveFailed) {
-                                regionNameId = id
-                                regionName = board.shapes.first { it.id == id }.name
+                                openRegionName(id, board.shapes.first { it.id == id }.name)
                                 menuTarget = null
                             }
                         }
@@ -1650,7 +1731,7 @@ fun CanvasScreen(
                     .pillBorder(10f).padding(8.dp).onGloballyPositioned {
                         chromeBounds["regionName"] = it.boundsInParent()
                     }, verticalAlignment = Alignment.CenterVertically) {
-                    BasicTextField(regionName, onValueChange = { regionName = it },
+                    BasicTextField(regionName, onValueChange = { regionDraft = regionDraft?.copy(name = it) },
                         singleLine = true, modifier = Modifier.width(140.dp).padding(8.dp)
                             .focusRequester(regionNameFocusRequester)
                             .semantics { contentDescription = regionNameLabel },
@@ -1662,8 +1743,7 @@ fun CanvasScreen(
                         })
                     EditorOption(stringResource(R.string.done), false, true, enabled = !saving && !saveFailed) {
                         if (board.updateShape(editingRegionId, name = regionName)) saveSnapshot()
-                        regionNameId = null
-                        keyboard?.hide()
+                        closeRegionName()
                     }
                 }
             }
@@ -1694,6 +1774,30 @@ fun CanvasScreen(
                 }
                 EditorOption(stringResource(if (saveFailed) R.string.retry else R.string.done), false, true, enabled = !saving) { commitDraft() }
             }
+        }
+        val currentEditorTarget = draft?.let { "text:${it.sessionId}" }
+            ?: regionDraft?.let { "region:${it.sessionId}" }
+        if (discardTarget != null && discardTarget == currentEditorTarget) {
+            val target = discardTarget
+            AlertDialog(
+                onDismissRequest = { discardTarget = null },
+                title = { Text(stringResource(R.string.discard_edit_title)) },
+                confirmButton = {
+                    TextButton(enabled = !exitBlocked(), onClick = {
+                        if (!exitBlocked()) {
+                            when (target) {
+                                editorSession.draft.value?.let { "text:${it.sessionId}" } -> cancelDraft()
+                                editorSession.regionNameDraft.value?.let { "region:${it.sessionId}" } -> closeRegionName()
+                            }
+                        }
+                    }) { Text(stringResource(R.string.discard_edit)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { discardTarget = null }) {
+                        Text(stringResource(R.string.continue_edit))
+                    }
+                },
+            )
         }
         if (saving || saveFailed) {
             val saveFailedLabel = stringResource(R.string.save_failed)

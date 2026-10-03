@@ -40,4 +40,7 @@
     <string name="menu_close">閉じる</string>
     <string name="region_name">囲みの名前</string>
     <string name="region_name_hint">名前（任意）</string>
+    <string name="discard_edit_title">編集内容を破棄しますか？</string>
+    <string name="discard_edit">破棄する</string>
+    <string name="continue_edit">編集を続ける</string>
 </resources>

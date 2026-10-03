@@ -11,4 +11,4 @@
 | Activity 再生成・一時 focus loss | draft と保存 continuation を保持 |
 | Idle、次の blank tap | 既存の選択解除/新規入力規則 |
 
-「完了」は explicit commit、「やめる」は無保存の explicit cancel。外側終了は空の新規入力の破棄または既存 Done の確定。空白文字と既存編集の空文字は current Done の validation に従う。DOWN/UP 間の更新後も同じ sessionId の最新内容を用いる。system back とボード移動の入口は維持する。
+「完了」は explicit commit、「やめる」は無保存の explicit cancel。外側終了は空の新規入力の破棄または既存 Done の確定。空白文字と既存編集の空文字は current Done の validation に従う。DOWN/UP 間の更新後も同じ sessionId の最新内容を用いる。system Backによる終了は [Spec 007](../../007-neutral-canvas-interaction/spec.md) の破棄確認に従い、IMEを閉じるだけでは入力を保持する。ボード移動の保存契約は維持する。
