@@ -33,3 +33,4 @@ T001→T002→T003/T004→US1→US2→検証・converge。US1はeditorからの�
 ## Phase 6: Convergence
 
 - [x] T012 CRITICAL: app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktのDOWN admissionと全event/Releaseでlive gesture generationを照合し、recomposition前の終了後UPによる確定を拒否する。app/src/androidTest/java/com/thinkcanvas/canvas/NeutralInteractionTest.ktでBackと古いUPを同一UI turnでdispatchし、修正前failure・修正後無確定を確認する。FR-006/008、US2/AC4（contradicts）。
+- [ ] T013 CRITICAL: app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktのtext/region自動focusを破棄確認中は抑制し、確認解除時だけ編集へ復帰する。app/src/androidTest/java/com/thinkcanvas/canvas/NeutralInteractionTest.ktでtext/region確認の再生成後に背後editorが非focusであること、IMEを強制hideせず一回のBackで確認を閉じ入力を保持することを検証する。FR-007、US1再生成（contradicts）。

@@ -7,6 +7,7 @@ import android.view.MotionEvent
 import android.view.WindowInsets
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.layout.boundsInWindow
@@ -66,9 +67,9 @@ class NeutralInteractionTest {
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             composeRule.waitForIdle()
         }
-        fun dialogBack() {
+        fun dialogBack(hideKeyboard: Boolean = true) {
             // Read the focused dialog window, not the underlying Activity's insets.
-            Espresso.closeSoftKeyboard()
+            if (hideKeyboard) Espresso.closeSoftKeyboard()
             composeRule.waitUntil(5_000) {
                 var hidden = false
                 Espresso.onView(isRoot()).inRoot(isDialog()).check { view, failure ->
@@ -348,7 +349,8 @@ class NeutralInteractionTest {
         composeRule.waitForIdle()
         assertDiscardDialog()
         assertEquals("Survives recreation", editor.draft.value?.text)
-        dialogBack()
+        composeRule.onNodeWithContentDescription("新しいテキスト").assertIsNotFocused()
+        dialogBack(hideKeyboard = false)
         assertNoDialog()
         assertEquals("Survives recreation", editor.draft.value?.text)
         assertEquals(listOf(note), rows().map { it.toModel() })
@@ -363,6 +365,16 @@ class NeutralInteractionTest {
         waitEditor("囲みの名前")
         assertEquals("Draft name", editor.regionNameDraft.value?.name)
         assertEquals("Cluster", board.shapes.single().name)
+        assertEquals("Cluster", shapes().single().toModel().name)
+        back()
+        assertDiscardDialog()
+        scenario.recreate()
+        composeRule.waitForIdle()
+        assertDiscardDialog()
+        composeRule.onNodeWithContentDescription("囲みの名前").assertIsNotFocused()
+        dialogBack(hideKeyboard = false)
+        assertNoDialog()
+        assertEquals("Draft name", editor.regionNameDraft.value?.name)
         assertEquals("Cluster", shapes().single().toModel().name)
     }
 
