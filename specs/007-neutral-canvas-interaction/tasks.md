@@ -38,4 +38,4 @@ T001→T002→T003/T004→US1→US2→検証・converge。US1はeditorからの�
 
 ## Phase 7: Convergence
 
-- [ ] T015 CRITICAL: app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktでIME/確認/editor/menu/search/tool/expanded/selection/listの受理Backによるpointer continuationを同期に失効させ、preview前DOWNも古いMOVE/UPから確定させない。Initial passのtext outside loopもDOWN/live世代を照合する。app/src/androidTest/java/com/thinkcanvas/canvas/NeutralInteractionTest.ktでpreview前のtext/grip/MOVE/resize、menu/search/expanded、outside-confirmをBackとMOVE/UP同一UI turnで検証し、priority・入力/選択/Room/Undo・次の操作を維持する。FR-006/007/008、US1/AC3、US2/AC4（contradicts）。
+- [x] T015 CRITICAL: app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktでIME/確認/editor/menu/search/tool/expanded/selection/listの受理Backによるpointer continuationを同期に失効させ、preview前DOWNも古いMOVE/UPから確定させない。Initial passのtext outside loopもDOWN/live世代を照合する。app/src/androidTest/java/com/thinkcanvas/canvas/NeutralInteractionTest.ktでpreview前のtext/grip/MOVE/resize、menu/search/expanded、outside-confirmをBackとMOVE/UP同一UI turnで検証し、priority・入力/選択/Room/Undo・次の操作を維持する。FR-006/007/008、US1/AC3、US2/AC4（contradicts）。

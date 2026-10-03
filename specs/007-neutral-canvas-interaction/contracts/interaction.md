@@ -16,3 +16,5 @@
 | 通常Back | 既存board navigation |
 
 Running/Failed/pending ackでは破棄・重複commit・自動retry・board移動なし。標準attachment dialog/外部share/guideは既存authority保持。
+
+Backによる終了受理時は、preview前のDOWNも同期に失効させる。main/Initial outside textの両pointer loopはDOWNの世代とlive世代を照合し、古いMOVE/UPで選択・編集・内容確定を復活させない。既存priorityを選ぶ前にpreview/選択を消さない。
