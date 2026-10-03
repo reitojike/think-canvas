@@ -51,3 +51,7 @@ T001→T002→T003/T004→US1→US2→US3→T011→T012→T013。pure unit file�
 
 - [x] T014 HIGH: app/src/androidTest/java/com/thinkcanvas/canvas/OffscreenIndicatorsTest.ktにmove grip→edge auto-pan中のmarker0、native CANCEL後の選択marker復帰、内容/save/history不変を追加する。FR-007、US3/AC2、T009（partial）。
 - [x] T015 HIGH: app/src/androidTest/java/com/thinkcanvas/canvas/OffscreenIndicatorsTest.ktにpending acknowledgementだけのblockと対象削除直後のstale actionを同一UI turnで拒否する回帰を追加する。FR-006/007、US1/AC3、T009（partial）。
+
+## Phase 8: Convergence
+
+- [x] T016 MEDIUM: app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktの表示guardにtoolsExpandedを含め、app/src/androidTest/java/com/thinkcanvas/canvas/OffscreenIndicatorsTest.ktでパレット展開中0・Backで閉じた後の再表示・既存tool選択中抑止を確認する。FR-007、US3/AC2、plan:入力寿命（partial）。

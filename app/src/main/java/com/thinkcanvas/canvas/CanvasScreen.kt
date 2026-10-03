@@ -326,7 +326,7 @@ fun CanvasScreen(
         editorSession.pendingDraftAcknowledgement.value == null &&
         editorSession.draft.value == null && editorSession.regionNameDraft.value == null &&
         discardTarget == null && menuTarget == null && attachmentEditor == null &&
-        tool == SpatialTool.NONE && inkTool == null && moveOwner == null && movePreview == null &&
+        tool == SpatialTool.NONE && inkTool == null && !toolsExpanded && moveOwner == null && movePreview == null &&
         handlePreview == null && spatialPreview == null && lassoPoints.isEmpty() &&
         gapPreview == null && inkPreview == null && imeInsets.getBottom(density) == 0
 

@@ -20,3 +20,5 @@
 - 純粋geometry15件を追加。初回unit119件中1件は安全な端のFloat丸めによりtouch領域が微小に外へ出る失敗。projectionとtouch anchorをsafe rectへclampして、全unit119件・lint・debug/androidTest buildが成功した。
 - convergeでFR-006/007の入力寿命の直接検証不足2件をT014/T015へappendし、move preview/native CANCELとpending acknowledgement/removed targetのsame-turn stale action回帰を実装した。
 - focused emulator・全CI・canonical reviewは未実行。成功と扱わない。
+- 固定head `c8a9948a432703f32681711a93233082624e18cb`の検索focusedは標準launcher run `20261003T223614Z-1745275f267244568647bfb89d700693`で成功。実検索/current result、native pan、48dp edge表示、実タップ→同じ結果へfocus/消滅、Board/Room/history/save0を照合。新しいowned XML1/0/0/0、sourceUnchanged true、介入0。証跡hashはPRの検証コメントへ記録する。
+- 下位モデルの有限read-only点検で、パレット展開中も明示抑止する条件をT016へappendし、guardとBackで閉じた後の復帰回帰を追加した。新しい対象familyや保存pathは作らない。
