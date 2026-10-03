@@ -24,5 +24,6 @@ focusedは1回。host blockerなら分類し、CIの独立Pixel9/API37 full XML�
 - ローカルlint、unit **85/0/0/0**、debug/androidTest APK build、公開境界、schema差分なし、diff checkは成功。
 - source censusは107 identities（新規20、Spec 006の21を維持）。初回[CI 37123356008](https://github.com/reitojike/think-canvas/actions/runs/37123356008)は基本検証成功、GMD **107/12/0/0**、missing/extra/duplicate=0。新しいBack契約に対応するテスト、IME終了同期、region操作node、stroke間の保存待ちを補正。
 - Windows focusedの初回と補正#1は失敗を観測し、blind rerunなし。[family checkpoint](https://github.com/reitojike/think-canvas/pull/86#issuecomment-5969326255)で補正#2の有限scopeを固定した。
-- convergeはFR/SC/USの24項目、設計5項目、Constitution5原則を照合し、追加のbuildable gapは0。検証・deliveryのT009/T011は、完了を推定せずpendingを維持する。
+- 最初のconvergeはFR/SC/USの24項目、設計5項目、Constitution5原則を照合した。その後[canonical P1](https://github.com/reitojike/think-canvas/pull/86#discussion_r4173360329)からT012を追加し、recomposition前の古いUPを同期世代guardで拒否する不足を補正した。検証・deliveryのT009/T011は、最終headの完了を推定せずpendingを維持する。
+- BackとUPを同じUI turnでdispatchする回帰は、修正前`5d75867`でstrokeの意図しない確定を再現（Windows focused **1/1/0/0**）。修正後`cd67124`は **1/0/0/0**、ownershipPassed/sourceUnchanged=true。修正後run `20261003T133837Z-d85fb528f36f40259688287af67eb071`、XML SHA256 `504D7AC162772C7F74872EA6B32FB63931E5C79E03F95DA55C077EE5BD428864`。古いheadのfull CI成功・reviewは最終gateへ流用しない。
 - final candidateのfocused、full CI XML identity、canonical review、base/thread、実際のmergeとIssue AC判定は[PR #86](https://github.com/reitojike/think-canvas/pull/86)と[Issue #73](https://github.com/reitojike/think-canvas/issues/73)の最新証跡で確認する。古いheadの成功は最終gateに使わない。
