@@ -78,8 +78,7 @@ class NeutralInteractionTest {
                 }
                 hidden
             }
-            InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(
-                android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+            Espresso.pressBack()
             composeRule.waitUntil(5_000) {
                 composeRule.onAllNodesWithText("編集内容を破棄しますか？")
                     .fetchSemanticsNodes().isEmpty()
