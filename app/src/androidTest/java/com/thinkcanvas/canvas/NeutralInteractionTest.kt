@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.WindowInsets
+import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.assertIsNotFocused
@@ -12,6 +13,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -85,6 +87,7 @@ class NeutralInteractionTest {
                 composeRule.onAllNodesWithText("編集内容を破棄しますか？")
                     .fetchSemanticsNodes().isEmpty()
             }
+            waitEditorReady()
         }
         fun tapOutsideDialog() {
             val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -99,8 +102,35 @@ class NeutralInteractionTest {
             }
             instrumentation.waitForIdleSync()
             composeRule.waitForIdle()
+            waitEditorReady()
+        }
+        fun waitEditorReady() {
+            val label = editor.draft.value?.let {
+                if (it.id == null) "新しいテキスト" else "テキストを編集"
+            } ?: "囲みの名前"
+            composeRule.waitUntil(10_000) {
+                val nodes = composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes()
+                val focused = nodes.singleOrNull()?.config?.getOrNull(SemanticsProperties.Focused) == true
+                var ready = false
+                scenario.onActivity { activity ->
+                    val root = activity.window.decorView
+                    val input = activity.getSystemService(InputMethodManager::class.java)
+                    val view = root.findFocus()
+                    val insets = root.rootWindowInsets
+                    ready = root.hasWindowFocus() && view != null && input.isActive(view) &&
+                        input.isAcceptingText && insets?.isVisible(WindowInsets.Type.ime()) == true &&
+                        insets.getInsets(WindowInsets.Type.ime()).bottom > 0
+                }
+                focused && ready
+            }
+            composeRule.waitForIdle()
+        }
+        fun continueEditing() {
+            composeRule.onNodeWithText("編集を続ける").performClick()
+            waitEditorReady()
         }
         fun hideImeIfVisible() {
+            composeRule.waitForIdle()
             Espresso.closeSoftKeyboard()
             composeRule.waitUntil(5_000) {
                 var hidden = false
@@ -117,6 +147,7 @@ class NeutralInteractionTest {
             composeRule.waitUntil(10_000) {
                 composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes().isNotEmpty()
             }
+            waitEditorReady()
         }
         fun tapCanvas(xFraction: Float = .15f, yFraction: Float = .35f) {
             val canvas = composeRule.onNodeWithContentDescription("キャンバス")
@@ -241,7 +272,7 @@ class NeutralInteractionTest {
         startNew("Unsaved note")
         back()
         assertDiscardDialog()
-        composeRule.onNodeWithText("編集を続ける").performClick()
+        continueEditing()
         assertEquals("Unsaved note", editor.draft.value?.text)
         back()
         assertDiscardDialog()
@@ -306,7 +337,7 @@ class NeutralInteractionTest {
         composeRule.onNodeWithContentDescription("囲みの名前").performTextReplacement("Renamed")
         back()
         assertDiscardDialog()
-        composeRule.onNodeWithText("編集を続ける").performClick()
+        continueEditing()
         assertEquals("Renamed", editor.regionNameDraft.value?.name)
         back()
         assertDiscardDialog()
