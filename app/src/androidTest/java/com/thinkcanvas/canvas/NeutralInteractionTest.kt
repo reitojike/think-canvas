@@ -63,10 +63,14 @@ class NeutralInteractionTest {
             composeRule.waitForIdle()
         }
         fun dialogBack() {
-            hideImeIfVisible()
+            // Dialog owns Back. The underlying Activity's IME insets may be stale
+            // while its window is unfocused, so do not dispatch a preliminary Back.
             InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(
                 android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
-            composeRule.waitForIdle()
+            composeRule.waitUntil(5_000) {
+                composeRule.onAllNodesWithText("編集内容を破棄しますか？")
+                    .fetchSemanticsNodes().isEmpty()
+            }
         }
         fun tapOutsideDialog() {
             val instrumentation = InstrumentationRegistry.getInstrumentation()
