@@ -10,6 +10,7 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 [初期構築 #1](https://github.com/reitojike/think-canvas/issues/1) と Spec 001〜005 の実装、
 [初期ロードマップ #7](https://github.com/reitojike/think-canvas/issues/7) は完了しています。
 現在は日常利用での検証（dogfooding）と、使い勝手の改善を進める段階です。
+[Roadmap v2 #81](https://github.com/reitojike/think-canvas/issues/81)で、mobile操作と記録の改善を追跡しています。
 
 | 実装済みの仕様 | 完了 Issue | 公開仕様 |
 | --- | --- | --- |
@@ -18,12 +19,15 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 | Spec 003: Ink & Stylus | [#4](https://github.com/reitojike/think-canvas/issues/4) | [spec](specs/003-ink-stylus/spec.md) |
 | Spec 004: Semantic Navigation | [#5](https://github.com/reitojike/think-canvas/issues/5) | [spec](specs/004-semantic-navigation/spec.md) |
 | Spec 005: Board Lifecycle | [#6](https://github.com/reitojike/think-canvas/issues/6) | [spec](specs/005-board-lifecycle/spec.md) |
+| Spec 006: Text Editor Dismissal | [#71](https://github.com/reitojike/think-canvas/issues/71) | [spec](specs/006-text-editor-dismissal/spec.md) |
+| Spec 007: Neutral Canvas Interaction | [#73](https://github.com/reitojike/think-canvas/issues/73) | [spec](specs/007-neutral-canvas-interaction/spec.md) |
 
 ## 利用できる主な機能
 
 - テキストの作成・編集、見出し／本文と墨色／朱色の切り替え。
 - テキストの外側タップによる確定・終了。編集時のBackは未確定の変更がある場合だけ破棄を確認し、ツール・検索・選択のBackは通常キャンバスへ段階的に戻ります。
 - パン・ピンチズーム、要素の選択・移動、Undo/Redo。表示の移動や倍率変更では保存された配置を変えません。
+- 要素・複数選択を移動中に指を画面端で保持すると自動panし、指を離さず遠くへ運べます。中央へ戻ると停止し、一回の移動を一回の保存・Undoとして扱います。取消と検証範囲は[Spec008](specs/008-drag-edge-auto-pan/spec.md)と[検証手順](specs/008-drag-edge-auto-pan/quickstart.md)を参照してください。
 - 四角・丸・名前付き囲みの作成・サイズ変更、囲みと中身の移動、矢印の接続・曲げ・反転、
   複数選択とまとめて移動、空白の長押しドラッグによる余白挿入。
 - Jetpack Ink によるペン／マーカーの手書きとスタイラス入力。手書きも選択・移動・削除・保存できます。
