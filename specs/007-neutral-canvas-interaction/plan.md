@@ -47,10 +47,14 @@ pointer順: editor Initial-pass outside → main draft/save/chrome guard → sty
 
 1. textは保存済み要素とのtext/kind/color、regionはoriginalNameとの差分を判定する。確認targetはfamily/sessionIdにbindする。
 2. requestEditorExitはlive guard→確認/closeだけを扱う。確認前にも入力focus/IMEを解除し、入力とsessionを保持する。text/regionでfocus/IME cleanupを共有し、保存は扱わない。
-3. tool exitはpreviewを消しpointerInput keyを進めて古いUPのcommitを防ぐ。one-shotとink連続描画を維持。ink blank tapはstrokeなのでexitにしない。
+3. tool exitは世代を同期更新してpreviewを消す。pointerInput handler世代とDOWN時世代を一致させ、各event/Releaseでlive世代を照合して古いUPのcommitを拒否する。key変更によるcoroutine cancellationは後続cleanupとして併用する。one-shotとink連続描画を維持。ink blank tapはstrokeなのでexitにしない。
 4. Backはspecの有限順で一段階だけ処理。IMEはplatformに委ね、app callbackでIME表示時もIMEだけ閉じる。
 5. unit/lint/debug/androidTest build、focused/full instrumentation、public/diff/schemaを確認し、final headのCI/review/thread/baseをProcess #36で収束する。
 
 ## Complexity Tracking
 
 Constitution違反なし。generic coordinator/callback bagは作らず、2 editorのadmission/cleanupとspatial/inkのpreview cleanupだけを共有する。
+
+## Canonical review後の技術補正
+
+全CI成功後も、[P1 review](https://github.com/reitojike/think-canvas/pull/86#discussion_r4173360329)でrecomposition前のqueued Releaseが確定できる不足を確認した。gestureの内容・保存authorityは変えず、DOWN admissionと単一event loopの同期世代guardで全確定familyを保護する。BackとUPを同じUI turnでActivityのtouch dispatcherへ送り、frame待ちで競合を隠さない回帰にする。

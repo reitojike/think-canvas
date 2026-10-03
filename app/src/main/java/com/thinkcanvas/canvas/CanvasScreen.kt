@@ -721,6 +721,7 @@ fun CanvasScreen(
         if (dx != 0f || dy != 0f) viewport = viewport.pan(dx, dy)
     }
 
+    val pointerGeneration = gestureGeneration
     Box(
         modifier = Modifier.fillMaxSize().background(paper).safeDrawingPadding()
             .onSizeChanged { canvasSize = it }.clipToBounds()
@@ -774,10 +775,15 @@ fun CanvasScreen(
                         }
                     }
                 }
-            }.pointerInput(board, gestureGeneration) {
+            }.pointerInput(board, pointerGeneration) {
             awaitEachGesture {
                 try {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                val admittedGeneration = gestureGeneration
+                if (admittedGeneration != pointerGeneration) {
+                    down.consume()
+                    return@awaitEachGesture
+                }
                 // An outside dismissal must never enter the existing blank-double-tap path.
                 // Keep the original double tap at the initial blank point inside the new field.
                 if (latestDraft.value != null && textEditorBounds?.contains(down.position) != true)
@@ -878,6 +884,10 @@ fun CanvasScreen(
                         withTimeoutOrNull(remaining) { awaitPointerEvent() }
                     } else if (mode == "tap" && remaining <= 0) null
                     else awaitPointerEvent()
+                    if (gestureGeneration != admittedGeneration) {
+                        event?.changes?.forEach { it.consume() }
+                        break
+                    }
                     if (event == null) {
                         mode = "longPressPending"
                         // 長押し成立は視覚表示と振動で知らせる。drag の admission は touchSlop だけが決める。
