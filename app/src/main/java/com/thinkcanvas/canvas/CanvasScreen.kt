@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -90,6 +91,10 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -193,7 +198,8 @@ fun CanvasScreen(
     val longPressMillis = viewConfiguration.longPressTimeoutMillis
     val doubleTapTimeoutMillis = viewConfiguration.doubleTapTimeoutMillis
     val doubleTapSlop = android.view.ViewConfiguration.get(context).scaledDoubleTapSlop.toFloat()
-    val imeBottom = WindowInsets.ime.getBottom(density)
+    val imeInsets = WindowInsets.ime
+    val imeBottom = imeInsets.getBottom(density)
     val latestViewport = rememberUpdatedState(viewport)
     val latestElements = rememberUpdatedState(board.elements)
     val latestSnapshot = rememberUpdatedState(board.snapshot())
@@ -315,6 +321,54 @@ fun CanvasScreen(
     val latestInkTool = rememberUpdatedState(inkTool)
     val latestDraft = rememberUpdatedState(draft)
     val latestSaveBlocked = rememberUpdatedState(saving || saveFailed)
+
+    fun indicatorsAllowed(): Boolean = saveState.value == BoardSaveState.Idle &&
+        editorSession.pendingDraftAcknowledgement.value == null &&
+        editorSession.draft.value == null && editorSession.regionNameDraft.value == null &&
+        discardTarget == null && menuTarget == null && attachmentEditor == null &&
+        tool == SpatialTool.NONE && inkTool == null && moveOwner == null && movePreview == null &&
+        handlePreview == null && spatialPreview == null && lassoPoints.isEmpty() &&
+        gapPreview == null && inkPreview == null && imeInsets.getBottom(density) == 0
+
+    val indicatorNames = remember(snapshot.texts, snapshot.shapes, snapshot.ink, snapshot.arrows) {
+        buildMap {
+            snapshot.texts.forEach { put(it.id, it.text.take(32)) }
+            snapshot.shapes.forEach { put(it.id, when (it.kind) {
+                ShapeKind.REGION -> it.name.ifBlank { "囲み" }.take(32)
+                ShapeKind.RECTANGLE -> "四角形"
+                ShapeKind.ELLIPSE -> "楕円"
+            }) }
+            snapshot.ink.forEach { put(it.id, "描画") }
+            snapshot.arrows.forEach { put(it.id, "矢印") }
+        }
+    }
+    fun targetName(id: String): String = indicatorNames[id].orEmpty()
+
+    val indicatorTargets = if (indicatorsAllowed()) buildList {
+        currentMatch?.let { match -> add(IndicatorTarget(IndicatorKind.SEARCH, setOf(match.id),
+            match.bounds, "現在の検索結果、${searchPosition + 1}件目、${targetName(match.id)}へ移動")) }
+        renderedGeometry.union(selectedIds)?.let { bounds ->
+            add(IndicatorTarget(IndicatorKind.SELECTION, selectedIds, bounds,
+                if (selectedIds.size == 1) "選択対象、${targetName(selectedIds.single())}へ移動"
+                else "選択対象、${selectedIds.size}個のまとまりへ移動"))
+        }
+    } else emptyList()
+    val indicatorGap = with(density) { 8.dp.toPx() }
+    val topChromeKeys = setOf("board", "search", "searchButton", "guidance", "shareSelection")
+    val bottomChromeKeys = setOf("history", "zoom", "tools")
+    val indicatorChrome = chromeBounds.filterKeys { !it.startsWith("indicator:") }
+    val indicatorSafeBounds = Rect(indicatorGap,
+        (indicatorChrome.filterKeys { it in topChromeKeys }.values.maxOfOrNull { it.bottom } ?: 0f) + indicatorGap,
+        canvasSize.width - indicatorGap,
+        (indicatorChrome.filterKeys { it in bottomChromeKeys }.values.minOfOrNull { it.top }
+            ?: canvasSize.height.toFloat()) - indicatorGap)
+    val indicatorLayouts = offscreenIndicatorLayouts(indicatorTargets, viewport, canvasSize,
+        density.density, indicatorSafeBounds, indicatorChrome.values.toList())
+    val latestIndicatorLayouts = rememberUpdatedState(indicatorLayouts)
+
+    fun chromeContains(point: Offset): Boolean =
+        chromeBounds.any { (key, bounds) -> !key.startsWith("indicator:") && bounds.contains(point) } ||
+            indicatorsAllowed() && latestIndicatorLayouts.value.any { it.touchBounds.contains(point) }
 
     fun clearEditorFocus() {
         focusManager.clearFocus(force = true)
@@ -479,12 +533,10 @@ fun CanvasScreen(
         }
     }
 
-    fun focusMatch(index: Int) {
-        if (searchMatches.isEmpty() || canvasSize == IntSize.Zero) return
-        searchPosition = searchIndex(index, 0, searchMatches.size)
+    fun focusTarget(match: CanvasMatch) {
+        if (canvasSize == IntSize.Zero) return
         val width = canvasSize.width.toFloat()
         val height = canvasSize.height.toFloat()
-        val match = searchMatches[searchPosition]
         val initialTarget = viewport.focusMatch(match, width, height)
         val targetMatch = board.elements.firstOrNull { it.id == match.id }?.let { element ->
             val targetTier = semanticTier(bodyDp, initialTarget.scale)
@@ -500,6 +552,41 @@ fun CanvasScreen(
                 element.x + extent.width, element.y + extent.height))
         } ?: match
         animateViewport(viewport.focusMatch(targetMatch, width, height))
+    }
+
+    fun focusMatch(index: Int) {
+        if (searchMatches.isEmpty()) return
+        searchPosition = searchIndex(index, 0, searchMatches.size)
+        focusTarget(searchMatches[searchPosition])
+    }
+
+    fun navigateIndicator(target: IndicatorTarget): Boolean {
+        if (!indicatorsAllowed() || board.snapshot() != snapshot || latestIndicatorLayouts.value.none {
+            it.target.kind == target.kind && it.target.ids == target.ids }) return false
+        when (target.kind) {
+            IndicatorKind.SEARCH -> {
+                val liveMatch = if (searchOpen) board.snapshot().searchCanvas(searchQuery)
+                    .getOrNull(searchPosition) else null
+                if (liveMatch?.id !in target.ids) return false
+                focusMatch(searchPosition)
+            }
+            IndicatorKind.SELECTION -> {
+                if (selectedIds != target.ids) return false
+                val geometry = latestRenderedGeometry.value
+                val bounds = geometry.union(selectedIds) ?: return false
+                val text = board.elements.singleOrNull { it.id in selectedIds }
+                    ?.takeIf { selectedIds.size == 1 }
+                if (text != null) focusTarget(CanvasMatch(text.id, bounds, false)) else {
+                    val selectedGeometry = ResolvedRenderedGeometry(
+                        geometry.boundsById.filterKeys { it in selectedIds })
+                    animateViewport(board.snapshot().fittedViewport(canvasSize.width.toFloat(),
+                        canvasSize.height.toFloat(), measuredRegionLabelSizes.filterKeys { it in selectedIds },
+                        renderedGeometry = selectedGeometry))
+                }
+            }
+        }
+        lastBlankTap = null
+        return true
     }
     val selectedLabel = stringResource(R.string.selection_state_selected)
     val unselectedLabel = stringResource(R.string.unselected)
@@ -670,7 +757,7 @@ fun CanvasScreen(
 
     fun tap(point: Offset, eventUptimeMillis: Long?) {
         if (latestDraft.value != null || latestSaveBlocked.value) return
-        if (chromeBounds.values.any { it.contains(point) }) return
+        if (chromeContains(point)) return
         val (element, spatial) = hitCanvas(point)
         if (latestInkTool.value != null) return
         if (element == null && spatial == null) {
@@ -886,7 +973,7 @@ fun CanvasScreen(
                 if (latestDraft.value != null && textEditorBounds?.contains(down.position) != true)
                     return@awaitEachGesture
                 val requestedInk = down.type == PointerType.Stylus || latestInkTool.value != null
-                if (chromeBounds.values.any { it.contains(down.position) }) return@awaitEachGesture
+                if (chromeContains(down.position)) return@awaitEachGesture
                 latestAnimation.value?.cancel()
                 val previousBlankTap = lastBlankTap
                 if (previousBlankTap != null && !latestSaveBlocked.value &&
@@ -1581,6 +1668,35 @@ fun CanvasScreen(
                     if (it) { selectedIds = emptySet(); selectedId = null; saveSnapshot() }
                 }
             })
+
+        if (indicatorLayouts.isNotEmpty()) {
+            Box(Modifier.fillMaxSize().semantics { isTraversalGroup = true }) {
+                indicatorLayouts.forEach { layout ->
+                    key(layout.target.kind) {
+                        val boundsKey = "indicator:${layout.target.kind}"
+                        DisposableEffect(boundsKey) {
+                            onDispose { chromeBounds.remove(boundsKey) }
+                        }
+                        Box(Modifier.offsetPx(layout.touchBounds.left, layout.touchBounds.top)
+                            .size(48.dp).clip(CircleShape).background(Color.White).pillBorder(24f)
+                            .clickable(role = Role.Button, onClickLabel = layout.target.description) {
+                                navigateIndicator(layout.target)
+                            }
+                            .semantics {
+                                contentDescription = layout.target.description
+                                traversalIndex = layout.target.kind.ordinal.toFloat()
+                            }
+                            .onGloballyPositioned { chromeBounds[boundsKey] = it.boundsInParent() },
+                            contentAlignment = Alignment.Center) {
+                            Text("➜", color = if (layout.target.kind == IndicatorKind.SEARCH) vermilion else ink,
+                                fontSize = 22.sp, modifier = Modifier
+                                    .graphicsLayer { rotationZ = layout.angleDegrees }
+                                    .clearAndSetSemantics { })
+                        }
+                    }
+                }
+            }
+        }
 
         if (draft == null) {
             if (searchOpen) {
