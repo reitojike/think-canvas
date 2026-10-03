@@ -1,56 +1,17 @@
-name: Android checks
+name: Issue 78 EXACTLY_ONE_OBSERVATION
 
 on:
   pull_request:
-  push:
-    branches: [main]
+    branches: [codex/issue-78-postmerge-diagnostic-base]
+    types: [opened]
 
 permissions:
   contents: read
 
 jobs:
-  android:
-    name: lint・test・build・公開境界
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '25'
-      - uses: android-actions/setup-android@v4
-        with:
-          log-accepted-android-sdk-licenses: false
-      - name: Android SDK 37
-        run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
-      - uses: gradle/actions/setup-gradle@v6
-        with:
-          cache-provider: basic
-      - name: Android lint
-        run: ./gradlew :app:lintDebug --no-daemon
-      - name: Room schema の差分確認
-        run: |
-          ./gradlew :app:kspDebugKotlin --no-daemon
-          git diff --exit-code -- app/schemas
-          test -z "$(git ls-files --others --exclude-standard app/schemas)"
-      - name: 単体テスト
-        run: ./gradlew :app:testDebugUnitTest --no-daemon
-      - name: デバッグビルド
-        run: ./gradlew :app:assembleDebug --no-daemon
-      - name: PR のデバッグ APK を保存
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v7
-        with:
-          name: think-canvas-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 7
-      - name: 公開情報境界
-        shell: pwsh
-        run: ./scripts/check-public-boundary.ps1
-
   managed-device:
-    name: Android 17 Gradle Managed Device
+    name: DIAGNOSTIC_ONLY Pixel9 API37 single method
+    if: github.run_attempt == 1 && github.event.pull_request.head.ref == 'codex/issue-78-postmerge-diagnostic-observation'
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -73,6 +34,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p diagnostic-output
+          exec > >(tee diagnostic-output/environment-before.txt) 2>&1
+          printf 'actual_checkout_sha=%s\nactual_checkout_tree=%s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD^{tree})"
+          printf 'diagnostic_base_sha=%s\ndiagnostic_head_sha=%s\n' '${{ github.event.pull_request.base.sha }}' '${{ github.event.pull_request.head.sha }}'
           printf 'census_phase=before_gmd\n'
           printf 'run_id=%s\nrun_attempt=%s\nworkflow_sha=%s\n' \
             "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_SHA"
@@ -113,13 +78,18 @@ jobs:
             fi
           done
 
-      - name: ジェスチャーと保存の実機相当テスト
-        run: ./gradlew :app:pixel9Api37DebugAndroidTest -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
+      - name: EXACTLY_ONE_OBSERVATION 対象methodを1回だけ実行
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew :app:pixel9Api37DebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.class=com.thinkcanvas.canvas.EdgeAutoPanTest#multiSelectionTranslatesTextShapeAndFreeArrowTogether" -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon 2>&1 | tee diagnostic-output/focused-gmd.txt
       - name: GMD 実行後の環境を記録
         if: always()
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p diagnostic-output
+          exec > >(tee diagnostic-output/environment-after.txt) 2>&1
           printf 'census_phase=after_gmd\n'
 
           for package in \
@@ -138,13 +108,34 @@ jobs:
             fi
           done
 
+      - name: selectorをfail-closedで確認
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, sys, xml.etree.ElementTree as ET
+          files = list(pathlib.Path("app/build/outputs/androidTest-results/managedDevice/debug/pixel9Api37").glob("TEST-*.xml"))
+          identities = []
+          for path in files:
+              identities += [c.get("classname") + "#" + c.get("name") for c in ET.parse(path).getroot().iter("testcase")]
+          expected = ["com.thinkcanvas.canvas.EdgeAutoPanTest#multiSelectionTranslatesTextShapeAndFreeArrowTogether"]
+          valid = identities == expected
+          result = {"valid": valid, "identities": identities, "xml_files": [str(p) for p in files], "classification": "SELECTOR_GATE_PASSED" if valid else "ISSUE_78_DIAGNOSTIC_SELECTOR_GATE_FAILED"}
+          pathlib.Path("diagnostic-output").mkdir(exist_ok=True)
+          pathlib.Path("diagnostic-output/selector-gate.json").write_text(json.dumps(result, indent=2))
+          print(json.dumps(result))
+          sys.exit(0 if valid else 1)
+          PY
       - name: Android 17 GMD 診断結果を保存
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: android-17-gmd-test-results
+          name: issue-78-exactly-one-observation
           path: |
             app/build/reports/androidTests/managedDevice/
             app/build/outputs/androidTest-results/managedDevice/
+            app/build/outputs/managed_device_android_test_additional_output/
+            app/build/intermediates/managed_device_android_test_additional_output/
+            diagnostic-output/
           if-no-files-found: warn
           retention-days: 7
