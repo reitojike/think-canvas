@@ -51,3 +51,7 @@ custom checklistはreviewer-ownedの未査読markerを維持する。利用者�
 - [x] T015 app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktにnative pinchで15%/300%へ移った後のmove入力・preview/commit一致・一回saveを追加する。SC-002/FR-004のgeometry unitだけでなく入力経路を照合する（partial）。
 - [x] T016 app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktのbounded prototypeへA/Bそれぞれの複数選択dropを加え、相対配置・中央停止・一回Undo/saveの比較出力を残す。plan: prototype / FR-010（partial）。
 - [x] T017 app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktにeditor/modal・単純tap・slop未満のMOVE入力でtickerを開始しない回帰を追加する。FR-008 / T010（partial）。
+
+## Phase 8: Convergence
+
+- [x] T018 app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktのstylus takeover保存検証を、短い線の経過時間だけInkのFloat秒往復を考慮した1ms以内の比較にし、world座標・点数・種類・ID・開始終了metadata・一回save/Undoは厳密に照合する。native source固定後のowned focusedで実測した253→252ms以外の差を許さず、保存実装は変更しない。FR-008/010、SC-004、T010の目的を超える整数時間の完全一致assertを補正する（unrequested）。

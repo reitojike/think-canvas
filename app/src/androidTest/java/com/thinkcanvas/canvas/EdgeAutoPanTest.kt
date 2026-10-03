@@ -382,10 +382,27 @@ class EdgeAutoPanTest {
             frames(3)
         }
         composeRule.waitUntil(10_000) { saves.get() == 1 && savedSnapshot().ink.isNotEmpty() }
-        assertEquals(before.texts, board.elements)
+        assertEquals(before, board.snapshot().copy(ink = emptyList()))
         assertEquals(1, board.ink.size)
         assertEquals(InkInputType.STYLUS, board.ink.single().strokes.single().inputType)
-        assertEquals(board.snapshot(), savedSnapshot())
+        val stored = savedSnapshot()
+        assertEquals(before, stored.copy(ink = emptyList()))
+        val liveInk = board.ink.single()
+        val storedInk = stored.ink.single()
+        assertEquals(liveInk.copy(strokes = emptyList()), storedInk.copy(strokes = emptyList()))
+        val liveStroke = liveInk.strokes.single()
+        val storedStroke = storedInk.strokes.single()
+        assertEquals(liveStroke.copy(points = emptyList()), storedStroke.copy(points = emptyList()))
+        assertTrue(liveStroke.points.size >= 2)
+        assertEquals(liveStroke.points.size, storedStroke.points.size)
+        liveStroke.points.zip(storedStroke.points).forEach { (expected, actual) ->
+            assertEquals(expected.x, actual.x, 0f)
+            assertEquals(expected.y, actual.y, 0f)
+            // Ink's native batch stores float seconds; this short stroke can truncate by 1ms.
+            assertTrue(kotlin.math.abs(expected.elapsedMillis - actual.elapsedMillis) <= 1L)
+        }
+        assertTrue(storedStroke.points.zipWithNext().all { (first, second) ->
+            second.elapsedMillis >= first.elapsedMillis })
         composeRule.runOnUiThread { assertTrue(board.undo()) }
         assertEquals(before, board.snapshot())
         assertFalse(board.canUndo)
