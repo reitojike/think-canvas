@@ -12,8 +12,6 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextReplacement
@@ -147,13 +145,20 @@ class EdgeAutoPanTest {
         }
         fun assertNextPanWorks() {
             val before = position(fixed.text)
+            val content = board.snapshot()
             val area = canvas
-            composeRule.onNodeWithContentDescription("キャンバス").performTouchInput {
-                swipe(Offset(area.width * .22f, area.height * .72f),
-                    Offset(area.width * .32f, area.height * .74f))
-            }
+            val start = Offset(area.left + area.width * .22f, area.top + area.height * .72f)
+            val gesture = Gesture()
+            try {
+                gesture.send(MotionEvent.ACTION_DOWN, start)
+                gesture.send(MotionEvent.ACTION_MOVE, start + Offset(110f, 35f))
+                gesture.send(MotionEvent.ACTION_UP)
+            } finally { if (!gesture.ended) gesture.send(MotionEvent.ACTION_CANCEL) }
             composeRule.waitForIdle()
-            assertTrue(position(fixed.text).x > before.x + 30f)
+            val after = position(fixed.text)
+            assertEquals("次のnative pan x: $before → $after", before.x + 110f, after.x, 2f)
+            assertEquals("次のnative pan y: $before → $after", before.y + 35f, after.y, 2f)
+            assertEquals(content, board.snapshot())
         }
         fun waitSaved() {
             composeRule.waitUntil(10_000) {
