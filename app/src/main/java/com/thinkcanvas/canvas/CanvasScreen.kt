@@ -662,8 +662,8 @@ fun CanvasScreen(
     }
     val latestFinalizeDraft = rememberUpdatedState({ finalizeDraft() })
 
-    LaunchedEffect(draft?.id, draft?.x, draft?.y) {
-        if (draft != null) {
+    LaunchedEffect(draft?.id, draft?.x, draft?.y, discardTarget) {
+        if (draft != null && discardTarget == null) {
             focusRequester.requestFocus()
             keyboard?.show()
         }
@@ -693,8 +693,8 @@ fun CanvasScreen(
             closeRegionName()
         }
     }
-    LaunchedEffect(regionNameId) {
-        if (regionNameId != null) {
+    LaunchedEffect(regionNameId, discardTarget) {
+        if (regionNameId != null && discardTarget == null) {
             regionNameFocusRequester.requestFocus()
             keyboard?.show()
         }
