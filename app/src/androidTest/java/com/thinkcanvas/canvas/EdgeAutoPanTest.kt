@@ -50,7 +50,8 @@ import org.json.JSONObject
 class EdgeAutoPanTest {
     @get:Rule val composeRule = createEmptyComposeRule()
     private val moving = TextElement(id = "edge-moving", text = "Carry this", x = 500f, y = 1200f)
-    private val fixed = TextElement(id = "edge-fixed", text = "Fixed reference", x = 1300f, y = 1800f)
+    private val fixed = TextElement(id = "edge-fixed", kind = TextKind.TITLE,
+        text = "Fixed reference", x = 1300f, y = 1800f)
     private val defaults get() = BoardSnapshot(texts = listOf(moving, fixed))
     private val rectangle = ShapeElement(id = "edge-rectangle", kind = ShapeKind.RECTANGLE,
         x = 720f, y = 1450f, width = 300f, height = 140f, name = "Movable")
@@ -615,6 +616,7 @@ class EdgeAutoPanTest {
         PlatformTestStorageRegistry.getInstance().openOutputFile("edge-auto-pan-prototype.json").use {
             it.write(results.toString(2).toByteArray(Charsets.UTF_8))
         }
+        android.util.Log.i("EdgeAutoPanPrototype", results.toString())
     }
 
     @Test fun boundedProfilesKeepMultiSelectionTogetherOnDrop() {
@@ -660,6 +662,7 @@ class EdgeAutoPanTest {
         PlatformTestStorageRegistry.getInstance().openOutputFile("edge-auto-pan-multi-prototype.json").use {
             it.write(results.toString(2).toByteArray(Charsets.UTF_8))
         }
+        android.util.Log.i("EdgeAutoPanPrototype", results.toString())
     }
 
     @Test fun pinchLimitsKeepTheMoveAnchorAndReleasePositionConsistent() {

@@ -30,3 +30,7 @@ focusedはcandidateごとに一回、失敗は原因分類とcheckpointを行い
 - pure helperは19件、既存を含むunit104件が成功。15%でのFloat丸め差は0.001 world単位以下で比較する。
 - 初回の先行回帰は実行中に独立unitファイルが追加されsourceUnchanged=falseとなったため証跡から除外した。後のcompile failureはテストの文字列補間と誤ったimportとして分類し、sourceを修正した。0-testやstale結果を成功証跡にしない。
 - convergeは10 FR、4 SC、12操作条件、設計6項目、Constitution5原則を照合。入力倍率両端、A/B multi drop、editor/non-dragの検証残差をtasks T015〜T017へappendした。
+- head `95a042a`のBack回帰は、取消と旧UP拒否の後、Compose合成入力へ切り替えた次のpan確認で失敗した。同じproduction codeで次の操作もnativeへ揃えたhead `b97fc5a`、run `20261003T160350Z-f001dd9f73c94022a5e281372ce5493a`は1/0/0/0で成功。Backと旧UPは同一UI turn、queued frame停止、Room/履歴不変、独立した次のpanの110px/35pxを照合した。sourceUnchanged/owned XMLともtrue、介入0、XML SHA256 `623AE719F4C0C6F99030C1E7DB9E8C0531C96226AD38893E0345C45D880C2E22`。
+- A/B比較は`boundedProfilesCarryBeyondViewportAndStopBeforeDrop`と`boundedProfilesKeepMultiSelectionTogetherOnDrop`。結果JSONをtest storageと`EdgeAutoPanPrototype` logcatへ記録する。CI artifactの`logcat-com.thinkcanvas.canvas.EdgeAutoPanTest-<method>.txt`からmodel/density/移動量/offset/停止/saveの値を再読できる。操作成功は人間の片手操作・物理端末の快適さの判定とは区別する。
+- T015〜T017の実装後にconvergeを再実行し、10 FR・4 SC・12操作条件・設計6項目・Constitution5原則と全17 taskを照合した。追加のbuildable残差は0件、tasks.mdは変更しなかった。prototypeの採否とdelivery検証は既存のT007/T013/T014で未完了として管理する。
+- 下位モデルのread-only点検で、15%のFAR表示では非選択BODYの参照要素が消えることを確認し、独立した固定参照をTITLEにした。選択対象や移動契約は変えない。修正後のlint/unit104件/debug/androidTest build、公開境界186ファイル、schema/diffが成功した。
