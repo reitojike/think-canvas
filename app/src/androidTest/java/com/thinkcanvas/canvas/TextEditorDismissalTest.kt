@@ -7,11 +7,14 @@ import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.WindowInsets
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.isFocused
@@ -22,6 +25,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
@@ -60,6 +64,7 @@ class TextEditorDismissalTest {
         val scenario: ActivityScenario<MainActivity>,
         val database: CanvasDatabase,
         val sessions: BoardSessionViewModel,
+        private val composeTouch: Boolean,
     ) {
         val board get() = sessions.stateFor(1L, BoardSnapshot())
         fun rows() = runBlocking { database.canvasDao().elements(1L) }
@@ -170,6 +175,142 @@ class TextEditorDismissalTest {
             assertEquals(TextColor.VERMILION, prepared.color)
         }
         fun outside() = tap(point(.92f, .24f))
+        private var lastComposeDown: Long? = null
+
+        fun tap(point: Offset, withinDoubleTap: Boolean = false) = gesture(point,
+            withinDoubleTap = withinDoubleTap)
+
+        private fun assertLatestEditableInput(expected: String, sessionId: String) {
+            val latest = checkNotNull(editor.draft.value)
+            assertEquals(sessionId, latest.sessionId)
+            assertEquals("COMPOSE_SPLIT_TOUCH_TIMING_RECOVERY_INCOMPLETE: latest draft",
+                expected, latest.text)
+            val node = composeRule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().single()
+            check(node.config.contains(SemanticsActions.SetText))
+            val editable = checkNotNull(node.config.getOrNull(SemanticsProperties.EditableText))
+            assertEquals(expected, editable.text)
+        }
+
+        fun gesture(start: Offset, end: Offset = start, heldMillis: Long = 0,
+                    cancelled: Boolean = false, duringPress: (() -> Unit)? = null,
+                    expectedLatestText: String? = null, withinDoubleTap: Boolean = false) {
+            if (!composeTouch) {
+                uiAutomationGesture(start, end, heldMillis, cancelled, duringPress)
+                return
+            }
+            check(start == end && heldMillis == 0L && !cancelled) {
+                "Hybrid Compose mode only admits stationary short taps"
+            }
+            val canvas = composeRule.onNodeWithContentDescription("キャンバス")
+            canvas.assertIsDisplayed()
+            val host = composeRule.onAllNodesWithContentDescription("キャンバス")
+                .fetchSemanticsNodes().single()
+            val root = host.root
+            val bounds = host.boundsInRoot
+            check(bounds.width > 0f && bounds.height > 0f)
+            val origin = IntArray(2)
+            scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
+            // Preserve screen-pixel fractions/centers; injection uses clipped canvas-local px.
+            val local = start - Offset(origin[0].toFloat(), origin[1].toFloat()) -
+                host.boundsInWindow.topLeft
+            val rootPoint = bounds.topLeft + local
+            fun strictlyInside(rect: Rect, point: Offset) = point.x > rect.left &&
+                point.x < rect.right && point.y > rect.top && point.y < rect.bottom
+            check(strictlyInside(bounds, rootPoint)) { "Touch must be inside visible canvas bounds" }
+            val before = editor.draft.value
+            if (before != null) {
+                val field = composeRule.onNodeWithContentDescription(
+                    if (before.id == null) newEditor else existingEditor).fetchSemanticsNode()
+                val done = composeRule.onNodeWithText("完了").fetchSemanticsNode()
+                val cancel = composeRule.onNodeWithText("やめる").fetchSemanticsNode()
+                assertSame(root, field.root)
+                assertSame(root, done.root)
+                assertSame(root, cancel.root)
+                val cancelAncestors = generateSequence(cancel.layoutInfo) { it.parentInfo }.toList()
+                val toolbar = generateSequence(done.layoutInfo) { it.parentInfo }
+                    .first { ancestor -> cancelAncestors.any { it === ancestor } }
+                val toolbarBounds = toolbar.coordinates.boundsInRoot()
+                // Inclusive exclusion keeps test points off field and toolbar boundaries.
+                fun outside(rect: Rect) = rootPoint.x < rect.left || rootPoint.x > rect.right ||
+                    rootPoint.y < rect.top || rootPoint.y > rect.bottom
+                check(outside(field.boundsInRoot) && outside(toolbarBounds)) {
+                    "Outside DOWN must exclude current field and toolbar bounds"
+                }
+            }
+            val clock = composeRule.mainClock
+            val originalAutoAdvance = clock.autoAdvance
+            val started = clock.currentTime
+            val threshold = host.layoutInfo.viewConfiguration.longPressTimeoutMillis
+            if (withinDoubleTap) {
+                val previous = checkNotNull(lastComposeDown)
+                check(started - previous in 0..host.layoutInfo.viewConfiguration.doubleTapTimeoutMillis) {
+                    "Nearby outside tap must exercise the current double-tap interval"
+                }
+            }
+            var downCompleted = false
+            var terminalCompleted = false
+            var failure: Throwable? = null
+            fun sameRoot() = composeRule.onAllNodesWithContentDescription("キャンバス")
+                .fetchSemanticsNodes().single().root === root
+            fun assertActive() {
+                check(sameRoot()) { "HYBRID_TOUCH_RECOVERY_INCOMPLETE: Compose root changed" }
+                val currentBounds = canvas.fetchSemanticsNode().boundsInRoot
+                canvas.performTouchInput {
+                    val active = checkNotNull(currentPosition(0))
+                    assertTrue("Same pointer must retain its root position",
+                        (active + currentBounds.topLeft - rootPoint).getDistance() < .01f)
+                    assertEquals(null, currentPosition(1))
+                }
+            }
+            try {
+                clock.autoAdvance = false
+                check(40L < threshold) { "COMPOSE_SPLIT_TOUCH_TIMING_RECOVERY_INCOMPLETE" }
+                canvas.performTouchInput { down(local) }
+                downCompleted = true
+                lastComposeDown = started
+                assertActive()
+                duringPress?.invoke() // DOWN already flushed; SetText remains outside injection blocks.
+                if (before != null) {
+                    assertEquals(before.sessionId, checkNotNull(editor.draft.value).sessionId)
+                }
+                // Fixed budget: three Android test-clock frames (48ms), including recomposition.
+                // No condition-driven advancement or retry if the required state is not ready.
+                repeat(3) { clock.advanceTimeByFrame() }
+                if (before != null) {
+                    val expected = expectedLatestText ?: before.text
+                    assertLatestEditableInput(expected, before.sessionId)
+                }
+                assertActive()
+                val elapsed = clock.currentTime - started
+                assertTrue("COMPOSE_SPLIT_TOUCH_TIMING_RECOVERY_INCOMPLETE: minimum hold", elapsed >= 40L)
+                assertTrue("COMPOSE_SPLIT_TOUCH_TIMING_RECOVERY_INCOMPLETE: long press", elapsed < threshold)
+                println("COMPOSE_SHORT_TAP inputMillis=$elapsed thresholdMillis=$threshold rootStable=true")
+                canvas.performTouchInput { up(); terminalCompleted = true }
+                check(clock.currentTime - started == elapsed)
+                canvas.performTouchInput { assertEquals(null, currentPosition(0)) }
+            } catch (original: Throwable) {
+                failure = original
+                if (downCompleted && !terminalCompleted) {
+                    try {
+                        check(sameRoot()) { "HYBRID_TOUCH_RECOVERY_INCOMPLETE: cleanup root changed" }
+                        canvas.performTouchInput {
+                            check(currentPosition(0) != null)
+                            cancel()
+                            terminalCompleted = true
+                        }
+                    } catch (cleanup: Throwable) {
+                        original.addSuppressed(cleanup)
+                    }
+                }
+                throw original
+            } finally {
+                try { clock.autoAdvance = originalAutoAdvance }
+                catch (restore: Throwable) {
+                    if (failure != null) failure.addSuppressed(restore) else throw restore
+                }
+            }
+            composeRule.waitForIdle()
+        }
         fun assertUnchanged(expectedRedo: Boolean = false) {
             assertEquals(listOf(original), board.elements)
             assertEquals(listOf(original), rows().map { it.toModel() })
@@ -246,7 +387,7 @@ class TextEditorDismissalTest {
         }
     }
 
-    private fun withBoard(block: Harness.() -> Unit) {
+    private fun withBoard(composeTouch: Boolean = false, block: Harness.() -> Unit) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val seed = CanvasDatabase.open(context)
         runBlocking {
@@ -264,7 +405,7 @@ class TextEditorDismissalTest {
             }
             lateinit var sessions: BoardSessionViewModel
             scenario.onActivity { sessions = ViewModelProvider(it)[BoardSessionViewModel::class.java] }
-            Harness(scenario, database, sessions).block()
+            Harness(scenario, database, sessions, composeTouch).block()
         } finally {
             database.close()
             scenario.close()
@@ -278,12 +419,13 @@ class TextEditorDismissalTest {
         composeRule.onNodeWithContentDescription(label).assertIsFocused()
     }
 
-    private fun tap(point: Offset) = gesture(point)
-
-    private fun gesture(start: Offset, end: Offset = start, heldMillis: Long = 0,
+    private fun uiAutomationGesture(start: Offset, end: Offset = start, heldMillis: Long = 0,
                         cancelled: Boolean = false, duringPress: (() -> Unit)? = null) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val downTime = SystemClock.uptimeMillis()
+        var downAccepted = false
+        var terminalSent = false
+        var lastPoint = start
         fun send(action: Int, point: Offset) {
             val properties = arrayOf(MotionEvent.PointerProperties().apply {
                 id = 0; toolType = MotionEvent.TOOL_TYPE_FINGER
@@ -294,16 +436,29 @@ class TextEditorDismissalTest {
             val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action,
                 1, properties, coordinates, 0, 0, 1f, 1f, 0, 0,
                 InputDevice.SOURCE_TOUCHSCREEN, 0)
-            assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
-            event.recycle()
+            try {
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) terminalSent = true
+                val accepted = instrumentation.uiAutomation.injectInputEvent(event, true)
+                if (action == MotionEvent.ACTION_DOWN) downAccepted = accepted
+                assertTrue(accepted)
+            } finally { event.recycle() }
         }
-        send(MotionEvent.ACTION_DOWN, start)
-        Thread.sleep(heldMillis.coerceAtLeast(40))
-        duringPress?.invoke()
-        if (duringPress != null) assertTrue("The input update must fit inside a short tap",
-            SystemClock.uptimeMillis() - downTime < ViewConfiguration.getLongPressTimeout())
-        if (start != end) send(MotionEvent.ACTION_MOVE, end)
-        send(if (cancelled) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP, end)
+        try {
+            send(MotionEvent.ACTION_DOWN, start)
+            Thread.sleep(heldMillis.coerceAtLeast(40))
+            duringPress?.invoke()
+            if (duringPress != null) assertTrue("The input update must fit inside a short tap",
+                SystemClock.uptimeMillis() - downTime < ViewConfiguration.getLongPressTimeout())
+            if (start != end) { lastPoint = end; send(MotionEvent.ACTION_MOVE, end) }
+            send(if (cancelled) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP, end)
+        } catch (original: Throwable) {
+            if (downAccepted && !terminalSent) {
+                terminalSent = true
+                try { send(MotionEvent.ACTION_CANCEL, lastPoint) }
+                catch (cleanup: Throwable) { original.addSuppressed(cleanup) }
+            }
+            throw original
+        }
         composeRule.waitForIdle()
     }
 
@@ -349,11 +504,11 @@ class TextEditorDismissalTest {
         reopenSaved(expected)
     }
 
-    @Test fun outsideTapCommitsLatestInputWhenEmptyDraftChangesBetweenDownAndUp() = withBoard {
+    @Test fun outsideTapCommitsLatestInputWhenEmptyDraftChangesBetweenDownAndUp() = withBoard(composeTouch = true) {
         val saves = trackSaves()
         startNew()
         val sessionId = checkNotNull(editor.draft.value).sessionId
-        gesture(point(.92f, .24f), duringPress = {
+        gesture(point(.92f, .24f), expectedLatestText = "Input update while pressed", duringPress = {
             composeRule.onNodeWithContentDescription(newEditor)
                 .performTextReplacement("Input update while pressed")
             assertEquals(sessionId, checkNotNull(editor.draft.value).sessionId)
@@ -364,7 +519,7 @@ class TextEditorDismissalTest {
         assertSaved(listOf(original, created))
         assertEquals(1, saves.get())
         startNew("Before second update", y = .6f)
-        gesture(point(.92f, .24f), duringPress = {
+        gesture(point(.92f, .24f), expectedLatestText = "Latest non-empty update", duringPress = {
             composeRule.onNodeWithContentDescription(newEditor)
                 .performTextReplacement("Latest non-empty update")
         })
@@ -375,7 +530,7 @@ class TextEditorDismissalTest {
         assertEquals(2, saves.get())
     }
 
-    @Test fun existingEditOutsideTapCommitsContentKindColorAndPreservesIdentityPosition() = withBoard {
+    @Test fun existingEditOutsideTapCommitsContentKindColorAndPreservesIdentityPosition() = withBoard(composeTouch = true) {
         val saves = trackSaves()
         startExistingEditor()
         prepareExistingDraft("Changed note")
@@ -444,20 +599,20 @@ class TextEditorDismissalTest {
         assertUnchanged()
     }
 
-    @Test fun nearbyOutsideTapIsConsumedBeforeBlankDoubleTapZoom() = withBoard {
+    @Test fun nearbyOutsideTapIsConsumedBeforeBlankDoubleTapZoom() = withBoard(composeTouch = true) {
         val saves = trackSaves()
         val initial = point(.1f, .23f)
         val originalCenter = center(original.text)
         tap(initial)
         awaitEditor(newEditor)
         // Keep the original empty-draft zoom regression.
-        tap(initial - Offset(8f, 0f))
+        tap(initial - Offset(8f, 0f), withinDoubleTap = true)
         assertClosed()
         assertEquals(originalCenter, center(original.text))
         assertUnchanged()
         val next = point(.1f, .6f)
         startNew("Near outside", y = .6f)
-        tap(next - Offset(8f, 0f))
+        tap(next - Offset(8f, 0f), withinDoubleTap = true)
         assertClosed()
         assertEquals(originalCenter, center(original.text))
         assertEquals(2, board.elements.size)
@@ -472,6 +627,9 @@ class TextEditorDismissalTest {
         val first = point(.86f, .26f)
         val second = first + Offset(40f, 30f)
         val downTime = SystemClock.uptimeMillis()
+        var downAccepted = false
+        var terminalSent = false
+        var activeCount = 1
         fun send(action: Int, count: Int) {
             val properties = Array(count) { index -> MotionEvent.PointerProperties().apply {
                 id = index; toolType = MotionEvent.TOOL_TYPE_FINGER
@@ -483,14 +641,29 @@ class TextEditorDismissalTest {
             val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action,
                 count, properties, coordinates, 0, 0, 1f, 1f, 0, 0,
                 InputDevice.SOURCE_TOUCHSCREEN, 0)
-            assertTrue(automation.injectInputEvent(event, true))
-            event.recycle()
+            try {
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) terminalSent = true
+                val accepted = automation.injectInputEvent(event, true)
+                if (action == MotionEvent.ACTION_DOWN) downAccepted = accepted
+                if (accepted && action and MotionEvent.ACTION_MASK == MotionEvent.ACTION_POINTER_DOWN) activeCount = 2
+                if (accepted && action and MotionEvent.ACTION_MASK == MotionEvent.ACTION_POINTER_UP) activeCount = 1
+                assertTrue(accepted)
+            } finally { event.recycle() }
             Thread.sleep(40)
         }
-        send(MotionEvent.ACTION_DOWN, 1)
-        send(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 2)
-        send(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 2)
-        send(MotionEvent.ACTION_UP, 1)
+        try {
+            send(MotionEvent.ACTION_DOWN, 1)
+            send(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 2)
+            send(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 2)
+            send(MotionEvent.ACTION_UP, 1)
+        } catch (original: Throwable) {
+            if (downAccepted && !terminalSent) {
+                terminalSent = true
+                try { send(MotionEvent.ACTION_CANCEL, activeCount) }
+                catch (cleanup: Throwable) { original.addSuppressed(cleanup) }
+            }
+            throw original
+        }
         composeRule.waitForIdle()
         awaitEditor(newEditor)
         composeRule.onNodeWithContentDescription(newEditor).assertTextEquals("Two fingers")
@@ -524,7 +697,7 @@ class TextEditorDismissalTest {
         assertEquals(before.y, created.y)
     }
 
-    @Test fun existingDraftSurvivesRecreationThenCanCancelWithoutSave() = withBoard {
+    @Test fun existingDraftSurvivesRecreationThenCanCancelWithoutSave() = withBoard(composeTouch = true) {
         startExistingEditor()
         prepareExistingDraft("Changed note")
         recreate()
@@ -602,11 +775,11 @@ class TextEditorDismissalTest {
         assertOneHistoryChange(board.elements)
     }
 
-    @Test fun outsideTapDiscardsLatestEmptyInputBetweenDownAndUp() = withBoard {
+    @Test fun outsideTapDiscardsLatestEmptyInputBetweenDownAndUp() = withBoard(composeTouch = true) {
         val saves = trackSaves()
         startNew("Removed while pressed")
         val sessionId = checkNotNull(editor.draft.value).sessionId
-        gesture(point(.92f, .24f), duringPress = {
+        gesture(point(.92f, .24f), expectedLatestText = "", duringPress = {
             composeRule.onNodeWithContentDescription(newEditor).performTextReplacement("")
             assertEquals(sessionId, checkNotNull(editor.draft.value).sessionId)
         })
@@ -615,7 +788,7 @@ class TextEditorDismissalTest {
         assertEquals(0, saves.get())
     }
 
-    @Test fun explicitCancelDiscardsNewAndExistingEditsWithoutSaving() = withBoard {
+    @Test fun explicitCancelDiscardsNewAndExistingEditsWithoutSaving() = withBoard(composeTouch = true) {
         val saves = trackSaves()
         startNew("Explicit cancel")
         composeRule.onNodeWithText("やめる").performClick()
@@ -629,7 +802,7 @@ class TextEditorDismissalTest {
         assertEquals(0, saves.get())
     }
 
-    @Test fun existingEditExplicitDoneMatchesOutsideCompletion() = withBoard {
+    @Test fun existingEditExplicitDoneMatchesOutsideCompletion() = withBoard(composeTouch = true) {
         val saves = trackSaves()
         startExistingEditor()
         prepareExistingDraft("Changed note")
@@ -643,7 +816,7 @@ class TextEditorDismissalTest {
         reopenSaved(expected)
     }
 
-    @Test fun existingEditorEntryHandlesUnselectedSelectedDoneAndOutsideReentry() = withBoard {
+    @Test fun existingEditorEntryHandlesUnselectedSelectedDoneAndOutsideReentry() = withBoard(composeTouch = true) {
         val saves = trackSaves()
         // Fresh unselected entry selects first; completion retains that selection.
         startExistingEditor()
@@ -675,7 +848,7 @@ class TextEditorDismissalTest {
         assertEquals(2, saves.get())
     }
 
-    @Test fun existingDraftSurvivesRecreationThenOutsideCommits() = withBoard {
+    @Test fun existingDraftSurvivesRecreationThenOutsideCommits() = withBoard(composeTouch = true) {
         startExistingEditor()
         prepareExistingDraft("Changed note")
         val before = checkNotNull(editor.draft.value)
@@ -694,7 +867,7 @@ class TextEditorDismissalTest {
         reopenSaved(expected)
     }
 
-    @Test fun whitespaceOutsideUsesExistingDoneValidationForNewAndExistingDrafts() = withBoard {
+    @Test fun whitespaceOutsideUsesExistingDoneValidationForNewAndExistingDrafts() = withBoard(composeTouch = true) {
         val saves = trackSaves()
         repeat(2) { index ->
             startNew("   ")
@@ -712,7 +885,7 @@ class TextEditorDismissalTest {
         assertEquals(0, saves.get())
     }
 
-    @Test fun emptyExistingOutsideUsesExistingDoneValidationWithoutDeletingElement() = withBoard {
+    @Test fun emptyExistingOutsideUsesExistingDoneValidationWithoutDeletingElement() = withBoard(composeTouch = true) {
         val saves = trackSaves()
         repeat(2) { index ->
             startExistingEditor()
@@ -722,5 +895,37 @@ class TextEditorDismissalTest {
             assertUnchanged()
         }
         assertEquals(0, saves.get())
+    }
+
+    @Test fun splitOutsideTouchExceptionCancelsAndNextGestureSucceeds() = withBoard(composeTouch = true) {
+        val saves = trackSaves()
+        startNew("Cleanup draft")
+        val before = checkNotNull(editor.draft.value)
+        val originalAutoAdvance = composeRule.mainClock.autoAdvance
+        val sentinel = IllegalStateException("intentional split-touch sentinel")
+        var caught: Throwable? = null
+        try {
+            gesture(point(.92f, .24f), duringPress = { throw sentinel })
+        } catch (failure: Throwable) { caught = failure }
+        assertSame(sentinel, caught)
+        assertEquals(IllegalStateException::class.java, checkNotNull(caught).javaClass)
+        assertTrue(sentinel.suppressed.isEmpty())
+        assertEquals(originalAutoAdvance, composeRule.mainClock.autoAdvance)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("キャンバス").performTouchInput {
+            assertEquals(null, currentPosition(0))
+        }
+        assertEquals(before, editor.draft.value)
+        assertEquals(null, editor.pendingDraftAcknowledgement.value)
+        assertTrue(sessions.saveStateFor(1L, BoardSnapshot()).value is BoardSaveState.Idle)
+        assertEquals(0, saves.get())
+        assertUnchanged()
+        outside()
+        assertClosed()
+        val created = board.elements.single { it.id != original.id }
+        assertEquals(before.text, created.text)
+        assertSaved(listOf(original, created))
+        assertOneHistoryChange(listOf(original, created))
+        assertEquals(1, saves.get())
     }
 }
