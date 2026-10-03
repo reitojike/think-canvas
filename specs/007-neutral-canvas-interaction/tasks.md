@@ -22,9 +22,9 @@
 
 ## Phase 5: 検証と収束
 
-- [ ] T009 app/でlint/unit/debug/androidTest build、schema、公開境界、diff、focused/full instrumentationと既存Spec 006 regressionを検証しspecs/007-neutral-canvas-interaction/quickstart.mdへ結果を記録する。
+- [x] T009 app/でlint/unit/debug/androidTest build、schema、公開境界、diff、focused/full instrumentationと既存Spec 006 regressionを検証しspecs/007-neutral-canvas-interaction/quickstart.mdへ結果を記録する。
 - [x] T010 specs/007-neutral-canvas-interaction/tasks.mdにconvergeで残差を確認し、README.mdとSpec 006のBack参照を同期する。
-- [ ] T011 GitHub PRでfinal-head CI/canonical review/threads/baseを収束し、merge後にIssue #73の最新ACを逐条判定する。specs/007-neutral-canvas-interaction/quickstart.mdから証跡へ到達できるようにする。
+- [x] T011 GitHub PRでfinal-head CI/canonical review/threads/baseを収束し、merge後にIssue #73の最新ACを逐条判定する。specs/007-neutral-canvas-interaction/quickstart.mdから証跡へ到達できるようにする。
 
 ## 依存・実装戦略
 
@@ -39,3 +39,5 @@ T001→T002→T003/T004→US1→US2→検証・converge。US1はeditorからの�
 ## Phase 7: Convergence
 
 - [x] T015 CRITICAL: app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktでIME/確認/editor/menu/search/tool/expanded/selection/listの受理Backによるpointer continuationを同期に失効させ、preview前DOWNも古いMOVE/UPから確定させない。Initial passのtext outside loopもDOWN/live世代を照合する。app/src/androidTest/java/com/thinkcanvas/canvas/NeutralInteractionTest.ktでpreview前のtext/grip/MOVE/resize、menu/search/expanded、outside-confirmをBackとMOVE/UP同一UI turnで検証し、priority・入力/選択/Room/Undo・次の操作を維持する。FR-006/007/008、US1/AC3、US2/AC4（contradicts）。
+
+最終T009/T011は[Issue73のclosure証跡](https://github.com/reitojike/think-canvas/issues/73#issuecomment-5970533783)で完了。merge d56c098、final-head c4b5df7の両CI成功・fresh110/0/0/0・canonical clean・thread0・最新17 AC達成を記録した。

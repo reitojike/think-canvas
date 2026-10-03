@@ -4,8 +4,8 @@
 
 ## Phase 1: 開始時checkpoint
 
-- [ ] T001 #73のmerge/closure/current mainを再読し、app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktのpointer/Back/save/preview finite censusとSHAをspecs/008-drag-edge-auto-pan/plan.mdへ追記する。
-- [ ] T002 specs/008-drag-edge-auto-pan/のspec/plan/checklist/tasksをanalyzeし、authority/PO stop boundary・対象2 family・最終検証を照合する。
+- [x] T001 #73のmerge/closure/current mainを再読し、app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktのpointer/Back/save/preview finite censusとSHAをspecs/008-drag-edge-auto-pan/plan.mdへ追記する。
+- [x] T002 specs/008-drag-edge-auto-pan/のspec/plan/checklist/tasksをanalyzeし、authority/PO stop boundary・対象2 family・最終検証を照合する。
 
 ## Phase 2: 共通geometryとsession
 

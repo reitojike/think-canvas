@@ -72,3 +72,16 @@ Pixel9相当で候補A/Bを有限の右/下/角/中央復帰、複数選択drop�
 ## Complexity Tracking
 
 違反なし。既存の大きなpointer handlerは全面rewriteせず、移動の差分とframe lifecycleだけをboundedに追加する。保存・履歴・囲み包含の責務は既存ownerに残す。
+## 実装開始時checkpoint（2026-10-04）
+
+current mainは`d56c0980014bce1e30c615e3e9c7051e1a8c42ca`。#73は[PR86](https://github.com/reitojike/think-canvas/pull/86)でmerge済み、[最新17 ACのclosure](https://github.com/reitojike/think-canvas/issues/73#issuecomment-5970533783)まで完了。final head c4b5df7、両CI37131698617成功、fresh110/0/0/0（missing/extra/duplicate=0）、[canonical clean](https://github.com/reitojike/think-canvas/pull/86#issuecomment-5970501622)、全thread resolvedを再読した。Spec007を現行authorityとして使用する。
+
+finite censusの対象10 familyは計画時と同じ。現行primitiveは`invalidatePointerContinuation`（全受理Back・確認dismissの同期世代失効）、`clearInteractionPreviews`、`clearToolInteraction`、`finishToolInteraction`。mainとInitial outside textの両loopがDOWN/key/live世代を照合し、preview前のDOWNも終了後にMOVE/UPから確定しない。#78はmove/MOVE handleだけにUI-local ownerを接続し、他8 familyの入場・保存・座標を維持する。
+
+- frame処理は`LaunchedEffect`内、restricted pointer scopeの外へ置く。ownerのlatest pointerはSnapshot stateとして保持する。`snapshotFlow`でedge内かのBooleanを監視し、edge内の間だけframeを待つ。速度変更だけでtime basisをリセットせず、中央停止中はframe tickerを回さない。manual test clockでのbusy loopを避ける。
+- ownerは開始時snapshotも保持し、live BoardSnapshotが変わった場合は取消する。save stateが一瞬RunningからIdleへ戻る場合にも、他の内容変更へ古いdrag差分を加えない。通常frameでは同一list参照の比較で新しい内容計算を作らない。
+- pointer/frame/releaseはlive `viewport`から同じworld差分を求める。frameでpanを更新した直後にpointerが届いても、recomposition前の古いrememberUpdatedStateへcameraを戻さない。
+- `CanvasScreen`の任意profile引数でprototype A/Bを比較可能にする。既定のimmutable profileを使い、user settingsやglobal mutable test flagは作らない。最大速度は各axisの上限、角のvector上限はその√2倍とする。
+- save回数は既存`BoardSessionViewModel.setSaveOperation`で数え、処理は同じ`CanvasStore.get(context).save`へ委譲する。testの独自保存pathを作らない。画面位置・BoardSnapshot・Room・一回Undo/Redoを照合する。
+
+開始時analyzeは10 FR・4 SC・全US scenarioと14 taskを再照合。対象2 family・PO stop・final CI/review/closureに未対応なし。Constitution5原則に違反なし、CRITICAL/HIGH 0。prototype速度の採否と物理端末の横断UXは未検証として保持する。
