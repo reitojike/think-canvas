@@ -24,15 +24,15 @@
 
 **独立検証**: multi/region/inkの移動後の相対配置、Room、Undo/Redoを一回で照合。
 
-- [ ] T008 [US2] app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktにmulti-selection/region/ink、開始時包含、接続/自由矢印、one Undo/save、再読み込みの回帰を追加する。
-- [ ] T009 [US2] app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktでsession IDs/world anchorを固定し、既存translatedSelection/BoardState.moveSelectionへ同じdeltaだけを渡すことを確認する。frameごとのcontent record/saveを作らない。
+- [x] T008 [US2] app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktにmulti-selection/region/ink、開始時包含、接続/自由矢印、one Undo/save、再読み込みの回帰を追加する。
+- [x] T009 [US2] app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktでsession IDs/world anchorを固定し、既存translatedSelection/BoardState.moveSelectionへ同じdeltaだけを渡すことを確認する。frameごとのcontent record/saveを作らない。
 
 ## Phase 5: US3 取消と次の操作
 
 **独立検証**: Back/CANCEL/2本指/stylus/save block/recreation・STOPで残留0、古いframe/UP無効、対象外gestureと次の操作が成功。
 
-- [ ] T010 [US3] app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktに全停止条件・古いUP・MOVE handle・normal pan/pinch/ink/stylus・accessibilityの有限回帰を追加する。
-- [ ] T011 [US3] app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktでowner/世代の同期失効とfinally/Lifecycle STOP/disposal cleanupを統合し、#73終了primitiveを再利用してframe/Releaseをlive guardで拒否する。
+- [x] T010 [US3] app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktに全停止条件・古いUP・MOVE handle・normal pan/pinch/ink/stylus・accessibilityの有限回帰を追加する。
+- [x] T011 [US3] app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktでowner/世代の同期失効とfinally/Lifecycle STOP/disposal cleanupを統合し、#73終了primitiveを再利用してframe/Releaseをlive guardで拒否する。
 
 ## Phase 6: 検証とdelivery
 
@@ -45,3 +45,9 @@
 T001/T002→T003/T004→US1→US2→US3→converge/検証/delivery。同じCanvasScreenとinstrumentationは順に作業し、Gradleは一つずつ実行する。pure helperのtest作成は別ファイルの設計確認と並行可能。US1は単要素のMVP、US2/US3を加えてIssue78の全契約を満たす。
 
 custom checklistはreviewer-ownedの未査読markerを維持する。利用者の#81対応・merge許可に沿って進め、PO判断が必要な範囲では停止する。全最終検証が未完了の状態を完了と扱わない。
+
+## Phase 7: Convergence
+
+- [x] T015 app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktにnative pinchで15%/300%へ移った後のmove入力・preview/commit一致・一回saveを追加する。SC-002/FR-004のgeometry unitだけでなく入力経路を照合する（partial）。
+- [x] T016 app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktのbounded prototypeへA/Bそれぞれの複数選択dropを加え、相対配置・中央停止・一回Undo/saveの比較出力を残す。plan: prototype / FR-010（partial）。
+- [x] T017 app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktにeditor/modal・単純tap・slop未満のMOVE入力でtickerを開始しない回帰を追加する。FR-008 / T010（partial）。

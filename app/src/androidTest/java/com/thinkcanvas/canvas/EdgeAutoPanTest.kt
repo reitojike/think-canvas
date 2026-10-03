@@ -14,6 +14,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -52,7 +55,7 @@ class EdgeAutoPanTest {
     private val fixed = TextElement(id = "edge-fixed", text = "Fixed reference", x = 1300f, y = 1800f)
     private val defaults get() = BoardSnapshot(texts = listOf(moving, fixed))
     private val rectangle = ShapeElement(id = "edge-rectangle", kind = ShapeKind.RECTANGLE,
-        x = 720f, y = 1450f, width = 120f, height = 80f, name = "Movable")
+        x = 720f, y = 1450f, width = 300f, height = 140f, name = "Movable")
     private val stroke = InkElement(id = "edge-ink", kind = InkKind.PEN, strokes = listOf(
         InkStroke(id = "edge-stroke", startedAt = 1L, endedAt = 101L, inputType = InkInputType.TOUCH,
             points = listOf(InkPoint(600f, 1400f, 0L), InkPoint(780f, 1400f, 100L)))))
@@ -171,6 +174,21 @@ class EdgeAutoPanTest {
             assertEquals(after, board.snapshot())
             assertFalse(board.canRedo)
         }
+        fun pinch(factor: Float) {
+            // Small, distinct native contacts keep both pointers inside the canvas even at 300%.
+            val anchor = position(moving.text) + Offset(4f, 4f)
+            val gesture = Gesture()
+            val initial = listOf(anchor - Offset(6f, 0f), anchor + Offset(6f, 0f))
+            val changed = listOf(anchor - Offset(6f * factor, 0f), anchor + Offset(6f * factor, 0f))
+            try {
+                gesture.send(MotionEvent.ACTION_DOWN, initial.first())
+                gesture.event(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), initial)
+                gesture.event(MotionEvent.ACTION_MOVE, changed)
+                gesture.event(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), changed)
+                gesture.send(MotionEvent.ACTION_UP)
+            } finally { if (!gesture.ended) gesture.send(MotionEvent.ACTION_CANCEL) }
+            composeRule.waitForIdle()
+        }
         fun send(action: Int, point: Offset, downTime: Long) {
             val origin = IntArray(2)
             scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
@@ -181,7 +199,9 @@ class EdgeAutoPanTest {
             finally { event.recycle() }
         }
         fun stationaryDrag(cancel: Boolean = false) {
-            composeRule.onNodeWithContentDescription(moving.text).performClick()
+            val selected = composeRule.onNodeWithContentDescription(moving.text).fetchSemanticsNode()
+                .config.getOrNull(SemanticsProperties.StateDescription) == "選択中"
+            if (!selected) composeRule.onNodeWithContentDescription(moving.text).performClick()
             val start = bounds("要素を移動").center
             val area = canvas
             val edge = Offset(area.right - 3f, area.top + area.height * .45f)
@@ -592,6 +612,148 @@ class EdgeAutoPanTest {
         }
     }
 
+    @Test fun boundedProfilesKeepMultiSelectionTogetherOnDrop() {
+        val results = JSONArray()
+        for ((name, profile) in listOf("A" to EdgeAutoPanProfile.PrototypeA, "B" to EdgeAutoPanProfile.PrototypeB)) {
+            withBoard(defaults.copy(shapes = listOf(rectangle), arrows = listOf(freeArrow)), profile) {
+                select(moving.text)
+                action("四角: Movable", "選択に追加")
+                action("矢印", "選択に追加")
+                val before = board.snapshot()
+                val start = bounds("要素を移動").center
+                val area = canvas
+                val edge = Offset(area.right - 3f, start.y)
+                var pan = 0f
+                drag(start, edge) { gesture ->
+                    val reference = position(fixed.text)
+                    frames(90)
+                    pan = position(fixed.text).x - reference.x
+                    assertEquals(before, board.snapshot())
+                    gesture.send(MotionEvent.ACTION_MOVE, area.center)
+                    frames(4)
+                    val stopped = position(fixed.text)
+                    frames(20)
+                    assertEquals(stopped, position(fixed.text))
+                    gesture.send(MotionEvent.ACTION_UP)
+                    frames(3)
+                }
+                waitSaved()
+                val after = board.snapshot()
+                val dx = after.texts.single { it.id == moving.id }.x - moving.x
+                val dy = after.texts.single { it.id == moving.id }.y - moving.y
+                assertEquals(rectangle.x + dx, after.shapes.single().x, .001f)
+                assertEquals(rectangle.y + dy, after.shapes.single().y, .001f)
+                val from = after.arrows.single().from as ArrowEnd.Free
+                assertEquals(750f + dx, from.x, .001f)
+                assertEquals(1300f + dy, from.y, .001f)
+                assertOneHistory(before, after)
+                results.put(JSONObject().put("profile", name).put("family", "multi")
+                    .put("panX", pan).put("deltaWorldX", dx).put("deltaWorldY", dy)
+                    .put("saveCount", saves.get()).put("relativeError", 0).put("centerStopDrift", 0))
+            }
+        }
+        PlatformTestStorageRegistry.getInstance().openOutputFile("edge-auto-pan-multi-prototype.json").use {
+            it.write(results.toString(2).toByteArray(Charsets.UTF_8))
+        }
+    }
+
+    @Test fun pinchLimitsKeepTheMoveAnchorAndReleasePositionConsistent() {
+        for (percent in listOf(15, 300)) withBoard {
+            select(moving.text)
+            if (percent == 15) pinch(.01f) else repeat(8) { pinch(2f) }
+            val zoom = composeRule.onNode(hasContentDescription("倍率を切り替える、", substring = true))
+                .fetchSemanticsNode().config[SemanticsProperties.ContentDescription].single()
+            assertTrue(zoom, zoom.contains("、$percent%"))
+            stationaryDrag()
+        }
+    }
+
+    @Test fun tapAndSlopJitterDoNotStartAutoPan() {
+        withBoard {
+            select(moving.text)
+            val before = board.snapshot()
+            val camera = position(fixed.text)
+            val gesture = Gesture()
+            gesture.send(MotionEvent.ACTION_DOWN, bounds("要素を移動").center)
+            gesture.send(MotionEvent.ACTION_UP)
+            composeRule.waitForIdle()
+            composeRule.mainClock.autoAdvance = false
+            try { frames(40); assertEquals(camera, position(fixed.text)) }
+            finally { composeRule.mainClock.autoAdvance = true }
+            assertUnchanged(before)
+        }
+        withBoard(defaults.copy(shapes = listOf(rectangle))) {
+            select("四角: Movable")
+            val before = board.snapshot()
+            val start = bounds("移動").center
+            val camera = position(fixed.text)
+            val jitter = android.view.ViewConfiguration.get(instrumentation.targetContext).scaledTouchSlop * .25f
+            val gesture = Gesture()
+            composeRule.mainClock.autoAdvance = false
+            try {
+                gesture.send(MotionEvent.ACTION_DOWN, start)
+                gesture.send(MotionEvent.ACTION_MOVE, start + Offset(jitter, 0f))
+                frames(40)
+                assertEquals(camera, position(fixed.text))
+                assertEquals(before, board.snapshot())
+                val preview = position("四角: Movable")
+                gesture.send(MotionEvent.ACTION_UP)
+                frames(3)
+                assertEquals(preview.x, position("四角: Movable").x, 2f)
+            } finally {
+                if (!gesture.ended) gesture.send(MotionEvent.ACTION_CANCEL)
+                composeRule.mainClock.autoAdvance = true
+            }
+            composeRule.waitForIdle()
+            waitSaved()
+            assertOneHistory(before, board.snapshot())
+        }
+    }
+
+    @Test fun editorAndDiscardDialogDoNotAdmitTheMoveTicker() = withBoard {
+        select(moving.text)
+        composeRule.onNodeWithContentDescription(moving.text).performClick()
+        composeRule.waitUntil(10_000) {
+            var ready = false
+            scenario.onActivity {
+                val view = it.window.decorView.findFocus()
+                val input = it.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                ready = view != null && input.isActive(view) && input.isAcceptingText &&
+                    it.window.decorView.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime()) == true
+            }
+            ready
+        }
+        val before = board.snapshot()
+        val area = canvas
+        val start = Offset(area.right - 180f, area.top + area.height * .15f)
+        val edge = Offset(area.right - 3f, start.y)
+        drag(start, edge) { gesture ->
+            val camera = position(fixed.text)
+            frames(40)
+            assertEquals(camera, position(fixed.text))
+            gesture.send(MotionEvent.ACTION_UP)
+            frames(3)
+        }
+        assertEquals(moving.text, sessions.textEditorFor(1L, before).draft.value?.text)
+        composeRule.onNodeWithContentDescription("テキストを編集").performTextReplacement("Changed")
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        composeRule.waitUntil(5_000) {
+            var hidden = false
+            scenario.onActivity { hidden = it.window.decorView.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime()) == false }
+            hidden
+        }
+        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        composeRule.onNodeWithText("編集内容を破棄しますか？").assertExists()
+        val camera = position(fixed.text)
+        composeRule.mainClock.autoAdvance = false
+        try { frames(40); assertEquals(camera, position(fixed.text)) }
+        finally { composeRule.mainClock.autoAdvance = true }
+        assertUnchanged(before)
+        composeRule.onNodeWithText("破棄する").performClick()
+        composeRule.waitForIdle()
+        assertUnchanged(before)
+    }
+
     @Test fun panToolsAndGapDoNotStartTheMoveTicker() {
         for (tool in listOf("pan", "四角", "丸", "囲み", "矢印", "まとめて選ぶ", "ペン", "マーカー", "gap")) withBoard {
             val before = board.snapshot()
@@ -612,7 +774,7 @@ class EdgeAutoPanTest {
                 frames(4)
                 val camera = position(fixed.text)
                 frames(40)
-                assertEquals("$toolにはmove tickerを作らない", camera, position(fixed.text))
+                assertEquals("${tool}にはmove tickerを作らない", camera, position(fixed.text))
                 assertEquals(before, board.snapshot())
                 scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
                 gesture.send(MotionEvent.ACTION_CANCEL)
@@ -636,7 +798,7 @@ class EdgeAutoPanTest {
                 drag(start, edge) { gesture ->
                     val camera = position(fixed.text)
                     frames(40)
-                    assertEquals("$handleにはmove tickerを作らない", camera, position(fixed.text))
+                    assertEquals("${handle}にはmove tickerを作らない", camera, position(fixed.text))
                     assertEquals(before, board.snapshot())
                     scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
                     gesture.send(MotionEvent.ACTION_CANCEL)
