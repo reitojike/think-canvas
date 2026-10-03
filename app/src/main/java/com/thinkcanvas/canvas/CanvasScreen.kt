@@ -976,7 +976,11 @@ fun CanvasScreen(
                 }
                 val startWorld = viewport.screenToWorld(start.x, start.y).let { WorldPoint(it.first, it.second) }
                 fun previewMove(pointer: Offset) {
-                    if (!dragAdmitted || moveIds.isEmpty()) return
+                    if (moveIds.isEmpty()) return
+                    if (!dragAdmitted) {
+                        movePreview = moveIds to worldDragDelta(viewport, startWorld, pointer)
+                        return
+                    }
                     val owner = gestureMove ?: MoveDragSession(moveIds, startWorld, admittedGeneration,
                         gestureSnapshot, pointer).also { gestureMove = it; moveOwner = it }
                     if (moveIsLive(owner)) {
@@ -1185,7 +1189,7 @@ fun CanvasScreen(
                         drawingInput = InkInputType.STYLUS
                         drawingPointer = activeStylus.id
                         drawingStart = SystemClock.uptimeMillis()
-                        drawingPoints = listOf(latestViewport.value.screenToWorld(
+                        drawingPoints = listOf(viewport.screenToWorld(
                             activeStylus.position.x, activeStylus.position.y).let { (x, y) -> InkPoint(x, y, 0L) })
                         inkPreview = InkPreview(InkKind.PEN, InkInputType.STYLUS, drawingPoints)
                     } else if (pressed.size >= 2 && activeStylus == null) {
@@ -1206,7 +1210,7 @@ fun CanvasScreen(
                             val center = (first.position + second.position) / 2f
                             val before = (first.previousPosition - second.previousPosition).getDistance()
                             val after = (first.position - second.position).getDistance()
-                            if (before > 0f) viewport = latestViewport.value.zoomAt(
+                            if (before > 0f) viewport = viewport.zoomAt(
                                 previousCenter.x, previousCenter.y, after / before,
                                 center.x - previousCenter.x, center.y - previousCenter.y,
                             )

@@ -9,15 +9,15 @@
 
 ## Phase 2: 共通geometryとsession
 
-- [ ] T003 [P] app/src/test/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktに四辺/角/中央/小画面/速度上限、density、dt、倍率.15/1/3のpointer/camera world差分テストを先に追加する。
-- [ ] T004 app/src/main/java/com/thinkcanvas/canvas/EdgeAutoPan.ktにpure速度/world anchor helperとUI-local move sessionを実装する。band/速度/dtはfinite、中央停止帯、preview中はBoardSnapshot非変更、sessionをRoom/saved instanceへ保存しない。
+- [x] T003 [P] app/src/test/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktに四辺/角/中央/小画面/速度上限、density、dt、倍率.15/1/3のpointer/camera world差分テストを先に追加する。
+- [x] T004 app/src/main/java/com/thinkcanvas/canvas/EdgeAutoPan.ktにpure速度/world anchor helperとUI-local move sessionを実装する。band/速度/dtはfinite、中央停止帯、preview中はBoardSnapshot非変更、sessionをRoom/saved instanceへ保存しない。
 
 ## Phase 3: US1 指を離さず運ぶ
 
 **独立検証**: pointerを端で固定した一回のdragでcanvas幅/高さを超えて運び、中央復帰でpan停止、UPで見た位置へ一回確定。
 
-- [ ] T005 [US1] app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktにmanual frame clockのstationary pointer、finger offset、固定要素pan、release前BoardState不変、UP位置の回帰を追加する。
-- [ ] T006 [US1] app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktにrestricted pointer scope外のframe処理を追加し、move/MOVE handleのpreview・releaseを一つのworld anchor差分へ統合する。frameでは既存viewport/previewのみ、releaseではmoveSelection/saveSnapshotを一回呼ぶ。
+- [x] T005 [US1] app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktにmanual frame clockのstationary pointer、finger offset、固定要素pan、release前BoardState不変、UP位置の回帰を追加する。
+- [x] T006 [US1] app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.ktにrestricted pointer scope外のframe処理を追加し、move/MOVE handleのpreview・releaseを一つのworld anchor差分へ統合する。frameでは既存viewport/previewのみ、releaseではmoveSelection/saveSnapshotを一回呼ぶ。
 - [ ] T007 [US1] Pixel9相当でA/B profileの右/下/角/中央復帰/dropを比較し、specs/008-drag-edge-auto-pan/plan.mdへ採用値・操作・結果・物理端末の限界を記録する。製品判断が必要ならPOへエスカレーションし停止する。
 
 ## Phase 4: US2 相対配置と履歴
