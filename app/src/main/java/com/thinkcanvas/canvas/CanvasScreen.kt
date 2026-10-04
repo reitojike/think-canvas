@@ -846,10 +846,12 @@ fun CanvasScreen(
     val latestFinalizeDraft = rememberUpdatedState({ finalizeDraft() })
 
     suspend fun focusEditorInput(requester: FocusRequester, isCurrent: () -> Boolean) {
-        if (!isCurrent() || exitBlocked()) return
+        if (!isCurrent()) return
         snapshotFlow { windowInfo.isWindowFocused }.first { it }
-        if (!isCurrent() || exitBlocked()) return
+        if (!isCurrent()) return
         requester.requestFocus()
+        // Read-only editors retain focus, but cannot create an editable input connection.
+        if (exitBlocked()) return
         if (Build.VERSION.SDK_INT >= 30) {
             val controller = inputView.windowInsetsController ?: return
             suspendCancellableCoroutine<Unit> { continuation ->
@@ -876,7 +878,7 @@ fun CanvasScreen(
     val inputAllowed = currentSaveState == BoardSaveState.Idle && pendingDraftAcknowledgement == null
     LaunchedEffect(draft?.sessionId, draft?.id, draft?.x, draft?.y, discardTarget, inputAllowed) {
         val current = draft
-        if (current != null && discardTarget == null && inputAllowed) {
+        if (current != null && discardTarget == null) {
             val sessionId = current.sessionId
             focusEditorInput(focusRequester) {
                 editorSession.draft.value?.sessionId == sessionId && discardTarget == null
@@ -884,9 +886,9 @@ fun CanvasScreen(
         }
     }
     LaunchedEffect(searchOpen, inputAllowed) {
-        if (searchOpen && inputAllowed) {
+        if (searchOpen) {
             focusEditorInput(searchFocusRequester) { searchOpen && editorSession.draft.value == null }
-        } else if (!searchOpen) chromeBounds.remove("search")
+        } else chromeBounds.remove("search")
     }
     LaunchedEffect(searchOpen, searchQuery, board.elements, board.shapes) {
         if (searchOpen && searchQuery.isNotBlank() && searchMatches.isNotEmpty()) focusMatch(0)
@@ -909,7 +911,7 @@ fun CanvasScreen(
     }
     LaunchedEffect(regionDraft?.sessionId, regionNameId, discardTarget, inputAllowed) {
         val current = regionDraft
-        if (regionNameId != null && current != null && discardTarget == null && inputAllowed) {
+        if (regionNameId != null && current != null && discardTarget == null) {
             val sessionId = current.sessionId
             focusEditorInput(regionNameFocusRequester) {
                 editorSession.regionNameDraft.value?.sessionId == sessionId &&

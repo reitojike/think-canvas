@@ -56,3 +56,7 @@ T001→T002→T003/T004→US1→US2→検証・converge。US1はeditorからの�
 ## Phase 10: Issue91 input owner Convergence
 
 - [ ] T020 HIGH: `CanvasScreen.kt` の三focus ownerをlive save/ack admissionと実在fieldで保護し、blocked状態のkey変化で待機を取消す。IMM active/acceptingTextの無期限frame pollを除去し、API30以降は標準IME-controllabilityの取消可能な通知、API26〜29はwindow focus/frame経路を使い、entry/resumeごとの一回showとwindow focus非keyを維持する。`NeutralInteractionTest.kt` のwindow/継続/pending終了・置換および `TextEditorDismissalTest.kt` のRunning/Failed再生成をnative focused/fullで検証する。Spec007 FR-003/004/007/009、Spec006 FR-006/007、Issue91 AC1〜5、[第三bounded checkpoint](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5976059426)（partial）。
+
+## Phase 11: Issue91 readonly focus Convergence
+
+- [ ] T021 HIGH: `CanvasScreen.kt` の三ownerでfocusとIMEのadmissionを分離し、native window復帰後の現在fieldへのfocusをreadonlyでも保持する。live save/ack guardはfocus要求後のIME待機/showだけを拒否し、blockedでは即returnする。既存 `TextEditorDismissalTest.kt` のFocused=true/draft/ack/要求/Room/Undo保持条件を緩めずRunning/Failed再生成を検証し、Neutral継続/pending終了・置換と最終142件のdeliveryを収束する。Spec007 FR-004/009・SC-003、Spec006 FR-006/007、[第四bounded checkpoint](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5976130770)（contradicts）。
