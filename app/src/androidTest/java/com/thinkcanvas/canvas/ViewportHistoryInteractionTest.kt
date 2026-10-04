@@ -300,10 +300,8 @@ class ViewportHistoryInteractionTest {
     @Test fun recreationAndNativeCancelPreserveSessionAndNextGesture() = withBoard {
         pan(Offset(100f, 30f))
         val panned = navigation.focus()
-        val stale = marker("前の視点へ戻る").config[SemanticsActions.OnClick].action!!
         scenario.recreate()
         composeRule.waitForIdle()
-        composeRule.runOnUiThread { stale.invoke() }
         sameFocus(panned, navigation.focus())
         assertTrue(navigation.canBack)
         click("前の視点へ戻る")
@@ -342,29 +340,37 @@ class ViewportHistoryInteractionTest {
         sameFocus(camera, navigation.focus())
         completion.completeExceptionally(IllegalStateException("bounded fixture"))
         composeRule.waitUntil(5_000) { sessions.saveStateFor(1L, initial).value is BoardSaveState.Failed }
-        composeRule.runOnUiThread { stale.invoke() }
+        assertTrue(nodes("前の視点へ戻る").isEmpty())
         sameFocus(camera, navigation.focus())
         sessions.setSaveOperation { _, _ -> CompletableDeferred(Unit) }
         scenario.onActivity { sessions.retrySave(1L) }
         composeRule.waitForIdle()
         composeRule.waitUntil(5_000) { sessions.saveStateFor(1L, initial).value == BoardSaveState.Idle }
+        val acknowledgementStale = marker("前の視点へ戻る").config[SemanticsActions.OnClick].action!!
         scenario.onActivity {
             editor.pendingDraftAcknowledgement.value = sessions.requestSave(1L, initial)
             assertEquals(BoardSaveState.Idle, sessions.saveStateFor(1L, initial).value)
-            stale.invoke()
+            acknowledgementStale.invoke()
             sameFocus(camera, navigation.focus())
         }
         composeRule.waitForIdle()
         assertNull(editor.pendingDraftAcknowledgement.value)
-        composeRule.runOnUiThread { editor.draft.value = Draft(null, 800f, 1600f, "Draft"); stale.invoke() }
+        val editorStale = marker("前の視点へ戻る").config[SemanticsActions.OnClick].action!!
+        composeRule.runOnUiThread {
+            editor.draft.value = Draft(null, 800f, 1600f, "Draft")
+            editorStale.invoke()
+        }
         composeRule.waitForIdle()
         sameFocus(camera, navigation.focus())
         assertTrue(nodes("前の視点へ戻る").isEmpty())
         composeRule.runOnUiThread { editor.draft.value = null }
         closeSoftKeyboard()
         composeRule.waitForIdle()
-        click("図形ツールを開く")
-        composeRule.runOnUiThread { stale.invoke() }
+        val toolStale = marker("前の視点へ戻る").config[SemanticsActions.OnClick].action!!
+        val expand = nodes("図形ツールを開く").first { it.config.contains(SemanticsActions.OnClick) }
+            .config[SemanticsActions.OnClick].action!!
+        composeRule.runOnUiThread { expand.invoke(); toolStale.invoke() }
+        composeRule.waitForIdle()
         sameFocus(camera, navigation.focus())
         assertTrue(nodes("前の視点へ戻る").isEmpty())
         back()

@@ -26,4 +26,6 @@ read-only analyze結果: 10FR/4SC/12scenarioを全13tasksへ対応付け、cover
 - convergeは10FR/4SC/12scenario、有限設計、5原則を確認し、未変更attached arrowの範囲拡大をT014へappend。実測arrow geometry比較とunit/UI回帰で補正した。最終headのCI/canonical/deliveryはPRとIssueの証跡を参照する。
 最終候補のlint、unit135/0/0/0、debug/androidTest build、公開境界212候補、diff checkは成功。全family focused XML SHA256 C4C1B22EA1E02BC474099289E4EBF7F0BE59356A44CF514571BE873A0E821535。
 
+PR90のguard focusedでdetached Material IconButtonの古いactionを非表示後に直接invokeしたfixtureがCompose playClickSoundのCompositionLocal読取で失敗した。PR上の有限checkpointに従い、save/ack/editor/toolの状態変更と同一UI turnのattached actionを検証し、hide/Failed/recreation後は表示・camera・履歴を観測する。production source変更なし。更新headでfocused/全CIを再検証する。
+
 再converge: 10FR/4SC/12scenario、有限設計と5原則を再照合し、buildable残差0。tasks.mdはbyte-identical（SHA256 2FA24266A08557E7AC2B9F5A23019B5BA9466B9A468DAB80B5224484C34AF99B）、空phase追加なし。T012/T013の最終CI/review/merge/closureは未完了として保持する。
