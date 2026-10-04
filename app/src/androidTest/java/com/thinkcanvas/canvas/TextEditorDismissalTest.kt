@@ -599,19 +599,237 @@ class TextEditorDismissalTest {
         assertUnchanged()
     }
 
-    @Test fun nearbyOutsideTapIsConsumedBeforeBlankDoubleTapZoom() = withBoard(composeTouch = true) {
+    @Test fun shiftedNativeBlankDoubleTapResolvesBeforeEditorEntry() = withBoard {
         val saves = trackSaves()
         val initial = point(.1f, .23f)
-        val originalCenter = center(original.text)
-        tap(initial)
-        awaitEditor(newEditor)
-        // Keep the original empty-draft zoom regression.
-        tap(initial - Offset(8f, 0f), withinDoubleTap = true)
+        val history = sessions.viewportHistoryFor(1L, BoardSnapshot())
+        val before = history.viewportState.value
+        val slop = ViewConfiguration.get(InstrumentationRegistry.getInstrumentation().targetContext)
+            .scaledDoubleTapSlop
+        assertTrue(8f < slop)
+        var firstDraftStarted = false
+        nativeBlankTapPair(initial, initial - Offset(8f, 0f)) {
+            scenario.onActivity { firstDraftStarted = editor.draft.value != null }
+        }
+        assertFalse("First tap must not start an editor", firstDraftStarted)
+        composeRule.waitUntil(5_000) { history.canBack }
+        assertTrue(history.viewportState.value.scale != before.scale)
         assertClosed()
-        assertEquals(originalCenter, center(original.text))
         assertUnchanged()
         assertEquals(null, editor.draft.value)
         assertEquals(0, saves.get())
+        composeRule.runOnUiThread {
+            assertEquals(before, history.back())
+            assertFalse("Double tap records exactly one navigation", history.canBack)
+        }
+    }
+
+    @Test fun confirmedBlankSingleStartsOnceAtFirstWorldPosition() = withBoard {
+        val saves = trackSaves()
+        val location = point(.1f, .23f)
+        val origin = point(0f, 0f)
+        val history = sessions.viewportHistoryFor(1L, BoardSnapshot())
+        val expected = history.viewportState.value.screenToWorld(location.x - origin.x, location.y - origin.y)
+        val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+            .fetchSemanticsNode().layoutInfo.viewConfiguration
+        val up = nativeBlankSingle(location)
+        scenario.onActivity {
+            assertTrue(SystemClock.uptimeMillis() - up < configuration.doubleTapTimeoutMillis)
+            assertEquals(null, editor.draft.value)
+        }
+        Thread.sleep(configuration.doubleTapTimeoutMillis)
+        awaitEditor(newEditor)
+        val confirmed = checkNotNull(editor.draft.value)
+        assertEquals(expected.first, confirmed.x, .01f)
+        assertEquals(expected.second, confirmed.y, .01f)
+        Thread.sleep(configuration.doubleTapTimeoutMillis)
+        assertEquals(confirmed.sessionId, editor.draft.value?.sessionId)
+        assertEquals(1, composeRule.onAllNodesWithContentDescription(newEditor).fetchSemanticsNodes().size)
+        assertUnchanged()
+        assertEquals(0, saves.get())
+    }
+
+    @Test fun selectedBlankSingleWaitsThenClearsWithoutDraft() = withBoard {
+        composeRule.onNodeWithContentDescription(original.text).performClick()
+        val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+            .fetchSemanticsNode().layoutInfo.viewConfiguration
+        val up = nativeBlankSingle(point(.1f, .23f))
+        assertExistingSelected(original)
+        assertTrue(SystemClock.uptimeMillis() - up < configuration.doubleTapTimeoutMillis)
+        scenario.onActivity { assertEquals(null, editor.draft.value) }
+        Thread.sleep(configuration.doubleTapTimeoutMillis)
+        composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+        composeRule.waitForIdle()
+        val node = composeRule.onNodeWithContentDescription(original.text).fetchSemanticsNode()
+        assertEquals(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.unselected),
+            node.config.getOrNull(SemanticsProperties.StateDescription))
+        assertEquals(null, editor.draft.value)
+        assertUnchanged()
+    }
+
+    @Test fun selectedShiftedNativeDoubleTapKeepsSelectionAndOneNavigation() = withBoard {
+        val saves = trackSaves()
+        composeRule.onNodeWithContentDescription(original.text).performClick()
+        val first = point(.1f, .23f)
+        val history = sessions.viewportHistoryFor(1L, BoardSnapshot())
+        val before = history.viewportState.value
+        nativeBlankTapPair(first, first - Offset(8f, 0f))
+        composeRule.waitUntil(5_000) { history.canBack }
+        assertExistingSelected(original)
+        assertEquals(null, editor.draft.value)
+        assertClosed()
+        assertUnchanged()
+        assertEquals(0, saves.get())
+        composeRule.runOnUiThread {
+            assertEquals(before, history.back())
+            assertFalse(history.canBack)
+        }
+    }
+
+    @Test fun outsideDoubleTapSlopConfirmsBothSinglesInOrder() = withBoard {
+        composeRule.onNodeWithContentDescription(original.text).performClick()
+        val first = point(.1f, .23f)
+        val slop = ViewConfiguration.get(InstrumentationRegistry.getInstrumentation().targetContext)
+            .scaledDoubleTapSlop.toFloat()
+        val second = first + Offset(slop + 8f, 0f)
+        val origin = point(0f, 0f)
+        val history = sessions.viewportHistoryFor(1L, BoardSnapshot())
+        val before = history.viewportState.value
+        val expected = before.screenToWorld(second.x - origin.x, second.y - origin.y)
+        nativeBlankTapPair(first, second)
+        awaitEditor(newEditor)
+        val confirmed = checkNotNull(editor.draft.value)
+        assertEquals(expected.first, confirmed.x, .01f)
+        assertEquals(expected.second, confirmed.y, .01f)
+        assertFalse(history.canBack)
+        assertEquals(before, history.viewportState.value)
+        assertUnchanged()
+    }
+
+    @Test fun pendingBlankSingleRejectsReplacementEditorAndStopDispose() {
+        for (change in listOf("editor", "stop", "recreate")) withBoard {
+            val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+                .fetchSemanticsNode().layoutInfo.viewConfiguration
+            val point = point(.1f, .23f)
+            val clock = composeRule.mainClock
+            val autoAdvance = clock.autoAdvance
+            val started = clock.currentTime
+            var replacement: Draft? = null
+            try {
+                clock.autoAdvance = false
+                nativeBlankSingle(point)
+                repeat(3) { clock.advanceTimeByFrame() }
+                scenario.onActivity { assertEquals(null, editor.draft.value) }
+                when (change) {
+                    "editor" -> scenario.onActivity {
+                        replacement = Draft(original.id, original.x, original.y, original.text)
+                        editor.draft.value = replacement
+                    }
+                    "stop" -> scenario.moveToState(Lifecycle.State.CREATED)
+                    "recreate" -> scenario.recreate()
+                }
+                assertTrue("The confirmation deadline must remain pending during invalidation",
+                    clock.currentTime - started < configuration.doubleTapTimeoutMillis)
+                clock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+                if (change == "stop") scenario.moveToState(Lifecycle.State.RESUMED)
+            } finally {
+                clock.autoAdvance = autoAdvance
+            }
+            composeRule.waitForIdle()
+            assertEquals(replacement?.sessionId, editor.draft.value?.sessionId)
+            assertUnchanged()
+        }
+    }
+
+    @Test fun pendingBlankSingleRejectsToolSaveAndBoardSwitch() {
+        for (change in listOf("spatial", "ink", "save", "board")) withBoard {
+            val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+                .fetchSemanticsNode().layoutInfo.viewConfiguration
+            if (change == "spatial" || change == "ink")
+                composeRule.onNodeWithContentDescription("図形ツールを開く").performClick()
+            val label = when (change) {
+                "spatial" -> "四角"
+                "ink" -> "ペン"
+                "board" -> "ボード一覧を開く"
+                else -> null
+            }
+            val action = label?.let { composeRule.onNodeWithContentDescription(it)
+                .fetchSemanticsNode().config[SemanticsActions.OnClick].action!! }
+            val gate = CompletableDeferred<Unit>()
+            if (change == "save") sessions.setSaveOperation { _, _ -> gate }
+            val point = point(.1f, .23f)
+            val clock = composeRule.mainClock
+            val autoAdvance = clock.autoAdvance
+            val started = clock.currentTime
+            try {
+                clock.autoAdvance = false
+                nativeBlankSingle(point)
+                repeat(3) { clock.advanceTimeByFrame() }
+                scenario.onActivity {
+                    assertEquals(null, editor.draft.value)
+                    if (change == "save") {
+                        assertTrue(sessions.requestSave(1L, board.snapshot()) != null)
+                        assertTrue(sessions.saveStateFor(1L, BoardSnapshot()).value is BoardSaveState.Running)
+                    } else assertTrue(checkNotNull(action).invoke())
+                }
+                assertTrue(clock.currentTime - started < configuration.doubleTapTimeoutMillis)
+                clock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+            } finally {
+                clock.autoAdvance = autoAdvance
+            }
+            composeRule.waitForIdle()
+            assertEquals(null, editor.draft.value)
+            assertUnchanged()
+            if (change == "save") {
+                scenario.onActivity { gate.complete(Unit) }
+                composeRule.waitUntil(5_000) {
+                    sessions.saveStateFor(1L, BoardSnapshot()).value == BoardSaveState.Idle
+                }
+            }
+        }
+    }
+
+    private fun nativeBlankSingle(point: Offset): Long {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val down = SystemClock.uptimeMillis()
+        fun send(action: Int): Long {
+            val time = SystemClock.uptimeMillis()
+            val event = MotionEvent.obtain(down, time, action, point.x, point.y, 0).apply {
+                source = InputDevice.SOURCE_TOUCHSCREEN
+            }
+            try { assertTrue(automation.injectInputEvent(event, true)) } finally { event.recycle() }
+            return time
+        }
+        send(MotionEvent.ACTION_DOWN)
+        Thread.sleep(40)
+        return send(MotionEvent.ACTION_UP)
+    }
+
+    private fun nativeBlankTapPair(first: Offset, second: Offset, afterFirst: () -> Unit = {}) {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+            .fetchSemanticsNode().layoutInfo.viewConfiguration
+        val minimum = configuration.doubleTapMinTimeMillis
+        fun send(action: Int, point: Offset, down: Long): Long {
+            val time = SystemClock.uptimeMillis()
+            val event = MotionEvent.obtain(down, time, action, point.x, point.y, 0).apply {
+                source = InputDevice.SOURCE_TOUCHSCREEN
+            }
+            try { assertTrue(automation.injectInputEvent(event, true)) } finally { event.recycle() }
+            return time
+        }
+        val firstDown = SystemClock.uptimeMillis()
+        send(MotionEvent.ACTION_DOWN, first, firstDown)
+        Thread.sleep(40)
+        val firstUp = send(MotionEvent.ACTION_UP, first, firstDown)
+        afterFirst()
+        Thread.sleep(minimum)
+        val secondDown = SystemClock.uptimeMillis()
+        assertTrue(secondDown - firstUp in minimum..configuration.doubleTapTimeoutMillis)
+        send(MotionEvent.ACTION_DOWN, second, secondDown)
+        Thread.sleep(40)
+        send(MotionEvent.ACTION_UP, second, secondDown)
+        composeRule.waitForIdle()
     }
 
     @Test fun outsideTwoFingerGestureKeepsDraft() = withBoard {
