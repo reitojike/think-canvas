@@ -4,6 +4,8 @@ import android.content.Intent
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.Window
+import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.geometry.Offset
@@ -146,19 +148,39 @@ class EdgeAutoPanTest {
             assertEquals(0, saves.get())
             assertFalse(board.canUndo)
         }
-        fun assertNextPanWorks() {
+        fun assertNextPanWorks(case: String = "other") {
             val before = position(fixed.text)
             val content = board.snapshot()
             val area = canvas
             val start = Offset(area.left + area.width * .22f, area.top + area.height * .72f)
+            val samples = mutableListOf<String>()
+            lateinit var window: Window
+            lateinit var original: Window.Callback
+            lateinit var observer: Window.Callback
+            scenario.onActivity { activity ->
+                window = activity.window
+                original = window.callback
+                observer = object : Window.Callback by original {
+                    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                        samples += "action=${event.actionMasked} t=${event.eventTime} down=${event.downTime} x=${event.x} y=${event.y} history=${(0 until event.historySize).map { listOf(event.getHistoricalEventTime(it), event.getHistoricalX(it), event.getHistoricalY(it)) }} flags=${event.flags}"
+                        return original.dispatchTouchEvent(event)
+                    }
+                }
+                window.callback = observer
+            }
+            val beforeBounds = bounds(fixed.text)
             val gesture = Gesture()
             try {
                 gesture.send(MotionEvent.ACTION_DOWN, start)
                 gesture.send(MotionEvent.ACTION_MOVE, start + Offset(110f, 35f))
                 gesture.send(MotionEvent.ACTION_UP)
-            } finally { if (!gesture.ended) gesture.send(MotionEvent.ACTION_CANCEL) }
+            } finally {
+                if (!gesture.ended) gesture.send(MotionEvent.ACTION_CANCEL)
+                composeRule.runOnUiThread { if (window.callback === observer) window.callback = original }
+            }
             composeRule.waitForIdle()
             val after = position(fixed.text)
+            Log.i("NativePan93", "case=$case before=$before after=$after canvas=$area bounds=$beforeBounds -> ${bounds(fixed.text)} injected=$start -> ${start + Offset(110f, 35f)} samples=$samples")
             assertEquals("次のnative pan x: $before → $after", before.x + 110f, after.x, 2f)
             assertEquals("次のnative pan y: $before → $after", before.y + 35f, after.y, 2f)
             assertEquals(content, board.snapshot())
@@ -468,7 +490,7 @@ class EdgeAutoPanTest {
                 assertEquals(stopped, position(fixed.text))
             }
             assertUnchanged(before)
-            assertNextPanWorks()
+            assertNextPanWorks(if (recreate) "recreate" else "stop-resume")
         }
     }
 
