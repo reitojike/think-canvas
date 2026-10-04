@@ -1,7 +1,9 @@
 package com.thinkcanvas.canvas
 
+import android.os.Build
 import android.os.SystemClock
 import android.view.MotionEvent
+import android.view.WindowInsetsController
 import androidx.activity.compose.BackHandler
 import com.thinkcanvas.board.fittedViewport
 import com.thinkcanvas.board.RegionLabelSize
@@ -83,6 +85,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
@@ -112,12 +116,17 @@ import com.thinkcanvas.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -185,9 +194,12 @@ fun CanvasScreen(
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val pendingInputRequests = remember { mutableSetOf<Job>() }
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
+    val windowInfo = LocalWindowInfo.current
+    val inputView = LocalView.current
     val regionNameFocusRequester = remember { FocusRequester() }
     val canvasTextStyle = LocalTextStyle.current
     val regionLabelStyle = canvasTextStyle.copy(fontSize = DetailedRenderFacts.REGION_LABEL_SIZE_SP.sp)
@@ -370,9 +382,14 @@ fun CanvasScreen(
         chromeBounds.any { (key, bounds) -> !key.startsWith("indicator:") && bounds.contains(point) } ||
             indicatorsAllowed() && latestIndicatorLayouts.value.any { it.touchBounds.contains(point) }
 
-    fun clearEditorFocus() {
-        focusManager.clearFocus(force = true)
+    fun hideEditorIme() {
+        pendingInputRequests.toList().forEach { it.cancel() }
         keyboard?.hide()
+    }
+
+    fun clearEditorFocus() {
+        hideEditorIme()
+        focusManager.clearFocus(force = true)
         lastBlankTap = null
     }
 
@@ -612,7 +629,7 @@ fun CanvasScreen(
     BackHandler {
         if (imeBottom > 0) {
             invalidatePointerContinuation()
-            keyboard?.hide()
+            hideEditorIme()
         } else if (!exitBlocked()) {
             val currentDraft = editorSession.draft.value
             val currentRegion = editorSession.regionNameDraft.value
@@ -836,16 +853,68 @@ fun CanvasScreen(
     }
     val latestFinalizeDraft = rememberUpdatedState({ finalizeDraft() })
 
-    LaunchedEffect(draft?.id, draft?.x, draft?.y, discardTarget) {
-        if (draft != null && discardTarget == null) {
-            focusRequester.requestFocus()
-            keyboard?.show()
+    suspend fun focusEditorInput(requester: FocusRequester, isCurrent: () -> Boolean) {
+        if (!isCurrent()) return
+        val requestJob = currentCoroutineContext().job
+        pendingInputRequests.add(requestJob)
+        try {
+            snapshotFlow { windowInfo.isWindowFocused }.first { it }
+            if (!isCurrent()) return
+            requester.requestFocus()
+            // Read-only editors retain focus, but cannot create an editable input connection.
+            if (exitBlocked()) return
+            val controller = if (Build.VERSION.SDK_INT >= 30) {
+                inputView.windowInsetsController ?: return
+            } else null
+            val ready = awaitEditorImeWindow(
+                isCurrent = { isCurrent() && !exitBlocked() },
+                awaitWindowOwnership = {
+                    snapshotFlow { windowInfo.isWindowFocused && inputView.hasWindowFocus() }.first { it }
+                },
+                awaitImeControl = {
+                    if (Build.VERSION.SDK_INT >= 30 && controller != null) {
+                        suspendCancellableCoroutine<Unit> { continuation ->
+                            val listener = object : WindowInsetsController.OnControllableInsetsChangedListener {
+                                override fun onControllableInsetsChanged(controller: WindowInsetsController, typeMask: Int) {
+                                    if (continuation.isActive && typeMask and android.view.WindowInsets.Type.ime() != 0) {
+                                        // Ownership is checked after the frame, independently of IME control.
+                                        // Do not mutate the platform listener list during its dispatch.
+                                        inputView.post { controller.removeOnControllableInsetsChangedListener(this) }
+                                        continuation.resume(Unit)
+                                    }
+                                }
+                            }
+                            continuation.invokeOnCancellation {
+                                controller.removeOnControllableInsetsChangedListener(listener)
+                            }
+                            if (continuation.isActive) controller.addOnControllableInsetsChangedListener(listener)
+                        }
+                    }
+                },
+                awaitFrame = { withFrameNanos { } },
+                hasWindowFocus = { inputView.hasWindowFocus() },
+            )
+            if (ready) keyboard?.show()
+        } finally {
+            pendingInputRequests.remove(requestJob)
         }
     }
-    LaunchedEffect(searchOpen) {
+
+    val inputAllowed = currentSaveState == BoardSaveState.Idle && pendingDraftAcknowledgement == null
+    LaunchedEffect(draft?.sessionId, draft?.id, draft?.x, draft?.y, discardTarget, inputAllowed) {
+        val current = draft
+        if (current != null && discardTarget == null) {
+            val sessionId = current.sessionId
+            focusEditorInput(focusRequester) {
+                editorSession.draft.value?.sessionId == sessionId && discardTarget == null
+            }
+        }
+    }
+    LaunchedEffect(searchOpen, inputAllowed) {
         if (searchOpen) {
-            searchFocusRequester.requestFocus()
-            keyboard?.show()
+            focusEditorInput(searchFocusRequester) {
+                searchOpen && editorSession.draft.value == null && discardTarget == null
+            }
         } else chromeBounds.remove("search")
     }
     LaunchedEffect(searchOpen, searchQuery, board.elements, board.shapes) {
@@ -867,10 +936,14 @@ fun CanvasScreen(
             closeRegionName()
         }
     }
-    LaunchedEffect(regionNameId, discardTarget) {
-        if (regionNameId != null && discardTarget == null) {
-            regionNameFocusRequester.requestFocus()
-            keyboard?.show()
+    LaunchedEffect(regionDraft?.sessionId, regionNameId, discardTarget, inputAllowed) {
+        val current = regionDraft
+        if (regionNameId != null && current != null && discardTarget == null) {
+            val sessionId = current.sessionId
+            focusEditorInput(regionNameFocusRequester) {
+                editorSession.regionNameDraft.value?.sessionId == sessionId &&
+                    editorSession.draft.value == null && discardTarget == null
+            }
         }
     }
     LaunchedEffect(guidance, tool, inkTool, selectedIds) {
@@ -1741,7 +1814,7 @@ fun CanvasScreen(
                         Text("›", color = ink, fontSize = 24.sp)
                     }
                     IconButton(onClick = {
-                        searchOpen = false; searchQuery = ""; searchPosition = 0; keyboard?.hide()
+                        searchOpen = false; searchQuery = ""; searchPosition = 0; hideEditorIme()
                     }, modifier = Modifier.size(44.dp).semantics { contentDescription = "検索を閉じる" }) {
                         Text("×", color = ink, fontSize = 22.sp)
                     }
