@@ -46,3 +46,9 @@ T001→T002→T003/T004→US1→US2→検証・converge。US1はeditorからの�
 
 - [x] T016 HIGH: `CanvasScreen.kt` のtext/search/regionNameの既存focus effectでwindow ownerを標準WindowInfoのone-shotで待ち、frame適用後にIMEをshowする。`NeutralInteractionTest.kt` へnative別window所有中のeditor entryと、Backで隠したIMEのwindow復帰時保持の回帰を追加し、dialogのhide/Back fixtureを明示isDialog rootへ限定する。Spec007 FR-003/007/009。main修正前のFocused=trueをnative回帰で再現。PO/save/Undo/geometry/Back priority維持。
 - [ ] T017 `Issue91` の最終headでfocused、lint/unit/build、公開境界、full CI/source XML census、canonical review/base/threadを収束し、merge後に最新7 ACをsemantic closureする。PR90の視点履歴とはreview/rollback境界を分離する。
+
+## Phase 9: Issue91 Convergence
+
+- [x] T018 HIGH: `CanvasScreen.kt` のtext/search/regionName focus要求を、window復帰とframe適用後に同じnative host viewのactive input connection/acceptingText成立まで取消可能なframe待機にする。showは一回だけとし、effect keyとBackで隠したIMEの保持を維持する。`NeutralInteractionTest.kt` のreadiness timeoutにfield/native window/接続/insetsの診断をfailure時だけ追加しassert/timeoutを維持する。Spec007 FR-003/007/009、Issue91 AC1/2/3/4、[bounded checkpoint](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5975731094)（partial）。
+
+- [ ] T019 HIGH: `NeutralInteractionTest.kt` で別native window所有中のpending editorを終了し、再composition前のwindow帰還でも古いeditorへfocus/IMEを戻さないことを検証する。必要なら `CanvasScreen.kt` の三focus要求で既存session/search/確認のlive stateをawait後に照合する。Issue91 AC3、Spec007 FR-003/009（pending要求の取消検証不足）。

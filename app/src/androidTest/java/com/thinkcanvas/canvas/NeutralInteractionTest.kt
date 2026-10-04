@@ -10,6 +10,7 @@ import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.swipe
@@ -107,12 +108,31 @@ class NeutralInteractionTest {
             }
             instrumentation.waitForIdleSync()
             composeRule.waitForIdle()
+            assertNoDialog()
             waitEditorReady()
+        }
+        fun blockingWindow(): Dialog {
+            lateinit var dialog: Dialog
+            scenario.onActivity { activity ->
+                dialog = Dialog(activity).apply {
+                    setContentView(TextView(activity).apply { text = "Another window" })
+                    show()
+                }
+            }
+            composeRule.waitUntil(5_000) {
+                var ownsFocus = false
+                scenario.onActivity {
+                    ownsFocus = dialog.window?.decorView?.hasWindowFocus() == true &&
+                        !it.window.decorView.hasWindowFocus()
+                }
+                ownsFocus
+            }
+            return dialog
         }
         fun waitEditorReady(label: String = editor.draft.value?.let {
                 if (it.id == null) "新しいテキスト" else "テキストを編集"
             } ?: "囲みの名前") {
-            composeRule.waitUntil(10_000) {
+            try { composeRule.waitUntil(10_000) {
                 val nodes = composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes()
                 val focused = nodes.singleOrNull()?.config?.getOrNull(SemanticsProperties.Focused) == true
                 var ready = false
@@ -126,6 +146,21 @@ class NeutralInteractionTest {
                         insets.getInsets(WindowInsets.Type.ime()).bottom > 0
                 }
                 focused && ready
+            } } catch (timeout: ComposeTimeoutException) {
+                val nodes = composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes()
+                val focused = nodes.singleOrNull()?.config?.getOrNull(SemanticsProperties.Focused)
+                var native = ""
+                scenario.onActivity { activity ->
+                    val root = activity.window.decorView
+                    val input = activity.getSystemService(InputMethodManager::class.java)
+                    val view = root.findFocus()
+                    val insets = root.rootWindowInsets
+                    native = "windowFocus=${root.hasWindowFocus()}, view=${view?.javaClass?.simpleName}, " +
+                        "active=${view?.let { input.isActive(it) }}, accepting=${input.isAcceptingText}, " +
+                        "imeVisible=${insets?.isVisible(WindowInsets.Type.ime())}, " +
+                        "imeBottom=${insets?.getInsets(WindowInsets.Type.ime())?.bottom}"
+                }
+                throw AssertionError("Editor readiness: nodes=${nodes.size}, focused=$focused, $native", timeout)
             }
             composeRule.waitForIdle()
         }
@@ -676,24 +711,6 @@ class NeutralInteractionTest {
     }
 
     @Test fun editorWaitsForWindowOwnerAndDoesNotReshowHiddenImeOnWindowReturn() = withBoard {
-        fun blockingWindow(): Dialog {
-            lateinit var dialog: Dialog
-            scenario.onActivity { activity ->
-                dialog = Dialog(activity).apply {
-                    setContentView(TextView(activity).apply { text = "Another window" })
-                    show()
-                }
-            }
-            composeRule.waitUntil(5_000) {
-                var ownsFocus = false
-                scenario.onActivity {
-                    ownsFocus = dialog.window?.decorView?.hasWindowFocus() == true &&
-                        !it.window.decorView.hasWindowFocus()
-                }
-                ownsFocus
-            }
-            return dialog
-        }
         val first = blockingWindow()
         try {
             scenario.onActivity { editor.draft.value = Draft(null, 500f, 1200f, "Window owner draft") }
@@ -732,6 +749,41 @@ class NeutralInteractionTest {
         }
         assertEquals("Window owner draft", editor.draft.value?.text)
         assertOriginalContent()
+    }
+
+    @Test fun endedPendingEditorDoesNotRegainFocusBeforeRecomposition() = withBoard {
+        val blocker = blockingWindow()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        try {
+            scenario.onActivity { editor.draft.value = Draft(null, 500f, 1200f, "Pending input") }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithContentDescription("新しいテキスト").assertIsNotFocused()
+            composeRule.mainClock.autoAdvance = false
+            scenario.onActivity {
+                editor.draft.value = null
+                blocker.dismiss()
+            }
+            composeRule.waitUntil(5_000) {
+                var ownsFocus = false
+                scenario.onActivity { ownsFocus = it.window.decorView.hasWindowFocus() }
+                ownsFocus
+            }
+            instrumentation.waitForIdleSync()
+            composeRule.waitForIdle()
+            // The old field is still mounted until the next composition frame.
+            composeRule.onNodeWithContentDescription("新しいテキスト").assertIsNotFocused()
+            scenario.onActivity {
+                assertFalse(it.window.decorView.rootWindowInsets.isVisible(WindowInsets.Type.ime()))
+            }
+            assertEquals(null, editor.draft.value)
+            assertOriginalContent()
+        } finally {
+            scenario.onActivity { blocker.dismiss() }
+            composeRule.mainClock.autoAdvance = true
+            composeRule.waitForIdle()
+        }
+        assertEquals(0, composeRule.onAllNodesWithContentDescription("新しいテキスト")
+            .fetchSemanticsNodes().size)
     }
 
     private fun Harness.assertOriginalContent() {

@@ -2,6 +2,7 @@ package com.thinkcanvas.canvas
 
 import android.os.SystemClock
 import android.view.MotionEvent
+import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.BackHandler
 import com.thinkcanvas.board.fittedViewport
 import com.thinkcanvas.board.RegionLabelSize
@@ -83,6 +84,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -191,6 +193,10 @@ fun CanvasScreen(
     val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
     val windowInfo = LocalWindowInfo.current
+    val inputView = LocalView.current
+    val inputMethod = remember(inputView) {
+        inputView.context.getSystemService(InputMethodManager::class.java)
+    }
     val regionNameFocusRequester = remember { FocusRequester() }
     val canvasTextStyle = LocalTextStyle.current
     val regionLabelStyle = canvasTextStyle.copy(fontSize = DetailedRenderFacts.REGION_LABEL_SIZE_SP.sp)
@@ -839,22 +845,22 @@ fun CanvasScreen(
     }
     val latestFinalizeDraft = rememberUpdatedState({ finalizeDraft() })
 
-    LaunchedEffect(draft?.id, draft?.x, draft?.y, discardTarget) {
-        if (draft != null && discardTarget == null) {
-            snapshotFlow { windowInfo.isWindowFocused }.first { it }
-            focusRequester.requestFocus()
+    suspend fun focusEditorInput(requester: FocusRequester) {
+        snapshotFlow { windowInfo.isWindowFocused }.first { it }
+        requester.requestFocus()
+        do {
             withFrameNanos { }
-            snapshotFlow { windowInfo.isWindowFocused }.first { it }
-            keyboard?.show()
-        }
+        } while (!inputView.hasWindowFocus() || !inputMethod.isActive(inputView) ||
+            !inputMethod.isAcceptingText)
+        keyboard?.show()
+    }
+
+    LaunchedEffect(draft?.id, draft?.x, draft?.y, discardTarget) {
+        if (draft != null && discardTarget == null) focusEditorInput(focusRequester)
     }
     LaunchedEffect(searchOpen) {
         if (searchOpen) {
-            snapshotFlow { windowInfo.isWindowFocused }.first { it }
-            searchFocusRequester.requestFocus()
-            withFrameNanos { }
-            snapshotFlow { windowInfo.isWindowFocused }.first { it }
-            keyboard?.show()
+            focusEditorInput(searchFocusRequester)
         } else chromeBounds.remove("search")
     }
     LaunchedEffect(searchOpen, searchQuery, board.elements, board.shapes) {
@@ -878,11 +884,7 @@ fun CanvasScreen(
     }
     LaunchedEffect(regionNameId, discardTarget) {
         if (regionNameId != null && discardTarget == null) {
-            snapshotFlow { windowInfo.isWindowFocused }.first { it }
-            regionNameFocusRequester.requestFocus()
-            withFrameNanos { }
-            snapshotFlow { windowInfo.isWindowFocused }.first { it }
-            keyboard?.show()
+            focusEditorInput(regionNameFocusRequester)
         }
     }
     LaunchedEffect(guidance, tool, inkTool, selectedIds) {
