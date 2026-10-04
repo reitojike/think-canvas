@@ -7,6 +7,7 @@
 - entryはworld中心/scale。size/density変化でもscaleの数値を保持し、新canvas中央へ同じworld中心を写す。densityは2dpの重複許容に使う。
 - 上限80、中心の画面差2dp以内かつscale相対差1%以内は重複。同一検索入力groupは最初のoriginへまとめ、他navigationで区切る。
 - 正常animation終了、次navigation/native DOWNでの中断は実際の到達点を記録。dispose/resizeは追加しない。世代とorigin引き取りで二重記録を防ぐ。
+- Float補間の丸めが最小倍率.15を下回る場合があるため、animation各frameは既存の.15～3へclampし、正常completionで正確なtargetを適用してから記録する。中断はtargetへsnapせず到達点を使う。
 - manual originは最初のpan/pinch更新時、正常ACTION_UPで一件。move auto-pan/取消を除外。
 - Undo表示は最新snapshot/render geometryが揃うcompositionで一回処理。後続編集/明示navigationで古い要求を破棄。
 - 視点controlは倍率上方へ48dp Button二つ。表示時はtools columnを上へ移す。既存indicatorのlive guardを再利用し、hidden boundsをhitから除く。

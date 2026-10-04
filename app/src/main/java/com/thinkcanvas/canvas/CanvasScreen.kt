@@ -566,12 +566,15 @@ fun CanvasScreen(
         animationBoundary.job = uiScope.launch {
             animate(0f, 1f, animationSpec = tween(340)) { fraction, _ ->
                 viewport = Viewport(
-                    origin.scale + (target.scale - origin.scale) * fraction,
+                    (origin.scale + (target.scale - origin.scale) * fraction).coerceIn(.15f, 3f),
                     origin.panX + (target.panX - origin.panX) * fraction,
                     origin.panY + (target.panY - origin.panY) * fraction,
                 )
             }
             if (generation == animationBoundary.generation) {
+                // Float interpolation can round below the legal minimum on its final frame.
+                // A completed navigation must restore the exact target before history observes it.
+                viewport = target
                 val historyOrigin = animationBoundary.origin
                 animationBoundary.origin = null
                 navigation.record(historyOrigin, animationBoundary.group)

@@ -32,3 +32,4 @@ MVPはUS1。US2の内容操作/保存不変を確認しUS3の寿命/guardへ広�
 ## Phase 4: Convergence
 
 - [x] T014 HIGH: `ContentHistoryFocus.kt` と `CanvasScreen.kt` で接続先変更により候補となった未変更arrowを実際のbefore/after render geometryで絞り、色だけの変更等で変わらないarrowをfitへ含めない。`ContentHistoryFocusTest.kt` と `ViewportHistoryInteractionTest.kt` へ表示不変arrowとgeometry変化arrowの回帰を追加する。FR-006、SC-003、Edge Cases「未変更要素をfitへ入れない」（partial）。
+- [x] T015 HIGH: PR90の第三補正前family-level completeness checkpointでcamera writerを全列挙。`CanvasScreen.animateViewport` のFloat補間が最小倍率を下回る不足を既存scale clampと正常completionのexact targetで補正し、`ViewportHistoryInteractionTest` のregion fit→最小倍率back/forward往復で回帰を追加する。FR-001/003/008、SC-001/004。checkpointで同じauthority/responsibility/review/rollbackの追加一roundに限定。最終CI/reviewはT012で収束する。
