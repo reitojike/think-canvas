@@ -44,3 +44,7 @@ MVPはUS1。US2の内容操作/保存不変を確認しUS3の寿命/guardへ広�
 
 - [ ] T019 HIGH: `ViewportHistory.record` の無移動更新で未開始検索groupを消費する不足を補正し、`ViewportHistoryTest` に既存履歴のあるnear→最初の実移動→同group継続→往復を追加する。Spec010 FR-003/004、SC-001。[検索family checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5978808072)の同PR追加一round。
 - [ ] T020 HIGH: `CanvasScreen` のUndo/Redo検索再focus抑止時に現在位置だけを新件数へclampする。`ViewportHistoryInteractionTest` に2→1→0→1→2の件数/現在位置/current indicator、visible camera、内容/Room/saveのnative回帰を追加する。Spec010 FR-005/006/007、merge済Spec004 FR-013/014/016、SC-003/004。camera/内容authorityを変えず、更新head全154件CIとcanonicalを再収束する。
+
+## Phase 7: native IME Back convergence
+
+- [ ] T021 HIGH: `ViewportHistoryInteractionTest.Harness.hideSearchIme` のIME表示確認後の直接Activity dispatcherを、既存Neutral回帰と同じplatform `GLOBAL_ACTION_BACK` に合わせる。mergedSpec007のIMEだけ閉じ入力維持、Spec010 FR-005/006/007/010の観測経路を補正し、field/query・native IME非表示・内容/Room/save/cameraのassertを維持する。[native Back checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5979053043)の追加一round。旧CIの具体的なinsets timing原因は未確定として保持し、標準focusedと更新head全154件CI/reviewで再確認する。

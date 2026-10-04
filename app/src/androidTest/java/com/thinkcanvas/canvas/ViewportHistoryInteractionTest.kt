@@ -201,7 +201,9 @@ class ViewportHistoryInteractionTest {
         }
         fun hideSearchIme() {
             val query = nodes("ボード内を探す").single().config[SemanticsProperties.EditableText]
-            back()
+            assertTrue(instrumentation.uiAutomation.performGlobalAction(
+                android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
+            composeRule.waitForIdle()
             composeRule.waitUntil(5_000) {
                 var hidden = false
                 scenario.onActivity {

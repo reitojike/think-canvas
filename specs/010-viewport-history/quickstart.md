@@ -1,5 +1,15 @@
 # 検証と収束
 
+## native IME Back経路の補正（2026-10-04）
+
+head0d688b1のCI37194498596は基本job成功、native154/1/0/0、missing/extra/duplicate0。artifact11301365197、digest `sha256:429873af7f5e7fee250d995c266a6a18fe1409bcfbbecda8ebeb4f07a4fdd25e`、XML SHA256 `05982D33C6FADCD0DC0ED670D78344E8B5E141A02E73638CAF1D74CF1B6A9CA3`。新しいshrink/grow回帰を含む153件は成功したが、visibleAndOffscreenUndoRedoFocusWithoutExtraContentHistoryOrSaveの最後のRedo後に、IMEを閉じるBackで検索欄も消えた。
+
+[native Back checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5979053043)ではsave gate/native readiness/Back call site/製品IME・検索終了段階/既存Neutral回帰を有限censusした。fixtureはIME表示を確認してからActivity dispatcherを直接呼び、platform IMEの先行処理を迂回していた。製品guardの不具合を断定せず、T021でhideSearchImeだけを既存Neutral回帰と同じGLOBAL_ACTION_BACKへ合わせた。旧CIの具体的なinsets timing原因は未確定を維持する。
+
+標準focused run `20261004T103241Z-d2504fc9c66f4eaf9dd02b3f4dd0a404`は1/0/0/0、XML SHA256 `07EAA7623A71742EA6913FD25B2BC76656F43EF799FB62BFFAE20E3C2783C6B7`、owned/sourceUnchanged=true、介入0。検索field/query保持・native IME非表示・4回の内容/Room/save・camera/一entry/Redoの既存assertを維持した。他のapp-stage Back、入力readiness、製品コード、CI/launcher/schema/依存/許容差変更なし。
+
+local lint/全単体/debug/androidTest buildは成功1m5s、単体140/0/0/0、公開境界214ファイルPASS、diff check成功。10FR/4SC/12scenario、有限設計5項目、Constitution5原則と21taskのread-only再convergeで追加buildable残差0。native154件の削除/除外なし。最終CI/review/merge/deliveryは更新headで確認し、#79をgateへ含めない。source/docsは候補commit後にfreezeする。
+
 ## canonical検索familyの限定補正（2026-10-04）
 
 head11aaa4bのCI37192521290は両job成功、fresh153/0/0/0、missing/extra/duplicate0。artifact11299758000、digest `sha256:bf5f440e5ed890b105d2766965e3a79c4c5551f33aa5a899013713db9c6bc83c`、XML SHA256 `296E0CAB0A330A7F9B4800F366B76E5B6FB27FE911947D12B0EE3FECD7B3C84B`。依頼5978743500（09:56:36Z）後のcanonical review5405425154（10:00:22Z、同head）は無移動検索groupとUndo後の検索位置のP2を指摘した。Completed表示だけでは合格とせず、[検索family checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5978808072)で有限6surfaceを確認してT019/T020へ閉じた。
