@@ -77,9 +77,15 @@ class ViewportHistoryInteractionTest {
                 value.startsWith("現在の検索結果、") || value.startsWith("選択対象、") } == true }
         fun marker(prefix: String) = nodes(prefix).single()
         fun click(label: String) {
-            val node = nodes(label).first { it.config.contains(SemanticsActions.OnClick) }
+            val candidates = if (label == "戻す" || label == "進む")
+                composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes() else nodes(label)
+            val node = candidates.first { it.config.contains(SemanticsActions.OnClick) }
             composeRule.runOnUiThread { assertTrue(node.config[SemanticsActions.OnClick].action!!.invoke()) }
             composeRule.waitForIdle()
+            if (label == "戻す" || label == "進む") {
+                composeRule.waitUntil(5_000) { sessions.saveStateFor(1L, initial).value == BoardSaveState.Idle }
+                composeRule.waitForIdle()
+            }
         }
         fun action(label: String, action: String) {
             val node = nodes(label).first { it.config.contains(SemanticsActions.CustomActions) }
@@ -359,6 +365,7 @@ class ViewportHistoryInteractionTest {
             assertEquals(initial, board.snapshot())
             assertEquals(1, saves.get())
             click("進む")
+            assertFalse("対象をRedoで削除した後の内容", board.snapshot() == initial)
             sameFocus(visible, navigation.focus())
             assertEquals(2, saves.get())
             repeat(4) { pan(Offset(-canvas.width * .62f, 0f),
