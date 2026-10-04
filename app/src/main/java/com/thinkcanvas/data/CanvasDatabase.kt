@@ -30,6 +30,13 @@ data class BoardRow(
     val updatedAt: Long = System.currentTimeMillis(),
 )
 
+@Entity(tableName = "share_import_receipts")
+data class ShareImportReceiptRow(
+    @PrimaryKey val requestId: String,
+    val boardId: Long,
+    val elementId: String,
+)
+
 @Entity(tableName = "text_elements")
 data class TextElementRow(
     @PrimaryKey val id: String,
@@ -147,6 +154,9 @@ interface CanvasDao {
     @Query("SELECT * FROM ink_strokes WHERE boardId = :boardId ORDER BY rowid")
     suspend fun inkStrokes(boardId: Long): List<InkStrokeRow>
 
+    @Query("SELECT * FROM share_import_receipts WHERE requestId = :requestId")
+    suspend fun shareReceipt(requestId: String): ShareImportReceiptRow?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun putBoard(board: BoardRow)
 
@@ -161,6 +171,9 @@ interface CanvasDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putInkStrokes(strokes: List<InkStrokeRow>)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun putShareReceipt(receipt: ShareImportReceiptRow)
 
     @Query("DELETE FROM text_elements WHERE boardId = :boardId")
     suspend fun clearElements(boardId: Long)
@@ -240,6 +253,29 @@ interface CanvasDao {
     }
 
     @Transaction
+    suspend fun replaceAllForShare(
+        receipt: ShareImportReceiptRow,
+        elements: List<TextElementRow>,
+        spatialElements: List<SpatialElementRow>,
+        arrows: List<ArrowElementRow>,
+        inkStrokes: List<InkStrokeRow> = emptyList(),
+    ) {
+        val existing = shareReceipt(receipt.requestId)
+        if (existing != null) {
+            require(existing.boardId == receipt.boardId && existing.elementId == receipt.elementId) {
+                "共有要求の完了記録が一致しません"
+            }
+            return
+        }
+
+        require(elements.any { it.id == receipt.elementId && it.boardId == receipt.boardId }) {
+            "共有要求の文字が保存内容に含まれていません"
+        }
+        replaceAll(receipt.boardId, elements, spatialElements, arrows, inkStrokes)
+        putShareReceipt(receipt)
+    }
+
+    @Transaction
     suspend fun deleteBoard(boardId: Long): Boolean {
         if (board(boardId) == null) return false
         clearElements(boardId)
@@ -252,8 +288,8 @@ interface CanvasDao {
 
 @Database(
     entities = [BoardRow::class, TextElementRow::class, SpatialElementRow::class,
-        ArrowElementRow::class, InkStrokeRow::class],
-    version = 2,
+        ArrowElementRow::class, InkStrokeRow::class, ShareImportReceiptRow::class],
+    version = 3,
     exportSchema = true,
 )
 abstract class CanvasDatabase : RoomDatabase() {
@@ -268,10 +304,16 @@ abstract class CanvasDatabase : RoomDatabase() {
                 PRIMARY KEY(`id`))""".trimIndent())
         }
 
+        val MIGRATION_2_3 = Migration(2, 3) { connection ->
+            connection.execSQL("""CREATE TABLE IF NOT EXISTS `share_import_receipts` (
+                `requestId` TEXT NOT NULL, `boardId` INTEGER NOT NULL, `elementId` TEXT NOT NULL,
+                PRIMARY KEY(`requestId`))""".trimIndent())
+        }
+
         fun open(context: Context): CanvasDatabase = Room.databaseBuilder(
             context.applicationContext,
             CanvasDatabase::class.java,
             "thinkcanvas.db",
-        ).setDriver(AndroidSQLiteDriver()).addMigrations(MIGRATION_1_2).build()
+        ).setDriver(AndroidSQLiteDriver()).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
     }
 }

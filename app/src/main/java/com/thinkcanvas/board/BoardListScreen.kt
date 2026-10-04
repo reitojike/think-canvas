@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,12 +31,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -76,12 +82,24 @@ fun BoardListScreen(
     onDelete: (Long) -> Unit,
     onShare: (Long) -> Unit,
     onHelp: () -> Unit,
+    externalInteractionBlocked: () -> Boolean = { false },
+    onImportReadiness: ((Boolean, () -> Boolean) -> Unit)? = null,
 ) {
     var selectedId by remember { mutableStateOf<Long?>(null) }
     var renaming by remember { mutableStateOf(false) }
     var renameValue by remember { mutableStateOf("") }
     var deleteId by remember { mutableStateOf<Long?>(null) }
     val selected = boards.firstOrNull { it.details.id == selectedId }
+    val density = LocalDensity.current
+    val imeInsets = WindowInsets.ime
+    fun importReady(): Boolean = selectedId == null && !renaming && deleteId == null &&
+        imeInsets.getBottom(density) == 0
+    if (onImportReadiness != null) {
+        val latestReadiness = rememberUpdatedState(onImportReadiness)
+        val readyForImport = importReady()
+        SideEffect { onImportReadiness(readyForImport, ::importReady) }
+        DisposableEffect(Unit) { onDispose { latestReadiness.value(false) { false } } }
+    }
 
     Box(Modifier.fillMaxSize().background(paper).safeDrawingPadding()) {
         Column(Modifier.fillMaxSize()) {
@@ -107,12 +125,14 @@ fun BoardListScreen(
                     items(boards, key = { it.details.id }) { board ->
                         val name = displayName(board.details.name)
                         Column(Modifier.fillMaxWidth().combinedClickable(
-                            onClick = { onOpen(board.details.id) },
-                            onLongClick = { selectedId = board.details.id },
+                            enabled = !externalInteractionBlocked(),
+                            onClick = { if (!externalInteractionBlocked()) onOpen(board.details.id) },
+                            onLongClick = { if (!externalInteractionBlocked()) selectedId = board.details.id },
                         ).semantics {
                             contentDescription = "$name、最終編集 ${editedDate(board.details.updatedAt)}"
                             onLongClick(label = "$name の操作") {
-                                selectedId = board.details.id; true
+                                if (externalInteractionBlocked()) false
+                                else { selectedId = board.details.id; true }
                             }
                         }) {
                             BoardThumbnail(board.snapshot, Modifier.fillMaxWidth().height(132.dp)
@@ -135,7 +155,7 @@ fun BoardListScreen(
         }
         Box(Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 18.dp)
             .size(58.dp).background(ink, RoundedCornerShape(18.dp))
-            .clickable(onClick = onCreate)
+            .clickable(enabled = !externalInteractionBlocked()) { if (!externalInteractionBlocked()) onCreate() }
             .semantics { contentDescription = "新しいボード" }, contentAlignment = Alignment.Center) {
             Text("＋", color = paper, fontSize = 26.sp)
         }
@@ -150,12 +170,14 @@ fun BoardListScreen(
             if (renaming) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp),
                     verticalAlignment = Alignment.CenterVertically) {
-                    TextField(renameValue, onValueChange = { renameValue = it },
+                    TextField(renameValue, onValueChange = { if (!externalInteractionBlocked()) renameValue = it },
                         placeholder = { Text("名前（なくてもいい）") }, singleLine = true,
                         modifier = Modifier.weight(1f).height(56.dp))
                     Button(onClick = {
-                        onRename(selected.details.id, renameValue.trim())
-                        selectedId = null; renaming = false
+                        if (!externalInteractionBlocked()) {
+                            onRename(selected.details.id, renameValue.trim())
+                            selectedId = null; renaming = false
+                        }
                     }, modifier = Modifier.padding(start = 10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = ink)) { Text("保存") }
                 }
@@ -164,14 +186,16 @@ fun BoardListScreen(
                     Text(action, color = if (action == "削除") vermilion else ink,
                         fontSize = 15.sp, modifier = Modifier.fillMaxWidth().height(52.dp)
                             .clickable(role = if (action == "画像で共有") Role.Button else null) {
-                                when (action) {
-                                    "名前を変える" -> {
-                                        renameValue = selected.details.name; renaming = true
+                                if (!externalInteractionBlocked()) {
+                                    when (action) {
+                                        "名前を変える" -> {
+                                            renameValue = selected.details.name; renaming = true
+                                        }
+                                        "複製" -> { onDuplicate(selected.details.id); selectedId = null }
+                                        "画像で共有" -> { onShare(selected.details.id); selectedId = null }
+                                        "削除" -> { deleteId = selected.details.id; selectedId = null }
+                                        else -> selectedId = null
                                     }
-                                    "複製" -> { onDuplicate(selected.details.id); selectedId = null }
-                                    "画像で共有" -> { onShare(selected.details.id); selectedId = null }
-                                    "削除" -> { deleteId = selected.details.id; selectedId = null }
-                                    else -> selectedId = null
                                 }
                             }.padding(start = 22.dp, top = 15.dp))
                 }
@@ -185,7 +209,7 @@ fun BoardListScreen(
         title = { Text("ボードを削除") },
         text = { Text("「${displayName(deleting.details.name)}」を削除しますか？") },
         confirmButton = { TextButton(onClick = {
-            onDelete(deleting.details.id); deleteId = null
+            if (!externalInteractionBlocked()) { onDelete(deleting.details.id); deleteId = null }
         }) { Text("削除", color = vermilion) } },
         dismissButton = { TextButton(onClick = { deleteId = null }) { Text("キャンセル") } },
     )

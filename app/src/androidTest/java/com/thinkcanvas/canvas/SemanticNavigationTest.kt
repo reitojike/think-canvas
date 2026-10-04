@@ -1,10 +1,12 @@
 package com.thinkcanvas.canvas
 
 import android.content.Intent
+import android.graphics.Rect
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -260,7 +262,29 @@ class SemanticNavigationTest {
                 ?.let { return it }
             Thread.sleep(pollMillis)
         }
-        error("Accessibility node が見つかりません: $prefix")
+        error("Accessibility node が見つかりません: $prefix; 現在の倍率=${currentOpeningZoom()}")
+    }
+
+    private fun awaitCanvasAfterSearchIme(scenario: ActivityScenario<MainActivity>) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        var previousBounds: Rect? = null
+        var stableBounds = 0
+        composeRule.waitUntil(5_000) {
+            var imeHidden = false
+            scenario.onActivity {
+                val insets = checkNotNull(it.window.decorView.rootWindowInsets)
+                imeHidden = !insets.isVisible(WindowInsets.Type.ime()) &&
+                    insets.getInsets(WindowInsets.Type.ime()).bottom == 0
+            }
+            val bounds = Rect()
+            findA11y(instrumentation.uiAutomation.rootInActiveWindow, "キャンバス", false)
+                ?.getBoundsInScreen(bounds)
+            stableBounds = if (imeHidden && !bounds.isEmpty && bounds == previousBounds)
+                stableBounds + 1 else 0
+            previousBounds = bounds
+            stableBounds >= 2
+        }
+        composeRule.waitForIdle()
     }
 
     private fun findEditableA11y(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
@@ -416,6 +440,7 @@ class SemanticNavigationTest {
             awaitA11y("0件")
             assertA11yActionable("検索を閉じる")
             activateViaSemantics("検索を閉じる")
+            awaitCanvasAfterSearchIme(scenario)
             assertA11yActionable("倍率を切り替える")
             activateViaSemantics("倍率を切り替える")
             awaitA11y("倍率を切り替える、25%  遠")
