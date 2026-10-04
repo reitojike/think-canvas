@@ -16,6 +16,12 @@ import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import android.util.AtomicFile
+import java.io.FileOutputStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeoutException
 
 @RunWith(AndroidJUnit4::class)
 class ShareImportCheckpointTest {
@@ -163,6 +169,63 @@ class ShareImportCheckpointTest {
         assertTrue(runCatching { ShareImportCheckpoint(directory, token).read() }.isFailure)
     }
 
+    @Test
+    fun anotherOwnerReadDoesNotDiscardAnInFlightAtomicWrite() = withTestDirectory { directory, tokens ->
+        val token = newToken(tokens)
+        val first = ShareImportRequest(text = "old durable body")
+        ShareImportCheckpoint(directory, token).write(first)
+        val replacement = first.copy(text = "新しい共有本文🌸")
+        whileNativeWriteIsOpen(directory, token, replacement) {
+            val observed = ShareImportCheckpoint(directory, token).read()
+            assertTrue(observed == first || observed == replacement)
+        }
+        assertEquals(replacement, ShareImportCheckpoint(directory, token).read())
+    }
+
+    @Test
+    fun newTaskDiscardWaitsForThePreviousOwnerAtomicWrite() = withTestDirectory { directory, tokens ->
+        val oldToken = newToken(tokens)
+        val newToken = newToken(tokens)
+        val current = ShareImportRequest(text = "current task body")
+        ShareImportCheckpoint(directory, newToken).write(current)
+        whileNativeWriteIsOpen(directory, oldToken, ShareImportRequest(text = "旧task本文🌸")) {
+            ShareImportCheckpoint.discardOtherTasks(directory, newToken)
+        }
+        assertEquals(current, ShareImportCheckpoint(directory, newToken).read())
+        assertFalse(File(directory, "$oldToken.pending").exists())
+        assertFalse(File(directory, "$oldToken.pending.new").exists())
+    }
+
+    private fun whileNativeWriteIsOpen(directory: File, token: String, request: ShareImportRequest,
+                                       concurrentAccess: () -> Unit) {
+        val opened = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val accessing = CountDownLatch(1)
+        val native = object : AtomicFile(File(directory, "$token.pending")) {
+            override fun startWrite(): FileOutputStream {
+                val stream = super.startWrite()
+                opened.countDown()
+                check(release.await(10, TimeUnit.SECONDS)) { "native writer release timeout" }
+                return stream
+            }
+        }
+        val executor = Executors.newFixedThreadPool(2)
+        val writing = executor.submit<Unit> { ShareImportCheckpoint(directory, token, native).write(request) }
+        try {
+            assertTrue("The native write must be open", opened.await(10, TimeUnit.SECONDS))
+            val access = executor.submit<Unit> { accessing.countDown(); concurrentAccess() }
+            assertTrue(accessing.await(10, TimeUnit.SECONDS))
+            // A protected read/discard waits; an unprotected one touches the actual staging file.
+            try { access.get(1, TimeUnit.SECONDS) } catch (_: TimeoutException) { }
+            release.countDown()
+            writing.get(10, TimeUnit.SECONDS)
+            access.get(10, TimeUnit.SECONDS)
+        } finally {
+            release.countDown()
+            executor.shutdown()
+            assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS))
+        }
+    }
     private fun parcelTaskToken(token: String): Pair<String, Int> {
         val bundle = Bundle().apply { putString(TASK_TOKEN_KEY, token) }
         assertEquals(setOf(TASK_TOKEN_KEY), bundle.keySet())

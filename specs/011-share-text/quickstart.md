@@ -84,3 +84,29 @@ head `4513721bad6b3b50ac056f43c68eaa4df37875d2` のCI37213119426はbasic成功�
 read-only family checkpointでMain startupとserialized Store actor、全instrumentationのgateを照合した。actor全体を止めるfixtureは一箇所で、初期Store readより先にgateが入ると初期一覧を表示できない順序競合がある。下位モデルの独立read-only censusも同じ結論。他のgateは操作/保存固有だった。追加1roundをT032の初期一覧待ち→gate挿入とfinally解除保証へ限定し、製品処理と既存assert/待機上限を維持した。
 
 補正focusedは1件、失敗/error/skip0、sourceUnchanged=true、manual intervention0、FRESH_EXACT_XML。XML SHA256 `8740F10EAD95CA8E913566D258C279A3568F792C19BA526A376EE8ADCB80C26E`。local lint/unit161/debug/test APK build成功、schema3 SHA256は上記と一致。read-only convergeの追加実装残差0、新headの必須CI/canonical/deliveryは実証待ち。
+## checkpoint IO follow-up の completeness checkpoint
+
+PR #97 head 8e50adc の required CI は source/XML exact 191/1/0/0。共有 empty-create の preview timeout と AtomicFile rename failure を観測した。両者の正確な因果は未確定。利用者の追加許可により blank arbitration から別PRへ分離する。
+
+main 5b5c7d6 上の native concurrent owner read は exact 1/1/0/0、write の read-back IOException で RED。
+続く checkpoint class は 8/2/0/0。owner read は同じ IOException、cleanup case は staging の観測前提で失敗したため、cleanup corruption の RED として採用しない。
+
+family は checkpoint IO とその検証境界。有限 surface は AtomicFile read/write/read-back/discard、ViewModel の既存 IO、finishing task の Store cleanup、public/internal constructor、二つの native concurrency regression、三つの picker 操作 fixture。
+判定は BOUNDED_CORRECTION。startWrite latch の native primitive injection により観測境界を固定し、同一 process の共有 monitor と picker readiness の観測へ補正を限定する。新 owner/writer/schema/workflow、blank arbitration は変更しない。新しい material finding は HOLD/checkpoint。
+
+境界を固定した native checkpoint class は fresh exact **8/2/0/0**。新規2件だけが write/read-back IOException または ENOENT で失敗し、元の6件は成功。constructor の native primitive injection だけを追加した時点の、排他導入前の RED とする。
+
+排他補正後の checkpoint class は fresh source/XML exact **8/0/0/0**。二つの制御した native IO 競合と既存6件を確認した。shared interaction class / floor / final-head full / CI / canonical review は別 gate。
+
+## shared interaction fixture の追加 checkpoint
+
+checkpoint 排他候補の focused interaction は fresh exact 23/1/0/0。empty-create を含む22件は成功し、imagePreviewAndChooserReturnToTheSameOwnerBeforeTextImport の2回目の一覧 card 操作で node 不在が発生した。外部 chooser を開く前であり、chooser 復帰の製品不具合とは判定しない。
+
+HOLD 後の read-only surface は当該 test/helper、Main の onOpenList/showList/BoardListAction completion、既存 BoardListScreenTest の一覧待機。Main の一覧表示は非同期で、header 表示と BoardListAction の consume、一覧 card 表示は別の完了境界。該当 helper は一覧 click 直後に card を操作し、その完了を観測していなかった。click 拒否と非同期読込中のどちらだったかは失敗logだけでは断定しない。
+
+判定は BOUNDED_CORRECTION。追加1roundは当該 helper で既存 BoardListAction Idle と実際の一覧 card 表示を待つことに限定する。同じ一回の click/long-click、10秒上限、owner/Room/import の期待値を維持する。製品 navigation guard、checkpoint owner、blank arbitration は変更しない。新しい material finding は再度 HOLD/checkpoint。
+
+一覧 readiness 補正後の image preview / chooser focused は fresh exact **1/0/0/0**。同じ一回の操作で元の owner / Room / text import の期待値を確認した。全23件成功とは記録せず、他22件は先行 class の結果と区別する。全185件は固定 head の full/CI で照合する。
+
+
+follow-up 候補の lint / unit **161/0/0/0** / debug / androidTest build は成功。Room schema 差分なし、公開境界235 candidate files、diff check 成功。固定 final head の full Pixel9/API37 は source185件と XML 全件を照合し、current-head CI / canonical / base / unresolved threads の実証で判定する。

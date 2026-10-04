@@ -10,6 +10,7 @@ import android.accessibilityservice.AccessibilityService
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -24,6 +25,8 @@ import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.thinkcanvas.BoardListActionState
+import com.thinkcanvas.BoardListActionViewModel
 import com.thinkcanvas.BoardSaveState
 import com.thinkcanvas.BoardSessionViewModel
 import com.thinkcanvas.MainActivity
@@ -83,6 +86,15 @@ class ShareImportInteractionTest {
                 ready
             }
             composeRule.onNodeWithText("取り込む").assertIsEnabled()
+        }
+        fun awaitPicker() {
+            awaitText("取り込み先を選択")
+            composeRule.waitUntil(10_000) {
+                val state = imports().state
+                state.phase == ShareImportPhase.PICKER && !state.writing
+            }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithText("新しいボード").assertIsEnabled()
         }
         fun awaitEmpty() {
             composeRule.waitUntil(10_000) {
@@ -207,7 +219,7 @@ class ShareImportInteractionTest {
             awaitPreview("二つ目")
             assertEquals(listOf(note), rows().map { it.toModel() }); assertTrue(rows(2).isEmpty())
             composeRule.onNodeWithText("取り込み先を変更").performClick()
-            awaitText("取り込み先を選択")
+            awaitPicker()
             composeRule.onNodeWithText("一つ目").performClick()
             awaitPreview()
             confirm(); awaitEmpty()
@@ -216,7 +228,7 @@ class ShareImportInteractionTest {
 
     @Test fun missingLastBoardShowsPickerAndCancelPreservesContentAndHistory() =
         withBoards(last = null, payload = "cancel me") {
-            awaitText("取り込み先を選択")
+            awaitPicker()
             back(); awaitEmpty()
             assertEquals(listOf(note), rows().map { it.toModel() }); assertTrue(rows(2).isEmpty())
             assertFalse(board.canUndo); assertFalse(board.canRedo)
@@ -226,9 +238,10 @@ class ShareImportInteractionTest {
 
     @Test fun emptyShareStartDoesNotCreateBoardUntilExplicitCreate() =
         withBoards(last = null, payload = "first shared text", empty = true) {
+            awaitPicker()
             awaitText("ボードがありません")
             assertTrue(runBlocking { database.canvasDao().boards() }.isEmpty())
-            composeRule.onNodeWithText("新しいボード").performClick()
+            composeRule.onNodeWithText("新しいボード").assertIsEnabled().performClick()
             awaitPreview("無題のボード")
             val destination = checkNotNull(imports().state.request?.destinationId)
             assertTrue(rows(destination).isEmpty())
@@ -656,7 +669,18 @@ class ShareImportInteractionTest {
         awaitText("‹ 一つ目")
         val original = sessions
         fun openImagePreview() {
+            composeRule.waitUntil(10_000) {
+                var idle = false
+                scenario.onActivity {
+                    idle = ViewModelProvider(it)[BoardListActionViewModel::class.java].state.value == BoardListActionState.Idle
+                }
+                idle
+            }
+            composeRule.waitForIdle()
             composeRule.onNodeWithContentDescription("ボード一覧を開く").performClick()
+            composeRule.waitUntil(10_000) {
+                composeRule.onAllNodesWithContentDescription("一つ目、", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
             composeRule.onNodeWithContentDescription("一つ目、", substring = true)
                 .performSemanticsAction(SemanticsActions.OnLongClick)
             composeRule.onNodeWithText("画像で共有").performClick()
