@@ -863,27 +863,38 @@ fun CanvasScreen(
             requester.requestFocus()
             // Read-only editors retain focus, but cannot create an editable input connection.
             if (exitBlocked()) return
-            if (Build.VERSION.SDK_INT >= 30) {
-                val controller = inputView.windowInsetsController ?: return
-                suspendCancellableCoroutine<Unit> { continuation ->
-                    val listener = object : WindowInsetsController.OnControllableInsetsChangedListener {
-                        override fun onControllableInsetsChanged(controller: WindowInsetsController, typeMask: Int) {
-                            if (continuation.isActive && inputView.hasWindowFocus() &&
-                                typeMask and android.view.WindowInsets.Type.ime() != 0) {
-                                // Do not mutate the platform listener list during its dispatch.
-                                inputView.post { controller.removeOnControllableInsetsChangedListener(this) }
-                                continuation.resume(Unit)
+            val controller = if (Build.VERSION.SDK_INT >= 30) {
+                inputView.windowInsetsController ?: return
+            } else null
+            val ready = awaitEditorImeWindow(
+                isCurrent = { isCurrent() && !exitBlocked() },
+                awaitWindowOwnership = {
+                    snapshotFlow { windowInfo.isWindowFocused && inputView.hasWindowFocus() }.first { it }
+                },
+                awaitImeControl = {
+                    if (Build.VERSION.SDK_INT >= 30 && controller != null) {
+                        suspendCancellableCoroutine<Unit> { continuation ->
+                            val listener = object : WindowInsetsController.OnControllableInsetsChangedListener {
+                                override fun onControllableInsetsChanged(controller: WindowInsetsController, typeMask: Int) {
+                                    if (continuation.isActive && typeMask and android.view.WindowInsets.Type.ime() != 0) {
+                                        // Ownership is checked after the frame, independently of IME control.
+                                        // Do not mutate the platform listener list during its dispatch.
+                                        inputView.post { controller.removeOnControllableInsetsChangedListener(this) }
+                                        continuation.resume(Unit)
+                                    }
+                                }
                             }
+                            continuation.invokeOnCancellation {
+                                controller.removeOnControllableInsetsChangedListener(listener)
+                            }
+                            if (continuation.isActive) controller.addOnControllableInsetsChangedListener(listener)
                         }
                     }
-                    continuation.invokeOnCancellation {
-                        controller.removeOnControllableInsetsChangedListener(listener)
-                    }
-                    if (continuation.isActive) controller.addOnControllableInsetsChangedListener(listener)
-                }
-            }
-            withFrameNanos { }
-            if (isCurrent() && !exitBlocked() && inputView.hasWindowFocus()) keyboard?.show()
+                },
+                awaitFrame = { withFrameNanos { } },
+                hasWindowFocus = { inputView.hasWindowFocus() },
+            )
+            if (ready) keyboard?.show()
         } finally {
             pendingInputRequests.remove(requestJob)
         }

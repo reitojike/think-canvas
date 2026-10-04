@@ -64,3 +64,13 @@ T019の修正後は同じnative終了回帰に同位置session置換を含め1/0
 第五roundの同じproduction sourceで、既存pending終了・同位置session置換回帰も1/0/0/0（run20261004T035055Z-a83db39241c0418d9739085371459a13、XML `33191A073CB38B13DE593D602DB5B063101D7E7A38E77E39A1A84487F549C53D`）。owned/sourceUnchanged=true、介入0。再composition前の旧field非focus、終了後非表示、新sessionへの正常接続を維持する。read-only再convergeでは三owner/全hide箇所/live save・確認・session guardを有限照合しbuildable残差0。T017/T020〜T022の最終deliveryは未達のまま保持する。
 
 第五roundの最終候補はlint、unit119/0/0/0、debug/androidTest APK build、公開境界198候補、diff check、schema不変を確認。native source censusは143 identities、duplicate0。base main cb8aa72にbehind0。これをfinal candidateとしてfreezeし、同じheadの両CIとfresh full XML/canonical reviewを最終gateへ使う。CI成功やmerge/AC完了はここでは推定しない。
+
+## Issue91 late focus lossの補正（2026-10-04）
+
+統合head `a7682c2af1b2cef4edcd4eb262274b0dfb347e3f` の[両CI37181196325](https://github.com/reitojike/think-canvas/actions/runs/37181196325)はfresh143/0/0/0だったが、[canonical P2](https://github.com/reitojike/think-canvas/pull/92#discussion_r4176405318)によりmergeをHOLDした。[第六family checkpoint](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5977331918)の三owner・全pending段階・hide取消・readonly/save/ack・listener cleanupの有限範囲でT023を実装した。
+
+- 既存post-focus段階を小さいapp固有関数へ切り出した補正前の単体回帰は4/4/0/0（XML SHA256 `246AD1359F9E257CCED4C605EA2C5C14E18C297F287F00E6CBC0439F1DBAB12A`）。window復帰を待つ補正後は4/0/0/0（`86721D99BCEFC32781EFFA2A0A678851724FC423ED95C6492924AD57418EDF93`）。legacy/modernのlate loss、modern controlの再確認、終了/blockedとJob取消を検証した。focus/show各一回、window focus非keyを維持する。
+- 三ownerのnative late-window回帰はfocused1/0/0/0、run `20261004T063708Z-6d52e09dd01449ac996e39c6e246ea8d`、XML `7B332FEA174F3BB34757F0C2379790BAE09EF7946DB24A2A87F69E851446DF73`。field focusとnative IME controlを観測し、Compose frameを停止した間に別windowへ所有を移し、帰還後の同じ入力/focus/接続/IMEとBoard/Room/Undo不変を検証した。
+- 既存確認/IME Backのpending取消回帰はfocused1/0/0/0、run `20261004T064252Z-83ccaf21c0f04234b76ae36e2fd5bcaf`、XML `A2F2E209FB83C5DE6E509C97BD0C2CA294DDCFD2BAD8528F75FD8BA123C49D31`。両focusedともownershipPassed/sourceUnchanged=true、manualInterventions=0。初回native fixtureはKotlinのlocal変数参照のコンパイルエラーでfresh XMLなし・未実行だったため、成功証跡には使わない。
+- lint/unit123/0/0/0/debug/androidTest build、公開境界200候補、diff check/schema不変を確認した。API37 nativeとlegacy単体adapterを区別し、API26〜29 native実行は未実施。native source censusは144 identities。
+- Spec007再converge: FR10/SC3/US scenario11、plan設計5、Constitution原則5、既存23 tasksの結果を照合し、buildable missing/partial/contradicts/unrequestedは0。追加taskなし。reviewer-owned exit-uxの8未査読markerは保持し、既存実装許可に従う。T023の有限補正は完了、T017/T020〜T022のfinal deliveryは新headの両CI/full census/canonical/base/thread/merge/最新ACまでpending。旧headのgreen/reviewを最終gateへ再利用しない。

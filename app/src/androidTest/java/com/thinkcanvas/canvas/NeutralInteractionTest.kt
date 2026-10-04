@@ -8,6 +8,7 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.WindowInsets
 import android.view.WindowManager
+import android.view.WindowInsetsController
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.click
@@ -752,6 +753,75 @@ class NeutralInteractionTest {
         }
         assertEquals("Window owner draft", editor.draft.value?.text)
         assertOriginalContent()
+    }
+
+    @Test fun lateWindowLossDuringInputFrameResumesTextRegionAndSearch() {
+        for (label in listOf("新しいテキスト", "囲みの名前", "ボード内を探す")) withBoard {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val first = blockingWindow()
+            var second: Dialog? = null
+            var controlMask = 0
+            var controller: WindowInsetsController? = null
+            val listener = WindowInsetsController.OnControllableInsetsChangedListener { _, mask ->
+                controlMask = mask
+            }
+            try {
+                if (label == "ボード内を探す") {
+                    composeRule.onNodeWithContentDescription("ボード内を検索").performClick()
+                } else scenario.onActivity {
+                    if (label == "新しいテキスト") {
+                        editor.draft.value = Draft(null, 500f, 1200f, "Late window draft")
+                    } else {
+                        editor.regionNameDraft.value = RegionNameDraft(region.id, region.name)
+                            .copy(name = "Late window name")
+                    }
+                }
+                composeRule.waitForIdle()
+                composeRule.onNodeWithContentDescription(label).assertIsNotFocused()
+                val draft = editor.draft.value
+                val regionDraft = editor.regionNameDraft.value
+                composeRule.mainClock.autoAdvance = false
+                scenario.onActivity {
+                    controller = checkNotNull(it.window.decorView.windowInsetsController)
+                    controller?.addOnControllableInsetsChangedListener(listener)
+                    first.dismiss()
+                }
+                // The field is focused and the platform IME is controllable, while the
+                // Compose frame awaited by the unfinished input request is still paused.
+                composeRule.waitUntil(5_000) {
+                    val focused = composeRule.onAllNodesWithContentDescription(label)
+                        .fetchSemanticsNodes().singleOrNull()?.config
+                        ?.getOrNull(SemanticsProperties.Focused) == true
+                    var ready = false
+                    scenario.onActivity {
+                        ready = it.window.decorView.hasWindowFocus() &&
+                            controlMask and WindowInsets.Type.ime() != 0
+                    }
+                    focused && ready
+                }
+                instrumentation.waitForIdleSync()
+                second = blockingWindow()
+                composeRule.mainClock.advanceTimeByFrame()
+                instrumentation.waitForIdleSync()
+                assertEquals(draft, editor.draft.value)
+                assertEquals(regionDraft, editor.regionNameDraft.value)
+                assertOriginalContent()
+                scenario.onActivity { second?.dismiss() }
+                composeRule.mainClock.autoAdvance = true
+                waitEditorReady(label)
+                assertEquals(draft, editor.draft.value)
+                assertEquals(regionDraft, editor.regionNameDraft.value)
+                assertOriginalContent()
+            } finally {
+                scenario.onActivity {
+                    first.dismiss()
+                    second?.dismiss()
+                    controller?.removeOnControllableInsetsChangedListener(listener)
+                }
+                composeRule.mainClock.autoAdvance = true
+                composeRule.waitForIdle()
+            }
+        }
     }
 
     @Test fun endedPendingEditorDoesNotRegainFocusBeforeRecomposition() = withBoard {
