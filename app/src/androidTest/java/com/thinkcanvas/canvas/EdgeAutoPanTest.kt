@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.Window
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.geometry.Offset
@@ -146,23 +147,68 @@ class EdgeAutoPanTest {
             assertEquals(0, saves.get())
             assertFalse(board.canUndo)
         }
-        fun assertNextPanWorks() {
+        fun assertNextPanWorks(case: String = "次の操作") {
             val before = position(fixed.text)
             val content = board.snapshot()
+            val stored = savedSnapshot()
+            val saveCount = saves.get()
+            val canUndo = board.canUndo
+            val canRedo = board.canRedo
             val area = canvas
             val start = Offset(area.left + area.width * .22f, area.top + area.height * .72f)
             val gesture = Gesture()
+            var deliveredDown: Offset? = null
+            var deliveredMove: Offset? = null
+            var deliveredUp = false
+            lateinit var window: Window
+            lateinit var original: Window.Callback
+            lateinit var observer: Window.Callback
+            scenario.onActivity { activity ->
+                window = activity.window
+                original = window.callback
+                observer = object : Window.Callback by original {
+                    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                        if (event.downTime == gesture.downTime && event.pointerCount == 1) {
+                            when (event.actionMasked) {
+                                MotionEvent.ACTION_DOWN -> deliveredDown = Offset(event.x, event.y)
+                                MotionEvent.ACTION_MOVE -> deliveredMove = Offset(event.x, event.y)
+                                MotionEvent.ACTION_UP -> deliveredUp = true
+                            }
+                        }
+                        return original.dispatchTouchEvent(event)
+                    }
+                }
+                window.callback = observer
+            }
             try {
                 gesture.send(MotionEvent.ACTION_DOWN, start)
                 gesture.send(MotionEvent.ACTION_MOVE, start + Offset(110f, 35f))
                 gesture.send(MotionEvent.ACTION_UP)
-            } finally { if (!gesture.ended) gesture.send(MotionEvent.ACTION_CANCEL) }
+            } finally {
+                try { if (!gesture.ended) gesture.send(MotionEvent.ACTION_CANCEL) }
+                finally { composeRule.runOnUiThread { if (window.callback === observer) window.callback = original } }
+            }
             composeRule.waitForIdle()
+            assertNotNull("$case native DOWN", deliveredDown)
+            assertNotNull("$case native MOVE", deliveredMove)
+            assertTrue("$case native UP", deliveredUp)
+            val delta = deliveredMove!! - deliveredDown!!
+            val slop = android.view.ViewConfiguration.get(instrumentation.targetContext).scaledTouchSlop
+            assertTrue("$case native panが成立する差分: $delta", delta.x > slop && delta.y > 0f)
             val after = position(fixed.text)
-            assertEquals("次のnative pan x: $before → $after", before.x + 110f, after.x, 2f)
-            assertEquals("次のnative pan y: $before → $after", before.y + 35f, after.y, 2f)
+            // Android may resample MOVE. Compare rendering with window delivery, not injected coordinates.
+            assertEquals("$case 次のnative pan x: $before → $after / $delta", before.x + delta.x, after.x, 2f)
+            assertEquals("$case 次のnative pan y: $before → $after / $delta", before.y + delta.y, after.y, 2f)
+            assertEquals("$case canvas layout", area, canvas)
             assertEquals(content, board.snapshot())
+            assertEquals(stored, savedSnapshot())
+            assertEquals(saveCount, saves.get())
+            assertEquals(canUndo, board.canUndo)
+            assertEquals(canRedo, board.canRedo)
+            frames(30)
+            assertEquals("$case pan終了後のcamera", after, position(fixed.text))
         }
+
         fun waitSaved() {
             composeRule.waitUntil(10_000) {
                 saves.get() == 1 && sessions.saveStateFor(1L, defaults).value == BoardSaveState.Idle &&
@@ -468,7 +514,7 @@ class EdgeAutoPanTest {
                 assertEquals(stopped, position(fixed.text))
             }
             assertUnchanged(before)
-            assertNextPanWorks()
+            assertNextPanWorks(if (recreate) "recreate" else "stop-resume")
         }
     }
 

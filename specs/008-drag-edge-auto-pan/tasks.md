@@ -60,3 +60,9 @@ custom checklistはreviewer-ownedの未査読markerを維持する。利用者�
 
 - [x] T019 HIGH: app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktのnativeCancel行は中央停止後ではなくedge稼働中にCANCELし、30 frame停止・Board/Room/Undo/save不変と独立した次のnative panを照合する。成功UP行の中央復帰/確定比較は保持する。FR-007、SC-003、T010（partial）。
 - [x] T020 MEDIUM: app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.ktのstylus保存比較で空のInkElement/InkStrokeをcopyせず、非空モデルのid/kind/inputType/startedAt/endedAtを直接比較する。point数・world座標厳密、経過時間だけ1ms以内・単調性、一回save/Undoと他content保持を維持する。FR-010、T018（contradicts）。
+
+## Phase 10: Convergence
+
+- [x] T021 HIGH: `app/src/androidTest/java/com/thinkcanvas/canvas/EdgeAutoPanTest.kt` の `assertNextPanWorks` を、同じnative streamでWindowへ届いたDOWNと最後のMOVEの座標差分に対して表示位置を2px以内で比較するoracleへ補正する。eventは変更せず元callbackへ一回渡しfinallyで復元する。stream受理・正方向移動・canvas layout・Board/Room/save/Undo/Redo不変と停止後の次操作を照合し、CANCEL/Back/2本指handoff/STOP/再生成の既存4 call sitesを維持する。FR-007/008、SC-003/004、T010/T019（partial）。
+- [ ] T022 HIGH: 補正後の `app/` のfocused、lint/unit/debug/androidTest build、schema/公開境界/diff、最終required CIとfresh source/XML censusを検証する。GitHub上でcurrent-head canonical review・最新base・全threadを収束し、Issue93の最新ACをsemantic closureする。PR92/90の同期と再gateの前提・残作業を記録し、#78のclosed historical evidenceや親#81の実機未確認を変更しない。FR-010、SC-004、T013/T014（partial）。
+- [x] T023 MEDIUM: `EdgeAutoPanTest.kt` の診断専用高速timestamp・NativePan93ログ・history配列を通常fixtureから除去し、Gesture.eventの標準注入/source/tool/時刻と既存2px許容を維持する。`specs/008-drag-edge-auto-pan/research.md` と `quickstart.md` に、配信deltaと表示deltaの制御観測、probeの時刻への影響、旧CI native座標は未記録という限界、採用oracleと検証を記録する。production/依存/CI/launcherへ診断を残さない。plan: native検証/既存gesture維持、FR-008/010（unrequested）。
