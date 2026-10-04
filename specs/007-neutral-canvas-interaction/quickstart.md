@@ -1,5 +1,9 @@
 # 検証手順
 
+## Issue93 merge後のPR92再gate（2026-10-04）
+
+native pan oracleの独立follow-upは[PR95](https://github.com/reitojike/think-canvas/pull/95)のmerge `77f7dcde436f2f8c31fe7e4f99aa9ec5b4311297`と[Issue93の最新6AC closure](https://github.com/reitojike/think-canvas/issues/93#issuecomment-5977070810)で完了した。このmerge済みmainをPR92へ統合する。IME productionと3つの追加native回帰はhead02be1a3から変更しない。旧CI143/1/0/0を成功証跡へ転用せず、統合後の新headでsource143の両CI/fresh XML/canonical/base/threadを再確認する。T017/T020〜T022とIssue91 closureはそのdeliveryが確定するまでpendingとする。
+
 JDK25 / SDK37を用意しrootで実行する。
 
 ```powershell
