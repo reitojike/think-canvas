@@ -186,6 +186,12 @@ class ViewportHistoryInteractionTest {
             composeRule.waitForIdle()
             lateinit var sessions: BoardSessionViewModel
             scenario.onActivity { sessions = ViewModelProvider(it)[BoardSessionViewModel::class.java] }
+            // A canvas semantics node can precede its first measurement/initial fit.
+            // Each Activity in a multi-launch test must own a ready camera before observation.
+            composeRule.waitUntil(10_000) {
+                sessions.viewportHistoryFor(1L, initial).focus() != null
+            }
+            composeRule.waitForIdle()
             val harness = Harness(scenario, sessions, initial)
             sessions.setSaveOperation { id, snapshot ->
                 harness.saves.incrementAndGet()
