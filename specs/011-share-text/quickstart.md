@@ -77,3 +77,10 @@ read-only family checkpointはMainの各照会/継続とCanvas chrome/navigation
 read-only family checkpointで検索/IME/layout/viewport animationとnative oracleを照合し、追加1roundはT031のfixture前提観測へ限定した。検索終了後のnative IME非表示/inset0とCanvas bounds安定を確認し、同じzoom actionと期待倍率、本文非表示、囲みfocus、保存不変、待機上限を維持する。失敗logにはIME終了があるがanimation中断を直接観測していないため、製品コードを推測で変更しない。
 
 補正focusedは1件、失敗/error/skip0、sourceUnchanged=true、manual intervention0、FRESH_EXACT_XML。XML SHA256 `2DE69B7586292087D84163998E2F0E46702681B815F7F4AFEAC33F2CDAA89315`。local lint/unit161/debug/test APK build成功、schema3 SHA256は上記と一致。新headの必須CI/canonicalとdeliveryは実証待ち。
+## CIの初期一覧/Store gate fixture補正
+
+head `4513721bad6b3b50ac056f43c68eaa4df37875d2` のCI37213119426はbasic成功、fresh native183/183で182成功/1失敗。欠落/extra/重複/error/skip0、XML SHA256 `84DE4880B25F00C99234CBD63B3A1CDB66E758D6530BC8B0D4AA54EE6FD8D542`。#79の29件と検索/zoom補正回帰は全成功。唯一の失敗は既存画像共有Loadingテストの初期一覧待ちで、共有操作前だった。
+
+read-only family checkpointでMain startupとserialized Store actor、全instrumentationのgateを照合した。actor全体を止めるfixtureは一箇所で、初期Store readより先にgateが入ると初期一覧を表示できない順序競合がある。下位モデルの独立read-only censusも同じ結論。他のgateは操作/保存固有だった。追加1roundをT032の初期一覧待ち→gate挿入とfinally解除保証へ限定し、製品処理と既存assert/待機上限を維持した。
+
+補正focusedは1件、失敗/error/skip0、sourceUnchanged=true、manual intervention0、FRESH_EXACT_XML。XML SHA256 `8740F10EAD95CA8E913566D258C279A3568F792C19BA526A376EE8ADCB80C26E`。local lint/unit161/debug/test APK build成功、schema3 SHA256は上記と一致。read-only convergeの追加実装残差0、新headの必須CI/canonical/deliveryは実証待ち。

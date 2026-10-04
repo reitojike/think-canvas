@@ -117,3 +117,8 @@ MainのDeferred候補照会は現在のPage/requestを捕捉し、boards/last照
 ### 検索終了後zoomの検証前提
 
 既存SemanticNavigationTestは検索終了後のnative IME非表示/inset0とCanvas bounds安定を観測してから同じzoom actionを行う。Canvas resizeによるanimation終了は変更せず、fixtureの通常操作前提を先に確認する。期待倍率・native accessibility oracle・wait上限は維持し、失敗時の現在zoomを診断する。
+
+
+### 一覧画像共有Loading fixtureの初期表示前提
+
+既存回帰は初期一覧の表示を待ってからStore actor gateを挿入し、startupのrestore/list読み込みをgateに巻き込まない。finallyの解除を保証し、製品のserialized actor/Loading guardと既存assert/待機上限を維持する。

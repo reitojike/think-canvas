@@ -1117,11 +1117,13 @@ class BoardListScreenTest {
         val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
         lateinit var vm: BoardListActionViewModel
         scenario.onActivity { vm = listActions(it) }
-        val (queueStarted, releaseQueue) = blockCanvasStoreQueue()
+        var releaseQueue: CompletableDeferred<Unit>? = null
         val database = CanvasDatabase.open(context)
         try {
-            runBlocking { withTimeout(5_000) { queueStarted.await() } }
             awaitDescription("共有元、", substring = true)
+            val (queueStarted, release) = blockCanvasStoreQueue()
+            releaseQueue = release
+            runBlocking { withTimeout(5_000) { queueStarted.await() } }
             composeRule.onNodeWithContentDescription("共有元、", substring = true)
                 .performSemanticsAction(SemanticsActions.OnLongClick)
             composeRule.onNodeWithText("画像で共有")
@@ -1144,7 +1146,7 @@ class BoardListScreenTest {
             assertEquals(-1L, context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
                 .getLong("lastOpenedBoardId", -1))
 
-            releaseQueue.complete(Unit)
+            release.complete(Unit)
             awaitDescription("共有元 の共有画像プレビュー")
             assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
                 .GLOBAL_ACTION_BACK))
@@ -1152,7 +1154,7 @@ class BoardListScreenTest {
             composeRule.onNodeWithContentDescription("開けない別案、", substring = true).performClick()
             awaitText("‹ 開けない別案")
         } finally {
-            releaseQueue.complete(Unit)
+            releaseQueue?.complete(Unit)
             scenario.close()
             database.close()
         }

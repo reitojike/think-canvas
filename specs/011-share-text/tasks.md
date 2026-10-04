@@ -94,3 +94,6 @@ US1が最小の利用者導線だが、lifecycleを欠く状態ではmergeしな
 ## Phase 11: Convergence
 
 - [x] T031 `app/src/androidTest/java/com/thinkcanvas/canvas/SemanticNavigationTest.kt` の検索終了後にnative IME非表示/inset0とCanvas bounds安定を観測してから既存zoom actionを実行する。失敗時は観測したzoomも診断へ記録する。同じ25%表示、遠景の本文非表示、囲みfocus、保存内容不変のoracleと待機上限を維持する。SC-005、plan: 既存検索/viewport回帰（partial、MEDIUM）。CI183件の一失敗をfamily checkpointで照合し、追加1roundはfixture前提観測へ限定する。IME終了によるanimation中断は可能性として扱い、製品コードを推測で変更しない。
+## Phase 12: Convergence
+
+- [x] T032 `app/src/androidTest/java/com/thinkcanvas/board/BoardListScreenTest.kt` の画像共有Loading回帰で、初期一覧表示を待ってからStore actor gateを挿入する。finallyでgate解除を保証し、同じqueue開始待ち・重複共有/別board/作成/複製拒否・Room/lastOpened不変・解除後preview/Back/openのassertと待機上限を維持する。SC-005、plan: 既存画像共有/一覧回帰（partial、MEDIUM）。read-only family checkpointでactor全体を止めるfixtureは一箇所と照合し、追加1roundはstartup読み込みを巻き込まない操作順へ限定する。
