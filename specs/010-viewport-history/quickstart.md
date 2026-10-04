@@ -1,5 +1,15 @@
 # 検証と収束
 
+## 色Undoの操作前提の収束（2026-10-04）
+
+head2697a2e9e372a254cf2fcdb0362a20214d157136 / CI37190430420は基本job成功、native153/1/0/0、missing/extra/duplicate0。152件成功し、元の検索offscreen Undoとmulti-selectionの失敗は解消。唯一のcolor Undo回帰はcenterY1472.825→1616.3251で失敗した。artifact11298688736、digest `sha256:5a305c556b155f5e61b887f8a601469efaa568cd6c2029f4bfb2df59454f9871`、XML SHA256 `6651F68D88A79B92F0CE3311E172989DDF993B861D0FEAD194E0036D748832D2`。このheadではcanonical/mergeを行わない。
+
+[有限checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5978484098)では、現行mainでも検索中の色editがfocus effectを再実行し得る一方、test baselineが色edit前だったoracle不足を確認した。標準OBS run20261004T091856Z-a83e2ef94cfa45fe993bb2d105e038e2ではedit前/後・Undo admission・Running・IME復帰/Back・Undo後のworld focus/scaleが同一で、旧CIの143.5差は再現せず、具体的な根因は未確定のまま記録した。1/0/0/0、XML `EDC2E70514C5C722296DED1A79849A6160877F7A9FBC333BD1971342AAA2329D`、owned/sourceUnchanged=true、介入0。独立した下位モデルのread-only点検でもUndo直前の観測が不足すると確認した。
+
+T018は一methodのbaselineを色edit後の既存waitForIdle後へ移し、Undo直前に対象が画面内であることをassertする。FR-006の『Undoそのものではcamera維持』を同じ3world-unit/.005scaleで照合し、内容復元/実Room/保存一回を維持する。probe/phaseObserver/logを除去したfocused run20261004T092336Z-de86ea2c755f4e0d91cbaadbfb4dea72は1/0/0/0、XML `BC98720C395F842B54C70ABF12A882929BABD057F690FF9F8C8286233F9E2420`、owned/sourceUnchanged=true、介入0。製品/search effect/geometry filter/入力/CI/launcher変更なし。旧CIの具体原因をPASSで解決済みと推定せず、更新head全CIで正しいUndo前後の契約を最終確認する。
+
+診断除去後のlocal lint/unit/debug/androidTest buildは成功（1m9s）、単体139/0/0/0、公開境界214ファイルPASS、diff check成功。10FR/4SC/12scenario、有限設計5項目、Constitution5原則と既存18taskをread-only再照合し、追加buildable残差0。T012/T013/T016/T017/T018の最終CI/review/deliveryは未完了を保持する。main a116374bへbehind0、schema/依存/CI/launcher差分なし、probeなし、native source153件を維持。候補commit後はsource/docsをfreezeし、更新headの両CIを確認してからcanonical reviewを依頼する。
+
 ## 統合headの失敗分類とnative fixture補正（2026-10-04）
 
 head `375de42a9c50955ac6c77fc5ec6ba87d3fdc4b11`のCI37187623444は基本job成功、native 153/2/0/0（missing/extra/duplicate 0）。XML SHA256 `55A49DCAF426C906F059D2F6F8C557EC85039D96B7F9839DFABA6FD0600A0132`。[有限checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5978097837)に従い、検索中の内容Undo/Redoのfixtureは実際のRoom完了をrequest-specific gateで確認し、既存inputAllowed復帰による検索IMEのnative readiness、IME Back、非表示を経てview操作する。製品のguard・保存処理は変更しない。

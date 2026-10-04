@@ -533,11 +533,13 @@ class ViewportHistoryInteractionTest {
             to = ArrowEnd.Free(6000f, 1600f))
         withBoard(defaults.copy(arrows = listOf(attached))) {
             search("Find alpha")
-            val visible = navigation.focus()
             composeRule.runOnUiThread {
                 assertTrue(board.edit(note.id, note.text, note.kind, TextColor.VERMILION))
             }
             composeRule.waitForIdle()
+            assertTrue("Undo直前の変更対象は画面内", canvas.contains(position(note.text)))
+            // The edit can re-focus an active search; compare Undo with its own immediate origin.
+            val visible = navigation.focus()
             click("戻す")
             sameFocus(visible, navigation.focus())
             assertEquals(initial, board.snapshot())
