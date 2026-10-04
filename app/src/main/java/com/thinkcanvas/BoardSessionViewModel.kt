@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.thinkcanvas.canvas.BoardSnapshot
 import com.thinkcanvas.canvas.BoardState
 import com.thinkcanvas.canvas.TextEditorSession
+import com.thinkcanvas.canvas.ViewportHistory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +41,7 @@ class BoardSessionViewModel(
         val board = BoardState(initial.texts, initial.shapes, initial.arrows, initial.ink)
         val saveState = MutableStateFlow<BoardSaveState>(BoardSaveState.Idle)
         val textEditor = TextEditorSession()
+        val viewportHistory = ViewportHistory()
         var latestDirtySnapshot: BoardSnapshot? = null
         var inFlight: Job? = null
         var nextRequestId = 0L
@@ -66,6 +68,9 @@ class BoardSessionViewModel(
 
     fun textEditorFor(boardId: Long, initial: BoardSnapshot): TextEditorSession =
         sessionFor(boardId, initial).textEditor
+
+    fun viewportHistoryFor(boardId: Long, initial: BoardSnapshot): ViewportHistory =
+        sessionFor(boardId, initial).viewportHistory
 
     fun setSaveOperation(operation: (Long, BoardSnapshot) -> kotlinx.coroutines.Deferred<Unit>) {
         saveOperation = operation

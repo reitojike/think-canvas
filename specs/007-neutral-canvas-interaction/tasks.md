@@ -45,7 +45,7 @@ T001→T002→T003/T004→US1→US2→検証・converge。US1はeditorからの�
 ## Phase 8: Issue91 独立IME復帰follow-up
 
 - [x] T016 HIGH: `CanvasScreen.kt` のtext/search/regionNameの既存focus effectでwindow ownerを標準WindowInfoのone-shotで待ち、frame適用後にIMEをshowする。`NeutralInteractionTest.kt` へnative別window所有中のeditor entryと、Backで隠したIMEのwindow復帰時保持の回帰を追加し、dialogのhide/Back fixtureを明示isDialog rootへ限定する。Spec007 FR-003/007/009。main修正前のFocused=trueをnative回帰で再現。PO/save/Undo/geometry/Back priority維持。
-- [ ] T017 `Issue91` の最終headでfocused、lint/unit/build、公開境界、full CI/source XML census、canonical review/base/threadを収束し、merge後に最新7 ACをsemantic closureする。PR90の視点履歴とはreview/rollback境界を分離する。
+- [x] T017 `Issue91` の最終headでfocused、lint/unit/build、公開境界、full CI/source XML census、canonical review/base/threadを収束し、merge後に最新7 ACをsemantic closureする。PR90の視点履歴とはreview/rollback境界を分離する。
 
 ## Phase 9: Issue91 Convergence
 
@@ -55,16 +55,18 @@ T001→T002→T003/T004→US1→US2→検証・converge。US1はeditorからの�
 
 ## Phase 10: Issue91 input owner Convergence
 
-- [ ] T020 HIGH: `CanvasScreen.kt` の三focus ownerをlive save/ack admissionと実在fieldで保護し、blocked状態のkey変化で待機を取消す。IMM active/acceptingTextの無期限frame pollを除去し、API30以降は標準IME-controllabilityの取消可能な通知、API26〜29はwindow focus/frame経路を使い、entry/resumeごとの一回showとwindow focus非keyを維持する。`NeutralInteractionTest.kt` のwindow/継続/pending終了・置換および `TextEditorDismissalTest.kt` のRunning/Failed再生成をnative focused/fullで検証する。Spec007 FR-003/004/007/009、Spec006 FR-006/007、Issue91 AC1〜5、[第三bounded checkpoint](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5976059426)（partial）。
+- [x] T020 HIGH: `CanvasScreen.kt` の三focus ownerをlive save/ack admissionと実在fieldで保護し、blocked状態のkey変化で待機を取消す。IMM active/acceptingTextの無期限frame pollを除去し、API30以降は標準IME-controllabilityの取消可能な通知、API26〜29はwindow focus/frame経路を使い、entry/resumeごとの一回showとwindow focus非keyを維持する。`NeutralInteractionTest.kt` のwindow/継続/pending終了・置換および `TextEditorDismissalTest.kt` のRunning/Failed再生成をnative focused/fullで検証する。Spec007 FR-003/004/007/009、Spec006 FR-006/007、Issue91 AC1〜5、[第三bounded checkpoint](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5976059426)（partial）。
 
 ## Phase 11: Issue91 readonly focus Convergence
 
-- [ ] T021 HIGH: `CanvasScreen.kt` の三ownerでfocusとIMEのadmissionを分離し、native window復帰後の現在fieldへのfocusをreadonlyでも保持する。live save/ack guardはfocus要求後のIME待機/showだけを拒否し、blockedでは即returnする。既存 `TextEditorDismissalTest.kt` のFocused=true/draft/ack/要求/Room/Undo保持条件を緩めずRunning/Failed再生成を検証し、Neutral継続/pending終了・置換と最終142件のdeliveryを収束する。Spec007 FR-004/009・SC-003、Spec006 FR-006/007、[第四bounded checkpoint](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5976130770)（contradicts）。
+- [x] T021 HIGH: `CanvasScreen.kt` の三ownerでfocusとIMEのadmissionを分離し、native window復帰後の現在fieldへのfocusをreadonlyでも保持する。live save/ack guardはfocus要求後のIME待機/showだけを拒否し、blockedでは即returnする。既存 `TextEditorDismissalTest.kt` のFocused=true/draft/ack/要求/Room/Undo保持条件を緩めずRunning/Failed再生成を検証し、Neutral継続/pending終了・置換と最終142件のdeliveryを収束する。Spec007 FR-004/009・SC-003、Spec006 FR-006/007、[第四bounded checkpoint](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5976130770)（contradicts）。
 
 ## Phase 12: Issue91 pending入力取消 Convergence
 
-- [ ] T022 HIGH: `CanvasScreen.kt` の三入力要求を標準Jobで取消可能に登録し、既存clearEditorFocus/IME優先Back/検索closeの受理hideで同期cancelする。finallyで登録を除去し、searchのlive確認guardを追加する。`NeutralInteractionTest.kt` のnative別windowで確認受理から再composition前の非focus、確認Backから編集復帰、IME Backからwindow帰還後の非表示とdraft/Board/Room/Undo保持を検証する。Spec007 FR-003/007/009、Issue91 AC3/4/5、[第五bounded checkpoint](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5976244593)（contradicts）。実装・focused成功後も、最終head全体143件とdeliveryの確定までT017/T020〜T022はpending。
+- [x] T022 HIGH: `CanvasScreen.kt` の三入力要求を標準Jobで取消可能に登録し、既存clearEditorFocus/IME優先Back/検索closeの受理hideで同期cancelする。finallyで登録を除去し、searchのlive確認guardを追加する。`NeutralInteractionTest.kt` のnative別windowで確認受理から再composition前の非focus、確認Backから編集復帰、IME Backからwindow帰還後の非表示とdraft/Board/Room/Undo保持を検証する。Spec007 FR-003/007/009、Issue91 AC3/4/5、[第五bounded checkpoint](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5976244593)（contradicts）。実装・focused成功後も、最終head全体143件とdeliveryの確定までT017/T020〜T022はpending。
 
 ## Phase 13: Convergence
 
 - [x] T023 HIGH: `CanvasScreen.kt` とapp固有の `EditorImeWindow.kt` で、未完了IME要求がcontrol/frame中にnative window focusを失っても現在ownerのまま取消可能に復帰を待つ。focus要求・IME showは各一回、readonly/save/ack/live sessionとpending Job取消を維持し、IME-control通知と実際の所有を分離する。`EditorImeWindowTest.kt` のlegacy/modern段階・終了/取消で補正前RED/後GREENを確認し、`NeutralInteractionTest.kt` で三ownerのlate window往復と既存hide取消を検証する。Spec007 FR-003/007/009、Issue91 AC1–5（partial）。deliveryは既存T017で確定し、API26〜29のnative未実行を明記する。
+
+T017/T020〜T022は[Issue91の最新7AC closure](https://github.com/reitojike/think-canvas/issues/91#issuecomment-5977858342)で完了。PR92 merge a116374bのtreeは最終検証head bfdbad45と一致し、両CI37183797445成功・fresh144/0/0/0・最後の依頼より新しいcanonical clean・thread0を確認した。過去のpending記述は当時の状態として保持する。

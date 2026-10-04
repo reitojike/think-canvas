@@ -526,14 +526,59 @@ class EdgeAutoPanTest {
         val before = board.snapshot()
         val start = bounds("要素を移動").center
         val edge = Offset(canvas.right - 3f, start.y)
+        val initialRender = position(moving.text)
+        val initialArea = canvas
+        val navigation = sessions.viewportHistoryFor(1L, defaults)
+        val initialScale = navigation.viewportState.value.scale
         var preview = Offset.Zero
-        drag(start, edge) { gesture ->
-            frames(40)
-            assertEquals(before, board.snapshot())
-            assertEquals(0, saves.get())
-            preview = position(moving.text)
-            gesture.send(MotionEvent.ACTION_UP)
-            frames(3)
+        var deliveredDown: Offset? = null
+        var deliveredMove: Offset? = null
+        var deliveredUp: Offset? = null
+        var previewPointer: Offset? = null
+        var observedDownTime: Long? = null
+        var observedPointerId: Int? = null
+        var singlePointerStream = true
+        lateinit var window: Window
+        lateinit var original: Window.Callback
+        lateinit var observer: Window.Callback
+        scenario.onActivity { activity ->
+            window = activity.window
+            original = window.callback
+            observer = object : Window.Callback by original {
+                override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                    if (observedDownTime == null && event.actionMasked == MotionEvent.ACTION_DOWN) {
+                        observedDownTime = event.downTime
+                        observedPointerId = event.getPointerId(0)
+                    }
+                    if (event.downTime == observedDownTime) {
+                        singlePointerStream = singlePointerStream && event.pointerCount == 1 &&
+                            event.getPointerId(0) == observedPointerId
+                        when (event.actionMasked) {
+                            MotionEvent.ACTION_DOWN -> deliveredDown = Offset(event.x, event.y)
+                            MotionEvent.ACTION_MOVE -> deliveredMove = Offset(event.x, event.y)
+                            MotionEvent.ACTION_UP -> deliveredUp = Offset(event.x, event.y)
+                        }
+                    }
+                    return original.dispatchTouchEvent(event)
+                }
+            }
+            window.callback = observer
+        }
+        try {
+            drag(start, edge) { gesture ->
+                frames(40)
+                assertEquals(before, board.snapshot())
+                assertEquals(0, saves.get())
+                val node = composeRule.onNodeWithContentDescription(moving.text).fetchSemanticsNode()
+                composeRule.runOnUiThread {
+                    preview = node.positionInWindow
+                    previewPointer = deliveredMove
+                }
+                gesture.send(MotionEvent.ACTION_UP)
+                frames(3)
+            }
+        } finally {
+            composeRule.runOnUiThread { if (window.callback === observer) window.callback = original }
         }
         waitSaved()
         val after = board.snapshot()
@@ -550,8 +595,20 @@ class EdgeAutoPanTest {
         assertEquals(1000f + dx, to.x, .001f)
         assertEquals(1550f + dy, to.y, .001f)
         assertEquals(fixed, after.texts.single { it.id == fixed.id })
-        assertEquals(preview.x, position(moving.text).x, 2f)
-        assertEquals(preview.y, position(moving.text).y, 2f)
+        assertNotNull("native DOWN", deliveredDown)
+        assertNotNull("preview native MOVE", previewPointer)
+        assertNotNull("native UP", deliveredUp)
+        assertTrue("single pointer stream", singlePointerStream)
+        assertEquals("canvas layout", initialArea, canvas)
+        assertEquals("scale", initialScale, navigation.viewportState.value.scale, .0001f)
+        val down = deliveredDown!!
+        val move = previewPointer!!
+        val up = deliveredUp!!
+        // Android may predict MOVE beyond the injected point; UP still carries its actual final point.
+        assertEquals("native preview x", initialRender.x + move.x - down.x, preview.x, 2f)
+        assertEquals("native preview y", initialRender.y + move.y - down.y, preview.y, 2f)
+        assertEquals("native release x", preview.x + up.x - move.x, position(moving.text).x, 2f)
+        assertEquals("native release y", preview.y + up.y - move.y, position(moving.text).y, 2f)
         assertOneHistory(before, after)
     }
 

@@ -27,3 +27,8 @@ source実装とfocused検証は完了。最終headのfull CI/canonical review/me
 - T016実装後のconvergeは10FR・4SC・9scenario・有限設計・Constitution5原則と全16tasksを照合し、新しいbuildable残差0。tasks.mdはbyte-identical（SHA256 `8458ACE97640DEF6A3E2DDD8563A73ADC21AB979B683689DEA3C6F1633D4F8DE`）で空phaseを作らなかった。T012/T013の最終検証/deliveryは未完了として保持する。
 
 - 初回final CI run 37159676057は通常job成功、Android XMLは140件中139成功・1失敗、sourceとのmissing/extra/duplicate/skip0。即完了ackの解除後もmarker0を期待したtestが既存lifecycleと不一致だった。family-level read-only checkpoint（PR88 issuecomment-5974469986）で同authorityのtest期待値だけのbounded correctionを選び、同一UI turn stale rejectionと解除後navigationを照合する。新headでfocused/full CIを再検証し、古いCIを最終証跡にしない。
+
+## Merge後の完了記録
+
+PR88 final head 9909ec9dac798a3e47c08aa8af8f0ef5dd4508b1のAndroid CI run37160950399は両job成功。全source/XML140/0/0/0、missing/extra/duplicate0。最終headのcanonical cleanは最新依頼より後、base/thread gateも成立した。
+merge cb8aa72d15650a409ba615c1ae234518d0c5e438は検証headと同じtree。最新Issue76の11ACを個別照合し全達成、[完了証跡](https://github.com/reitojike/think-canvas/issues/76#issuecomment-5974656372)に記録してCOMPLETED close。T012/T013をSpec010作業で事実に合わせ同期した。親81の実機dogfoodingは別途継続する。

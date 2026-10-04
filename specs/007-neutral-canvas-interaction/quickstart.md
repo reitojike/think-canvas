@@ -1,5 +1,11 @@
 # 検証手順
 
+## Issue91 delivery完了（2026-10-04）
+
+[PR92](https://github.com/reitojike/think-canvas/pull/92)はmerge `a116374b3f39fe3ad46b200a05d49296f38efd68`で完了した。merge treeと検証head `bfdbad45a37a036e69511a264630f172d869fb8e`のtreeは一致する。[CI37183797445](https://github.com/reitojike/think-canvas/actions/runs/37183797445)の両jobが成功し、fresh source/XML censusは144/0/0/0、missing/extra/duplicate 0。artifact `11296955914`、digest `sha256:eec5fd0533037629a7b4faf56834508b406aecc42e715510cf31ede2a77cd915`、XML SHA256 `31850D7D8B73ECE2E146CB2AD0D58DD8DAC13DEDBC84F69F4FC5E7EBC1440A72`。
+
+[最終canonical依頼](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5977817241)より新しい[head対応のclean result](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5977838409)、最新base/behind0、全thread resolvedを確認後にmergeした。[Issue91の最新7AC逐条closure](https://github.com/reitojike/think-canvas/issues/91#issuecomment-5977858342)でcompletedを確定し、T017/T020〜T022を同期した。API26〜29は段階別unitの確認でありnative未実行。物理端末の横断UXは親81で継続する。以下のpending記述は各時点の履歴であり、現在のdelivery状態はこの節とclosure証跡を使う。
+
 ## Issue93 merge後のPR92再gate（2026-10-04）
 
 native pan oracleの独立follow-upは[PR95](https://github.com/reitojike/think-canvas/pull/95)のmerge `77f7dcde436f2f8c31fe7e4f99aa9ec5b4311297`と[Issue93の最新6AC closure](https://github.com/reitojike/think-canvas/issues/93#issuecomment-5977070810)で完了した。このmerge済みmainをPR92へ統合する。IME productionと3つの追加native回帰はhead02be1a3から変更しない。旧CI143/1/0/0を成功証跡へ転用せず、統合後の新headでsource143の両CI/fresh XML/canonical/base/threadを再確認する。T017/T020〜T022とIssue91 closureはそのdeliveryが確定するまでpendingとする。
