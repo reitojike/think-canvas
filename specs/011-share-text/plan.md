@@ -109,3 +109,7 @@ app/schemas/com.thinkcanvas.data.CanvasDatabase/3.json
 既存BoardListScreenTestの名前変更・再生成回帰では、native IME表示、保存ボタンの安定した画面位置、入力値を確認してから同じnative clickを行う。保存開始gateの時間と一回の保存/再生成後のassertを維持する。旧失敗ログだけからクリック遮蔽やguard拒否の原因を断定しない。
 
 現行headのlocal basic/Room/schema/public boundary、標準GMD、両CI、最後の依頼後canonical review、最新base、全thread解決を収束。許可済みmerge後に最新Issue79 ACを個別判定する。
+
+### 非同期admissionと古いchrome操作の限定補正
+
+MainのDeferred候補照会は現在のPage/requestを捕捉し、boards/last照会後にもlive guardを検査してpreviewを表示する。`share/SharePreviewAdmission.kt` は同じUI scope内のこの境界を単体で制御するための関数で、状態ownerや保存writerを追加しない。Canvasはzoom clickと検索移動focusMatchにlive制限を接続する。pointerのchrome DOWN-UP dispatchと既存検索入力は維持する。既存native回帰を拡張し、保存制限解除後の通常検索移動も確認する。

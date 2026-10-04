@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
@@ -586,6 +587,28 @@ class ShareImportInteractionTest {
     @Test fun searchAndToolRemainUsableWhileReceptionIsDeferred() = withBoards {
         awaitText("‹ 一つ目")
         composeRule.onNodeWithContentDescription("ボード内を検索").performClick()
+        composeRule.onNodeWithContentDescription("ボード内を探す").performTextInput("考え")
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("倍率を切り替える、", substring = true).performClick()
+        composeRule.waitForIdle()
+        val navigation = sessions.viewportHistoryFor(1, board.snapshot())
+        val blockedFocus = navigation.focus()
+        val nextResult = composeRule.onNodeWithContentDescription("次の検索結果").fetchSemanticsNode()
+            .config[SemanticsActions.OnClick].action!!
+        val gate = CompletableDeferred<Unit>()
+        scenario.onActivity {
+            sessions.setSaveOperation { _, _ -> gate }
+            sessions.requestSave(1, board.snapshot())
+            nextResult()
+        }
+        composeRule.waitForIdle()
+        assertEquals(blockedFocus, navigation.focus())
+        assertEquals(listOf(note), rows().map { it.toModel() })
+        gate.complete(Unit)
+        composeRule.waitUntil(10_000) { sessions.saveStateFor(1, board.snapshot()).value == BoardSaveState.Idle }
+        scenario.onActivity { nextResult() }
+        composeRule.waitForIdle()
+        assertNotEquals(blockedFocus, navigation.focus())
         send("after search")
         composeRule.waitUntil(10_000) { imports().state.phase == ShareImportPhase.DEFERRED && !imports().state.writing }
         composeRule.onNodeWithContentDescription("検索を閉じる").performClick()
@@ -602,6 +625,13 @@ class ShareImportInteractionTest {
 
     @Test fun capturedCanvasActionsCannotChangeContentOrStartToolsBehindPreview() = withBoards {
         awaitText("‹ 一つ目")
+        composeRule.waitUntil(10_000) { sessions.viewportHistoryFor(1, board.snapshot()).focus() != null }
+        val navigation = sessions.viewportHistoryFor(1, board.snapshot())
+        val focus = navigation.focus()
+        val couldGoBack = navigation.canBack
+        val couldGoForward = navigation.canForward
+        val zoom = composeRule.onNodeWithContentDescription("倍率を切り替える、", substring = true)
+            .fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
         val search = composeRule.onNodeWithContentDescription("ボード内を検索").fetchSemanticsNode()
             .config[SemanticsActions.OnClick].action!!
         val tools = composeRule.onNodeWithContentDescription("図形ツールを開く").fetchSemanticsNode()
@@ -611,7 +641,11 @@ class ShareImportInteractionTest {
         val addSelection = composeRule.onNodeWithContentDescription(note.text).fetchSemanticsNode()
             .config[SemanticsActions.CustomActions].single { it.label == "選択に追加" }.action
         send("block stale canvas"); awaitPreview()
-        scenario.onActivity { search(); tools(); assertFalse(gap()); assertFalse(addSelection()) }
+        scenario.onActivity { zoom(); search(); tools(); assertFalse(gap()); assertFalse(addSelection()) }
+        composeRule.waitForIdle()
+        assertEquals(focus, navigation.focus())
+        assertEquals(couldGoBack, navigation.canBack)
+        assertEquals(couldGoForward, navigation.canForward)
         assertEquals(listOf(note), rows().map { it.toModel() }); assertFalse(board.canUndo)
         assertTrue(composeRule.onAllNodesWithText("取り込む").fetchSemanticsNodes().isNotEmpty())
         confirm(); awaitEmpty() // Starting a hidden tool/search would make admission stay blocked.

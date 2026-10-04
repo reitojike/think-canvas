@@ -56,3 +56,16 @@ T027/T028補正後のlocal basicはlint/unit/assemble/assembleAndroidTest成功�
 - file failure/manual retryのfocused: 1件、失敗/error/skip0、sourceUnchanged=true、manual intervention0、FRESH_EXACT_XML。XML SHA256: `D7D879827A7A75D91362114A6C0607F57DBCBC8D30DE6F78031C6D3E5F8DC1F2`。preview準備・未確定destination消失・保存済みterminal更新の各失敗で要求を保持し、修復後の明示retryで回復した。
 
 最終read-only convergeはFR15、SC5、story acceptance14、planの有限surface6とConstitution5原則を照合し、新規の実装残差0件。T001〜T017/T021〜T028を完了。delivery T018〜T020はPR/CI/review/merge/Issue完了の実証待ちで未完了とする。重複するdelivery taskや空のConvergence phaseは追加しない。最終候補の全183件成功は現行headのCI結果で判定する。
+## PR96のUI操作保護補正
+
+最初の公開head `ddf392682727f3205ae7ef1df9676ddd4b9c9994` はAndroid checks run37207905467の両job成功。fresh XML183/183、欠落/extra/重複/失敗/error/skip0、SHA256 `DFE1DD4A9FD74148C99CE1DBEBE9BCFB7AF1E887CC8BC9BCBE6CCDCDD9479D68`。canonical review依頼14:29:58Z、結果14:34:43Z（review5406676027）で非同期宛先照会後のguardとzoom clickの2指摘あり。
+
+read-only family checkpointはMainの各照会/継続とCanvas chrome/navigation/tool/editor/accessibilityを有限surfaceとして照合。検索focusMatchにも同型を確認し、T029/T030の追加1roundをMain直前確認とzoom/search移動guardへ限定した。保存owner・PO決定・pointer dispatch・検索入力の挙動を広げない。share-specific照会関数に新owner/writer/cacheはない。
+
+補正候補local lint/unit/debug/test APK buildは成功。unit161件（新しい非同期競合2件を含む）、失敗/error/skip0、schema3生成SHA256は上記と同じ。補正したnative focusedと、新headの全required CI/canonical reviewはこれから確認する。旧headの成功を新headへ流用しない。
+補正後のfocused nativeは二件ともFRESH_EXACT_XML、各1件、失敗/error/skip0、sourceUnchanged=true、manual intervention0。
+
+- captured Canvas/zoom callback: XML SHA256 `F76B890C1AFE9D544AC201F6E6554EF08861A95441423CC3B5126B7BA5DEBC0C`。preview後に旧callbackを実行してもfocus/back-forward/content/Undo不変。
+- search/save/deferred tool: XML SHA256 `8F60EBD7AD60DE28744F65F044603641F29D690EAE20A01E568C2905EAFD8410`。Running中の検索callbackでfocus/content不変、Idle後は同callbackで通常移動でき、Deferred中の検索/toolを完了後にpreviewへ進める。
+
+最終read-only convergeはT029/T030を含む有限surfaceで新規実装残差0。T018〜T020は新headのCI/review/merge/Issue完了待ち。

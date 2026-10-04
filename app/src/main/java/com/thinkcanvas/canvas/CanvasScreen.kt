@@ -647,7 +647,7 @@ fun CanvasScreen(
     }
 
     fun focusMatch(index: Int, group: Any? = null) {
-        if (searchMatches.isEmpty()) return
+        if (saveBlocked() || searchMatches.isEmpty()) return
         searchPosition = searchIndex(index, 0, searchMatches.size)
         focusTarget(searchMatches[searchPosition], group)
     }
@@ -2071,8 +2071,8 @@ fun CanvasScreen(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 22.dp)
                     .background(Color.White, RoundedCornerShape(16.dp)).pillBorder(16f)
                     .heightIn(min = 44.dp).padding(horizontal = 10.dp, vertical = 5.dp)
-                    .clickable {
-                        if (canvasSize != IntSize.Zero) animateViewport(viewport.cycleZoom(bodyDp,
+                    .clickable(enabled = !saveBlocked()) {
+                        if (!saveBlocked() && canvasSize != IntSize.Zero) animateViewport(viewport.cycleZoom(bodyDp,
                             canvasSize.width.toFloat(), canvasSize.height.toFloat()))
                     }
                     .semantics { contentDescription = "倍率を切り替える、$zoomText" }

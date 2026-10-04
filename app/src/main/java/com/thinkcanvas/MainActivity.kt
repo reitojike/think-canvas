@@ -49,6 +49,7 @@ import com.thinkcanvas.share.ShareImportDialog
 import com.thinkcanvas.share.ShareImportPhase
 import com.thinkcanvas.share.ShareImportViewModel
 import com.thinkcanvas.share.sharedPlainText
+import com.thinkcanvas.share.loadSharePreviewIfReady
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -392,10 +393,21 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     when (shareImports.state.phase) {
-                        ShareImportPhase.DEFERRED -> if (baseImportReady()) {
-                            importBoards.value = store.boards()
-                            val candidate = (page.value as? Page.Board)?.id ?: store.lastOpenedBoard()?.details?.id
-                            shareImports.present(candidate)
+                        ShareImportPhase.DEFERRED -> {
+                            val candidatePage = page.value
+                            loadSharePreviewIfReady(
+                                isReady = { page.value === candidatePage &&
+                                    shareImports.state.phase == ShareImportPhase.DEFERRED &&
+                                    shareImports.state.request?.requestId == request.requestId &&
+                                    !shareImports.state.writing && baseImportReady() },
+                                loadBoards = { store.boards() },
+                                candidateId = { (candidatePage as? Page.Board)?.id ?:
+                                    store.lastOpenedBoard()?.details?.id },
+                                present = { boards, candidate ->
+                                    importBoards.value = boards
+                                    shareImports.present(candidate)
+                                },
+                            )
                         }
                         ShareImportPhase.PREVIEW, ShareImportPhase.PICKER -> {
                             importBoards.value = store.boards()

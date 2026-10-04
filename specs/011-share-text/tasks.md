@@ -86,3 +86,8 @@ US1が最小の利用者導線だが、lifecycleを欠く状態ではmergeしな
 
 - [x] T027 `app/src/main/java/com/thinkcanvas/share/ShareImportViewModel.kt` の未確定destination消失時のcheckpoint失敗をFailedへ遷移させ、Main effectで更新を反復しない。`ShareImportInteractionTest.kt` の既存file-failureテストで失敗→同要求保持→修復→明示retryを検証する。FR-010、plan: checkpoint失敗はmanual retry（partial、HIGH）。保存・復元familyのread-only checkpointで追加1roundをこの遷移とnative oracleへ限定した。
 - [x] T028 `app/src/androidTest/java/com/thinkcanvas/board/BoardListScreenTest.kt` の名前変更保存前にnative IMEと保存ボタンの安定した画面位置、確定入力を確認する。既存native click、5000ms保存開始gate、再生成後一回のRoom renameというassertを維持する。SC-005、plan: 既存一覧/IME回帰（partial、MEDIUM）。全183件の一失敗は保存開始待ち、原因未確定。入力/位置の準備を観測するfocusedで再検証し、製品guardを根拠なく変更しない。
+
+## Phase 10: Convergence
+
+- [x] T029 `app/src/main/java/com/thinkcanvas/MainActivity.kt` のDeferred宛先照会後に、同じPage/requestとlive中立状態を再確認してからpreviewを表示する。`share/SharePreviewAdmission.kt` に既存UI scope内の照会・直前確認だけを切り出し、`SharePreviewAdmissionTest.kt` でboards照会中の編集開始とlast照会中のPage変更を制御して、保留維持/最新ownerでの再試行を検証する。FR-007、US3/AC1/2、plan: 既存編集保護（partial、HIGH）。
+- [x] T030 `app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.kt` のzoom clickと検索移動のfocusMatchへlive操作制限を追加する。`ShareImportInteractionTest.kt` の既存captured action/検索保留テストで、preview後の古いzoomと保存制限中の検索actionが視点/履歴を変えず、制限終了後は通常操作できることを検証する。Spec010 FR-010、FR-007、US3/AC2（partial、HIGH）。pointer chrome dispatchは変更せず、検索入力の既存external guardを維持する。
