@@ -55,7 +55,7 @@ class ViewportHistory(private val capacity: Int = 80) {
         val current = focus() ?: return false
         if (origin == null || !origin.valid()) return false
         if (near(origin, current)) {
-            if (group == null || group !== lastGroup) lastGroup = group
+            if (group !== lastGroup) lastGroup = null
             return false
         }
         if (group == null || group !== lastGroup || previous.isEmpty()) {

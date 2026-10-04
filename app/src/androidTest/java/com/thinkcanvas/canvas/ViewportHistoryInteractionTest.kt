@@ -528,6 +528,63 @@ class ViewportHistoryInteractionTest {
         assertEquals(1, saves.get())
     }
 
+    @Test fun searchHistoryKeepsCurrentResultValidWhenMatchesShrinkAndGrow() {
+        withBoard(defaults.copy(texts = listOf(note.copy(text = "Alpha"),
+            other.copy(text = "Beta", x = 6000f), reference))) {
+            val first = initial.texts.single { it.id == note.id }
+            val second = initial.texts.single { it.id == other.id }
+            composeRule.runOnUiThread {
+                assertTrue(board.edit(first.id, note.text, first.kind, first.color))
+            }
+            composeRule.waitForIdle()
+            val oneMatch = board.snapshot()
+            search()
+            composeRule.runOnUiThread {
+                assertTrue(board.edit(second.id, other.text, second.kind, second.color))
+            }
+            composeRule.waitForIdle()
+            val twoMatches = board.snapshot()
+            click("次の検索結果")
+            assertTrue(nodes("2件目、全2件").isNotEmpty())
+            assertTrue(canvas.contains(position(other.text)))
+            val beforeUndo = navigation.focus()
+
+            click("戻す")
+            sameFocus(beforeUndo, navigation.focus())
+            assertEquals(oneMatch, board.snapshot())
+            assertEquals(oneMatch, saved())
+            assertEquals(1, saves.get())
+            assertTrue(nodes("1件目、全1件").isNotEmpty())
+            assertTrue(indicators().any { node -> node.config[SemanticsProperties.ContentDescription]
+                .any { it.startsWith("現在の検索結果、1件目、") } })
+
+            click("戻す")
+            assertEquals(initial, board.snapshot())
+            assertEquals(initial, saved())
+            assertEquals(2, saves.get())
+            assertTrue(nodes("0件").isNotEmpty())
+            assertTrue(indicators().isEmpty())
+            assertTrue(canvas.contains(position(first.text)))
+            val emptyFocus = navigation.focus()
+
+            click("進む")
+            sameFocus(emptyFocus, navigation.focus())
+            assertEquals(oneMatch, board.snapshot())
+            assertEquals(oneMatch, saved())
+            assertEquals(3, saves.get())
+            assertTrue(nodes("1件目、全1件").isNotEmpty())
+
+            click("進む")
+            assertEquals(twoMatches, board.snapshot())
+            assertEquals(twoMatches, saved())
+            assertEquals(4, saves.get())
+            assertTrue(nodes("1件目、全2件").isNotEmpty())
+            assertTrue(indicators().any { node -> node.config[SemanticsProperties.ContentDescription]
+                .any { it.startsWith("現在の検索結果、1件目、") } })
+            assertFalse(board.canRedo)
+        }
+    }
+
     @Test fun unchangedOffscreenAttachedArrowDoesNotMoveVisibleColorUndo() {
         val attached = ArrowElement(id = "long-attached", from = ArrowEnd.Attached(note.id, 1f, .5f),
             to = ArrowEnd.Free(6000f, 1600f))

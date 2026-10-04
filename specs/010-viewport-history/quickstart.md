@@ -1,5 +1,15 @@
 # 検証と収束
 
+## canonical検索familyの限定補正（2026-10-04）
+
+head11aaa4bのCI37192521290は両job成功、fresh153/0/0/0、missing/extra/duplicate0。artifact11299758000、digest `sha256:bf5f440e5ed890b105d2766965e3a79c4c5551f33aa5a899013713db9c6bc83c`、XML SHA256 `296E0CAB0A330A7F9B4800F366B76E5B6FB27FE911947D12B0EE3FECD7B3C84B`。依頼5978743500（09:56:36Z）後のcanonical review5405425154（10:00:22Z、同head）は無移動検索groupとUndo後の検索位置のP2を指摘した。Completed表示だけでは合格とせず、[検索family checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5978808072)で有限6surfaceを確認してT019/T020へ閉じた。
+
+T019回帰は補正前にBack中心X期待250/実際200でRED（unit XML SHA256 `E2C70F3B351B9B94A689A92D2CD33E5E84E88A89ECFC28C8DBCB9EFE511737F3`）。near更新は未開始groupを消費せず、開始済み同groupの集約だけを保持する。T020はsnapshot/query一致の一回suppressionで位置だけを新件数へclampし、camera再focusは抑止を維持する。独立した下位モデルのread-only censusでも2件の成立とこのauthority内の補正を確認し、追加writer不足はなかった。
+
+local lint/単体/debug/androidTest buildは成功1m17s、単体140/0/0/0、公開境界214ファイルPASS、diff check成功。新しいnative `searchHistoryKeepsCurrentResultValidWhenMatchesShrinkAndGrow` は2→1→0→1→2の件数/現在位置、current indicator、visible camera、内容/Room/saveを検証し、標準focused run `20261004T100600Z-f960625c7e9e436999e08155a0e71af3` で1/0/0/0。XML SHA256 `4A7AC70BE014DC78C2EE75C041902E186E1B88931580AFFC66755FB6E3550D1F`、owned/sourceUnchanged=true、介入0。
+
+10FR/4SC/12scenario、有限設計5項目、Constitution5原則と20taskをread-only再convergeし、追加buildable残差0。既存153nativeを維持して154件となった。製品のauthority/内容保存/schema/依存/CI/launcher/入力/許容差変更なし。T012/T013/T016～T020の最終deliveryは更新headの全CIとcanonical、merge後照合までpending。#79はこのgateへ含めない。補正commit後はsource/docsをfreezeし、最終headで再検証する。
+
 ## 色Undoの操作前提の収束（2026-10-04）
 
 head2697a2e9e372a254cf2fcdb0362a20214d157136 / CI37190430420は基本job成功、native153/1/0/0、missing/extra/duplicate0。152件成功し、元の検索offscreen Undoとmulti-selectionの失敗は解消。唯一のcolor Undo回帰はcenterY1472.825→1616.3251で失敗した。artifact11298688736、digest `sha256:5a305c556b155f5e61b887f8a601469efaa568cd6c2029f4bfb2df59454f9871`、XML SHA256 `6651F68D88A79B92F0CE3311E172989DDF993B861D0FEAD194E0036D748832D2`。このheadではcanonical/mergeを行わない。

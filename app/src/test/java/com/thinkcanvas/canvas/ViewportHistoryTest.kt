@@ -79,6 +79,35 @@ class ViewportHistoryTest {
         assertTrue(history.canBack)
     }
 
+    @Test fun searchGroupStartsAtFirstRealMovementWithExistingHistory() {
+        val history = measuredHistory()
+        val a = history.focus()!!
+        val b = ViewportFocus(250f, 100f, 1f)
+        history.viewportState.value = viewportFor(b, 400f, 200f)
+        assertTrue(history.record(a))
+
+        val group = Any()
+        assertFalse(history.record(b, group))
+        val c = ViewportFocus(600f, 200f, 1f)
+        history.viewportState.value = viewportFor(c, 400f, 200f)
+        assertTrue(history.record(b, group))
+        assertFalse(history.record(c, group))
+        val d = ViewportFocus(900f, 300f, 1f)
+        history.viewportState.value = viewportFor(d, 400f, 200f)
+        assertTrue(history.record(c, group))
+
+        history.viewportState.value = history.back()!!
+        assertFocus(b, history.focus()!!)
+        history.viewportState.value = history.back()!!
+        assertFocus(a, history.focus()!!)
+        assertFalse(history.canBack)
+        history.viewportState.value = history.forward()!!
+        assertFocus(b, history.focus()!!)
+        history.viewportState.value = history.forward()!!
+        assertFocus(d, history.focus()!!)
+        assertFalse(history.canForward)
+    }
+
     @Test fun newNavigationAfterBackDropsOnlyViewportForwardEntries() {
         val history = measuredHistory()
         val a = history.focus()!!

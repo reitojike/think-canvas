@@ -1025,8 +1025,10 @@ fun CanvasScreen(
         // A content-history change owns this navigation, including an unchanged visible camera.
         val historyNavigation = searchHistoryNavigation
         searchHistoryNavigation = null
-        if (searchOpen && historyNavigation?.first == snapshot && historyNavigation.second == searchQuery)
+        if (searchOpen && historyNavigation?.first == snapshot && historyNavigation.second == searchQuery) {
+            searchPosition = searchPosition.coerceIn(0, maxOf(0, searchMatches.size - 1))
             return@LaunchedEffect
+        }
         if (searchOpen && searchQuery.isNotBlank() && searchMatches.isNotEmpty())
             focusMatch(0, searchNavigationGroup)
     }
