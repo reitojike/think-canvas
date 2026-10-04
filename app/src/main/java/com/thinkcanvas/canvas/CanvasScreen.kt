@@ -845,22 +845,31 @@ fun CanvasScreen(
     }
     val latestFinalizeDraft = rememberUpdatedState({ finalizeDraft() })
 
-    suspend fun focusEditorInput(requester: FocusRequester) {
+    suspend fun focusEditorInput(requester: FocusRequester, isCurrent: () -> Boolean) {
+        if (!isCurrent()) return
         snapshotFlow { windowInfo.isWindowFocused }.first { it }
+        if (!isCurrent()) return
         requester.requestFocus()
         do {
             withFrameNanos { }
+            if (!isCurrent()) return
         } while (!inputView.hasWindowFocus() || !inputMethod.isActive(inputView) ||
             !inputMethod.isAcceptingText)
         keyboard?.show()
     }
 
-    LaunchedEffect(draft?.id, draft?.x, draft?.y, discardTarget) {
-        if (draft != null && discardTarget == null) focusEditorInput(focusRequester)
+    LaunchedEffect(draft?.sessionId, draft?.id, draft?.x, draft?.y, discardTarget) {
+        val current = draft
+        if (current != null && discardTarget == null) {
+            val sessionId = current.sessionId
+            focusEditorInput(focusRequester) {
+                editorSession.draft.value?.sessionId == sessionId && discardTarget == null
+            }
+        }
     }
     LaunchedEffect(searchOpen) {
         if (searchOpen) {
-            focusEditorInput(searchFocusRequester)
+            focusEditorInput(searchFocusRequester) { searchOpen }
         } else chromeBounds.remove("search")
     }
     LaunchedEffect(searchOpen, searchQuery, board.elements, board.shapes) {
@@ -882,9 +891,13 @@ fun CanvasScreen(
             closeRegionName()
         }
     }
-    LaunchedEffect(regionNameId, discardTarget) {
-        if (regionNameId != null && discardTarget == null) {
-            focusEditorInput(regionNameFocusRequester)
+    LaunchedEffect(regionDraft?.sessionId, regionNameId, discardTarget) {
+        val current = regionDraft
+        if (regionNameId != null && current != null && discardTarget == null) {
+            val sessionId = current.sessionId
+            focusEditorInput(regionNameFocusRequester) {
+                editorSession.regionNameDraft.value?.sessionId == sessionId && discardTarget == null
+            }
         }
     }
     LaunchedEffect(guidance, tool, inkTool, selectedIds) {

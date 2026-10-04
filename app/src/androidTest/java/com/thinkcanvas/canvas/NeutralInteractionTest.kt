@@ -784,6 +784,34 @@ class NeutralInteractionTest {
         }
         assertEquals(0, composeRule.onAllNodesWithContentDescription("新しいテキスト")
             .fetchSemanticsNodes().size)
+
+        val replacementWindow = blockingWindow()
+        try {
+            scenario.onActivity { editor.draft.value = Draft(null, 500f, 1200f, "Old session") }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithContentDescription("新しいテキスト").assertIsNotFocused()
+            composeRule.mainClock.autoAdvance = false
+            scenario.onActivity {
+                editor.draft.value = Draft(null, 500f, 1200f, "Replacement session")
+                replacementWindow.dismiss()
+            }
+            composeRule.waitUntil(5_000) {
+                var ownsFocus = false
+                scenario.onActivity { ownsFocus = it.window.decorView.hasWindowFocus() }
+                ownsFocus
+            }
+            instrumentation.waitForIdleSync()
+            composeRule.waitForIdle()
+            composeRule.onNodeWithContentDescription("新しいテキスト").assertIsNotFocused()
+            assertOriginalContent()
+        } finally {
+            scenario.onActivity { replacementWindow.dismiss() }
+            composeRule.mainClock.autoAdvance = true
+            composeRule.waitForIdle()
+        }
+        waitEditorReady()
+        assertEquals("Replacement session", editor.draft.value?.text)
+        assertOriginalContent()
     }
 
     private fun Harness.assertOriginalContent() {
