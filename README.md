@@ -22,6 +22,7 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 | Spec 006: Text Editor Dismissal | [#71](https://github.com/reitojike/think-canvas/issues/71) | [spec](specs/006-text-editor-dismissal/spec.md) |
 | Spec 007: Neutral Canvas Interaction | [#73](https://github.com/reitojike/think-canvas/issues/73) | [spec](specs/007-neutral-canvas-interaction/spec.md) |
 | Spec 008: Drag Edge Auto-Pan | [#78](https://github.com/reitojike/think-canvas/issues/78) | [spec](specs/008-drag-edge-auto-pan/spec.md) |
+| Spec 009: Offscreen Direction Indicators | [#76](https://github.com/reitojike/think-canvas/issues/76) | [spec](specs/009-offscreen-direction-indicators/spec.md) |
 
 ## 利用できる主な機能
 

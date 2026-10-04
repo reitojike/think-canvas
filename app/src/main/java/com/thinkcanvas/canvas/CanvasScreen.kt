@@ -131,6 +131,20 @@ private val muted = Color(0xFF8D8882)
 private val outline = Color(0xFFE8E6E2)
 private val toolbar = Color(0xFFF3F2EF)
 
+private class ViewportAnimationBoundary {
+    var active = true
+    var job: Job? = null
+    var origin: ViewportFocus? = null
+    var group: Any? = null
+    var generation = 0
+}
+
+private data class HistoryFocusRequest(
+    val before: BoardSnapshot,
+    val expected: BoardSnapshot,
+    val beforeGeometry: ResolvedRenderedGeometry,
+)
+
 @Composable
 fun CanvasScreen(
     board: BoardState,
@@ -142,9 +156,12 @@ fun CanvasScreen(
     onOpenList: () -> Unit,
     onShareSelection: (Set<String>) -> Unit,
     edgeAutoPanProfile: EdgeAutoPanProfile = EdgeAutoPanProfile.Default,
+    viewportHistory: ViewportHistory? = null,
 ) {
-    var viewport by remember { mutableStateOf(Viewport()) }
-    var initialFitApplied by remember(board) { mutableStateOf(false) }
+    val navigation = viewportHistory ?: remember(board) { ViewportHistory() }
+    var viewport by navigation.viewportState
+    val animationBoundary = remember(navigation) { ViewportAnimationBoundary() }
+    var pendingHistoryFocus by remember { mutableStateOf<HistoryFocusRequest?>(null) }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var tool by rememberSaveable { mutableStateOf(SpatialTool.NONE) }
@@ -173,10 +190,11 @@ fun CanvasScreen(
     val saveFailed = currentSaveState is BoardSaveState.Failed
     var pendingNewElementId by editorSession.pendingNewElementId
     var searchOpen by remember { mutableStateOf(false) }
+    val searchNavigationGroup = remember(searchOpen) { Any() }
     var searchQuery by remember { mutableStateOf("") }
+    var searchHistoryNavigation by remember { mutableStateOf<Pair<BoardSnapshot, String>?>(null) }
     var searchPosition by remember { mutableStateOf(0) }
     var lastBlankTap by remember { mutableStateOf<Pair<Long, Offset>?>(null) }
-    var viewportAnimation by remember { mutableStateOf<Job?>(null) }
     val elementSizes = remember { mutableStateMapOf<String, IntSize>() }
     val chromeBounds = remember { mutableStateMapOf<String, Rect>() }
     var textEditorBounds by remember { mutableStateOf<Rect?>(null) }
@@ -262,8 +280,24 @@ fun CanvasScreen(
             }
     }
     val latestRegionLabelSizes = rememberUpdatedState(measuredRegionLabelSizes)
+    fun stopViewportAnimation(record: Boolean = true) {
+        animationBoundary.job?.cancel()
+        animationBoundary.generation++
+        val origin = animationBoundary.origin
+        animationBoundary.origin = null
+        if (record) navigation.record(origin, animationBoundary.group)
+        animationBoundary.group = null
+    }
+    DisposableEffect(navigation) {
+        onDispose {
+            animationBoundary.active = false
+            stopViewportAnimation(record = false)
+        }
+    }
     LaunchedEffect(board, canvasSize, density, canvasTextStyle) {
-        if (!initialFitApplied && canvasSize.width > 0 && canvasSize.height > 0) {
+        stopViewportAnimation(record = false)
+        navigation.resize(canvasSize.width.toFloat(), canvasSize.height.toFloat(), density.density)
+        if (!navigation.initialized && canvasSize.width > 0 && canvasSize.height > 0) {
             var fitted = snapshot.fittedViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat())
             for (pass in 0 until 8) {
                 val approximateProjection = snapshot.semanticProjection(fitted.scale, bodyDp,
@@ -290,8 +324,7 @@ fun CanvasScreen(
                 fitted = next
                 if (settled) break
             }
-            viewport = fitted
-            initialFitApplied = true
+            navigation.initialize(fitted)
         }
     }
     val resolvedTextBounds = measuredTextExtents.mapNotNull { (id, extent) ->
@@ -313,7 +346,6 @@ fun CanvasScreen(
         renderedGeometry.boundsById)
     val latestProjection = rememberUpdatedState(projection)
     val latestSearchOpen = rememberUpdatedState(searchOpen)
-    val latestAnimation = rememberUpdatedState(viewportAnimation)
     val latestBodyDp = rememberUpdatedState(bodyDp)
     val latestSelected = rememberUpdatedState(selectedId)
     val latestSelectedIds = rememberUpdatedState(selectedIds)
@@ -355,8 +387,11 @@ fun CanvasScreen(
     } else emptyList()
     val indicatorGap = with(density) { 8.dp.toPx() }
     val topChromeKeys = setOf("board", "search", "searchButton", "guidance", "shareSelection")
-    val bottomChromeKeys = setOf("history", "zoom", "tools")
-    val indicatorChrome = chromeBounds.filterKeys { !it.startsWith("indicator:") }
+    val viewControlsVisible = indicatorsAllowed() && (navigation.canBack || navigation.canForward)
+    val bottomChromeKeys = setOf("history", "zoom", "tools", "viewportHistory")
+    val indicatorChrome = chromeBounds.filterKeys {
+        !it.startsWith("indicator:") && (it != "viewportHistory" || viewControlsVisible)
+    }
     val indicatorSafeBounds = Rect(indicatorGap,
         (indicatorChrome.filterKeys { it in topChromeKeys }.values.maxOfOrNull { it.bottom } ?: 0f) + indicatorGap,
         canvasSize.width - indicatorGap,
@@ -367,7 +402,9 @@ fun CanvasScreen(
     val latestIndicatorLayouts = rememberUpdatedState(indicatorLayouts)
 
     fun chromeContains(point: Offset): Boolean =
-        chromeBounds.any { (key, bounds) -> !key.startsWith("indicator:") && bounds.contains(point) } ||
+        chromeBounds.any { (key, bounds) -> !key.startsWith("indicator:") &&
+            (key != "viewportHistory" || indicatorsAllowed() && (navigation.canBack || navigation.canForward)) &&
+            bounds.contains(point) } ||
             indicatorsAllowed() && latestIndicatorLayouts.value.any { it.touchBounds.contains(point) }
 
     fun clearEditorFocus() {
@@ -519,10 +556,14 @@ fun CanvasScreen(
         }
     }
 
-    fun animateViewport(target: Viewport) {
-        latestAnimation.value?.cancel()
-        val origin = latestViewport.value
-        viewportAnimation = uiScope.launch {
+    fun animateViewport(target: Viewport, group: Any? = null, record: Boolean = true) {
+        stopViewportAnimation()
+        pendingHistoryFocus = null
+        val origin = viewport
+        animationBoundary.origin = if (record) navigation.focus() else null
+        animationBoundary.group = group
+        val generation = animationBoundary.generation
+        animationBoundary.job = uiScope.launch {
             animate(0f, 1f, animationSpec = tween(340)) { fraction, _ ->
                 viewport = Viewport(
                     origin.scale + (target.scale - origin.scale) * fraction,
@@ -530,10 +571,16 @@ fun CanvasScreen(
                     origin.panY + (target.panY - origin.panY) * fraction,
                 )
             }
+            if (generation == animationBoundary.generation) {
+                val historyOrigin = animationBoundary.origin
+                animationBoundary.origin = null
+                navigation.record(historyOrigin, animationBoundary.group)
+                animationBoundary.group = null
+            }
         }
     }
 
-    fun focusTarget(match: CanvasMatch) {
+    fun focusTarget(match: CanvasMatch, group: Any? = null) {
         if (canvasSize == IntSize.Zero) return
         val width = canvasSize.width.toFloat()
         val height = canvasSize.height.toFloat()
@@ -551,13 +598,13 @@ fun CanvasScreen(
             match.copy(bounds = WorldBounds(element.x, element.y,
                 element.x + extent.width, element.y + extent.height))
         } ?: match
-        animateViewport(viewport.focusMatch(targetMatch, width, height))
+        animateViewport(viewport.focusMatch(targetMatch, width, height), group)
     }
 
-    fun focusMatch(index: Int) {
+    fun focusMatch(index: Int, group: Any? = null) {
         if (searchMatches.isEmpty()) return
         searchPosition = searchIndex(index, 0, searchMatches.size)
-        focusTarget(searchMatches[searchPosition])
+        focusTarget(searchMatches[searchPosition], group)
     }
 
     fun navigateIndicator(target: IndicatorTarget): Boolean {
@@ -609,6 +656,60 @@ fun CanvasScreen(
         if (closeDraft) pendingDraftAcknowledgement = acknowledgement
     }
 
+    fun editHistory(redo: Boolean) {
+        if (exitBlocked() || !(if (redo) board.canRedo else board.canUndo)) return
+        stopViewportAnimation()
+        val before = board.snapshot()
+        val beforeGeometry = latestRenderedGeometry.value
+        if (!(if (redo) board.redo() else board.undo())) return
+        val after = board.snapshot()
+        if (searchOpen && (before.texts != after.texts || before.shapes != after.shapes))
+            searchHistoryNavigation = after to searchQuery
+        selectedId = null
+        selectedIds = emptySet()
+        pendingHistoryFocus = HistoryFocusRequest(before, after, beforeGeometry)
+        saveSnapshot()
+    }
+
+    LaunchedEffect(snapshot, pendingHistoryFocus, canvasSize) {
+        val request = pendingHistoryFocus ?: return@LaunchedEffect
+        if (board.snapshot() != request.expected) {
+            pendingHistoryFocus = null
+            return@LaunchedEffect
+        }
+        if (snapshot != request.expected || !navigation.initialized) return@LaunchedEffect
+        val ids = affectedHistoryDisplayIds(request.before, snapshot, request.beforeGeometry,
+            renderedGeometry, viewport.scale, density.density)
+        val geometry = historyDisplayBounds(ids, request.beforeGeometry, renderedGeometry)
+        val offscreen = geometry.boundsById.any { (id, bounds) ->
+            val (left, top) = viewport.worldToScreen(bounds.left, bounds.top)
+            val (right, bottom) = viewport.worldToScreen(bounds.right, bounds.bottom)
+            right < 0f || bottom < 0f || left > canvasSize.width || top > canvasSize.height ||
+                renderedGeometry.bounds(id) != null && !projection.visible(id)
+        }
+        pendingHistoryFocus = null
+        if (!offscreen) return@LaunchedEffect
+        val bounds = geometry.union() ?: return@LaunchedEffect
+        val text = snapshot.texts.singleOrNull { it.id in ids }
+            ?.takeIf { ids.size == 1 }
+        if (text != null) focusTarget(CanvasMatch(text.id, bounds, false)) else
+            animateViewport(snapshot.fittedViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat(),
+                measuredRegionLabelSizes.filterKeys { it in ids }, renderedGeometry = geometry))
+    }
+
+    fun restoreView(forward: Boolean) {
+        if (!animationBoundary.active || !indicatorsAllowed() ||
+            !(if (forward) navigation.canForward else navigation.canBack)) return
+        stopViewportAnimation()
+        pendingHistoryFocus = null
+        val target = if (forward) navigation.forward() else navigation.back()
+        if (target != null) {
+            invalidatePointerContinuation()
+            lastBlankTap = null
+            animateViewport(target, record = false)
+        }
+    }
+
     BackHandler {
         if (imeBottom > 0) {
             invalidatePointerContinuation()
@@ -628,7 +729,7 @@ fun CanvasScreen(
                 menuTarget != null -> { menuTarget = null; chromeBounds.remove("menu") }
                 searchOpen -> {
                     searchOpen = false; searchQuery = ""; searchPosition = 0
-                    viewportAnimation?.cancel()
+                    stopViewportAnimation()
                     clearEditorFocus()
                     chromeBounds.remove("search")
                 }
@@ -849,7 +950,13 @@ fun CanvasScreen(
         } else chromeBounds.remove("search")
     }
     LaunchedEffect(searchOpen, searchQuery, board.elements, board.shapes) {
-        if (searchOpen && searchQuery.isNotBlank() && searchMatches.isNotEmpty()) focusMatch(0)
+        // A content-history change owns this navigation, including an unchanged visible camera.
+        val historyNavigation = searchHistoryNavigation
+        searchHistoryNavigation = null
+        if (searchOpen && historyNavigation?.first == snapshot && historyNavigation.second == searchQuery)
+            return@LaunchedEffect
+        if (searchOpen && searchQuery.isNotBlank() && searchMatches.isNotEmpty())
+            focusMatch(0, searchNavigationGroup)
     }
 
     LaunchedEffect(menuTarget) { if (menuTarget == null) chromeBounds.remove("menu") }
@@ -974,7 +1081,8 @@ fun CanvasScreen(
                     return@awaitEachGesture
                 val requestedInk = down.type == PointerType.Stylus || latestInkTool.value != null
                 if (chromeContains(down.position)) return@awaitEachGesture
-                latestAnimation.value?.cancel()
+                stopViewportAnimation()
+                pendingHistoryFocus = null
                 val previousBlankTap = lastBlankTap
                 if (previousBlankTap != null && !latestSaveBlocked.value &&
                     pendingDraftAcknowledgement == null && latestTool.value == SpatialTool.NONE &&
@@ -1061,6 +1169,7 @@ fun CanvasScreen(
                     selectedGrip -> "move"
                     else -> "tap"
                 }
+                var manualViewportOrigin: ViewportFocus? = null
                 val startWorld = viewport.screenToWorld(start.x, start.y).let { WorldPoint(it.first, it.second) }
                 fun previewMove(pointer: Offset) {
                     if (moveIds.isEmpty()) return
@@ -1105,6 +1214,12 @@ fun CanvasScreen(
                     val activeReleased = mode == "ink" && event.changes.any { it.id == drawingPointer && !it.pressed }
                     if (pressed.isEmpty() || activeReleased) {
                         if (event.type != PointerEventType.Release) break
+                        if (mode == "pan" || mode == "zoom") {
+                            val native = event.motionEvent
+                            if (native?.actionMasked == MotionEvent.ACTION_UP &&
+                                native.flags and MotionEvent.FLAG_CANCELED == 0)
+                                navigation.record(manualViewportOrigin)
+                        }
                         if (mode == "move" || mode == "longPressPending" ||
                             mode == "handle" && handle == HandleKind.MOVE) {
                             val native = event.motionEvent
@@ -1297,10 +1412,13 @@ fun CanvasScreen(
                             val center = (first.position + second.position) / 2f
                             val before = (first.previousPosition - second.previousPosition).getDistance()
                             val after = (first.position - second.position).getDistance()
-                            if (before > 0f) viewport = viewport.zoomAt(
-                                previousCenter.x, previousCenter.y, after / before,
-                                center.x - previousCenter.x, center.y - previousCenter.y,
-                            )
+                            if (before > 0f) {
+                                if (manualViewportOrigin == null) manualViewportOrigin = navigation.focus()
+                                viewport = viewport.zoomAt(
+                                    previousCenter.x, previousCenter.y, after / before,
+                                    center.x - previousCenter.x, center.y - previousCenter.y,
+                                )
+                            }
                         }
                     } else {
                         val change = if (mode == "ink") pressed.firstOrNull { it.id == drawingPointer }
@@ -1333,7 +1451,10 @@ fun CanvasScreen(
                                         drawingInput, drawingPoints)
                                 }
                             }
-                            "pan" -> viewport = latestViewport.value.pan(delta.x, delta.y)
+                            "pan" -> {
+                                if (manualViewportOrigin == null) manualViewportOrigin = navigation.focus()
+                                viewport = latestViewport.value.pan(delta.x, delta.y)
+                            }
                             "move" -> if (activeId != null) {
                                 previewMove(change.position)
                             }
@@ -1794,16 +1915,35 @@ fun CanvasScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(
-                    onClick = { if (board.undo()) { selectedId = null; selectedIds = emptySet(); saveSnapshot() } },
+                    onClick = { editHistory(redo = false) },
                     enabled = board.canUndo && !saving && !saveFailed,
                     modifier = Modifier.size(48.dp).semantics { contentDescription = undoLabel },
                 ) { Text("↶", color = if (board.canUndo && !saving && !saveFailed) ink else muted.copy(alpha = 0.4f), fontSize = 25.sp) }
                 Box(Modifier.width(1.dp).height(20.dp).background(outline))
                 IconButton(
-                    onClick = { if (board.redo()) { selectedId = null; selectedIds = emptySet(); saveSnapshot() } },
+                    onClick = { editHistory(redo = true) },
                     enabled = board.canRedo && !saving && !saveFailed,
                     modifier = Modifier.size(48.dp).semantics { contentDescription = redoLabel },
                 ) { Text("↷", color = if (board.canRedo && !saving && !saveFailed) ink else muted.copy(alpha = 0.4f), fontSize = 25.sp) }
+            }
+            if (viewControlsVisible) {
+                DisposableEffect(navigation) {
+                    onDispose { chromeBounds.remove("viewportHistory") }
+                }
+                Row(
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 70.dp)
+                        .background(Color.White, RoundedCornerShape(24.dp)).pillBorder(24f)
+                        .onGloballyPositioned { chromeBounds["viewportHistory"] = it.boundsInParent() },
+                ) {
+                    IconButton(onClick = { restoreView(forward = false) }, enabled = navigation.canBack,
+                        modifier = Modifier.size(48.dp).semantics {
+                            contentDescription = "視点を戻る"
+                        }) { Text("←", color = if (navigation.canBack) ink else muted, fontSize = 23.sp) }
+                    IconButton(onClick = { restoreView(forward = true) }, enabled = navigation.canForward,
+                        modifier = Modifier.size(48.dp).semantics {
+                            contentDescription = "視点を進む"
+                        }) { Text("→", color = if (navigation.canForward) ink else muted, fontSize = 23.sp) }
+                }
             }
             val zoomText = "${(viewport.scale * 100).roundToInt()}%  ${when (projection.tier) {
                 SemanticTier.NEAR -> "近"
@@ -1824,7 +1964,8 @@ fun CanvasScreen(
             ) { Text(zoomText, color = muted, fontSize = 11.sp) }
 
             if (inkTool == null) Column(
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 70.dp)
+                modifier = Modifier.align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = if (viewControlsVisible) 126.dp else 70.dp)
                     .onGloballyPositioned { chromeBounds["tools"] = it.boundsInParent() },
                 horizontalAlignment = Alignment.End,
             ) {

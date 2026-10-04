@@ -36,8 +36,8 @@
 ## Phase 6: Polish / delivery
 
 - [x] T011 specs/009-offscreen-direction-indicators/tasks.mdへconverge残差を追記し、README.mdとspecs/008-drag-edge-auto-pan/tasks.md/quickstart.mdのmerge後完了事実を同期する。
-- [ ] T012 app/のlint/unit/debug/androidTest build、schema/public/diff、標準GMD focused、final head CIのfull source/XML censusを検証しspecs/009-offscreen-direction-indicators/quickstart.mdから証跡を参照できるようにする。
-- [ ] T013 GitHub PRのfinal head両CI/canonical/base/threadを収束し、merge後Issue76最新ACを逐条評価する。specs/009-offscreen-direction-indicators/quickstart.mdからdeliveryへ到達できるようにする。
+- [x] T012 app/のlint/unit/debug/androidTest build、schema/public/diff、標準GMD focused、final head CIのfull source/XML censusを検証しspecs/009-offscreen-direction-indicators/quickstart.mdから証跡を参照できるようにする。
+- [x] T013 GitHub PRのfinal head両CI/canonical/base/threadを収束し、merge後Issue76最新ACを逐条評価する。specs/009-offscreen-direction-indicators/quickstart.mdからdeliveryへ到達できるようにする。
 
 ## Dependencies / Parallel Opportunities
 

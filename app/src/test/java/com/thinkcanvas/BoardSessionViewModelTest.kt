@@ -16,6 +16,25 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BoardSessionViewModelTest {
+    @Test fun viewportSessionsAreIsolatedRetainedAndDiscardedWithoutContentChanges() {
+        val sessions = BoardSessionViewModel()
+        val initial = BoardSnapshot()
+        val a = sessions.viewportHistoryFor(1L, initial)
+        a.resize(400f, 800f)
+        a.initialize(com.thinkcanvas.canvas.Viewport())
+        val origin = a.focus()
+        a.viewportState.value = a.viewportState.value.pan(100f, 50f)
+        assertTrue(a.record(origin))
+        assertSame(a, sessions.viewportHistoryFor(1L, initial))
+        val b = sessions.viewportHistoryFor(2L, initial)
+        assertNotSame(a, b)
+        assertFalse(b.canBack)
+        assertEquals(initial, sessions.stateFor(1L, initial).snapshot())
+        sessions.discard(1L)
+        assertNotSame(a, sessions.viewportHistoryFor(1L, initial))
+        assertSame(b, sessions.viewportHistoryFor(2L, initial))
+    }
+
     private fun testSessions() = BoardSessionViewModel(
         CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
     )

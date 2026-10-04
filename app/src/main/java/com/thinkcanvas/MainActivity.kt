@@ -388,6 +388,7 @@ class MainActivity : ComponentActivity() {
                         CanvasScreen(current.state,
                             boardName = current.name.ifBlank { "無題のボード" },
                             editorSession = boardSessions.textEditorFor(current.id, current.state.snapshot()),
+                            viewportHistory = boardSessions.viewportHistoryFor(current.id, current.state.snapshot()),
                             saveState = boardSessions.saveStateFor(current.id, current.state.snapshot()),
                             onRequestSave = { snapshot -> boardSessions.requestSave(current.id, snapshot) },
                             onRetrySave = { boardSessions.retrySave(current.id) },
