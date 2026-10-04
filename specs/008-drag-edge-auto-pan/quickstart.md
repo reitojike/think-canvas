@@ -45,3 +45,22 @@ focusedはcandidateごとに一回、失敗は原因分類とcheckpointを行い
 [PR87](https://github.com/reitojike/think-canvas/pull/87)はmerge SHA `d33ed2e7b6a5242c5821169c642e169a882c1b52`でmerge済み。final head `0d3b8cd82ef12ba76e1f9790fd5f4d9db83d935b`とmerge treeは同じ。両CI [37138090347](https://github.com/reitojike/think-canvas/actions/runs/37138090347)成功、unit104、fresh instrumentation128/0/0/0、missing/extra/duplicate/skipped0。XML SHA256 `2F21941440513959E542F4CF9DCE44D05CC1244862B742D63907D8E34ACE655B`。最後の依頼より新しい[current-head canonical clean](https://github.com/reitojike/think-canvas/pull/87#issuecomment-5971482270)、base最新/thread0を照合した。
 
 [Issue78最新12ACのclosure](https://github.com/reitojike/think-canvas/issues/78#issuecomment-5971536596)で全条件達成を逐条確認し、COMPLETED close済み。T013/T014をこの完了事実で同期した。物理端末の横断dogfoodingと親81の完了は別途未確認。
+
+## Issue93: STOP/再生成後の次のnative pan
+
+[Issue93](https://github.com/reitojike/think-canvas/issues/93)はSpec008 FR-007/008・SC-003/004のnative次操作回帰を扱う。#78のclosed historical preview→commit evidenceは変更しない。
+
+- 旧required CI37175575885（head02be1a3）はSTOP/resume、CI37171896715（head36a89da）は再生成caseの次panで固定110px oracleが失敗した。Lifecycle raw logでcaseを照合した。旧native座標は未記録のため具体的な補正量を推定事実として書かない。
+- 最初のWindows観測run20261004T043708Z-418cca0c8bcb477cb6cf249b49c3a02eは1/0/0/0、XML85D604E0DE36143633E8589354EBC882273A7576EB460766BEE66EC1559259FA。diagnostic-only [PR94](https://github.com/reitojike/think-canvas/pull/94)の[CI37177725777](https://github.com/reitojike/think-canvas/actions/runs/37177725777)はfresh140/1/0/0、missing/extra/duplicate0、XMLDFBB61216669AE078F5D9C788C4A97B68D09E04A2F1AD754F9B6CE8F2A9292B3。pan5回は配信/表示110/35一致、入力間隔33〜37ms。残る一件は#91の既知dialog root family。probeの時刻への影響と非再現を記録し、PR94はMUST_NOT_MERGEとしてclose済み。
+- 制御RED run20261004T050517Z-b05c008cdcbd44ccad908d7a1410e055は1/1/0/0、XML01C80C30E6EEAF7A3EE5161D315ACB1126342EFF4867B12D6B7BB3A08262B246。MOVEの有効なeventTime間隔8ms、注入110/35、Window配信165/52.5（historyに元座標）、表示165/53、layout同一。旧oracleだけが失敗した。
+- 同じ高速入力の新oracle GREEN run20261004T051256Z-487a88de38604af48a063bc3a448fd55は1/0/0/0、XML579CEE31A230E21DD7E5CD65DF4BACFEAD4DCB601C8AECA812A574CBF2DB6E91。STOP/resume・再生成とも配信165/52.5対表示165/53、2px以内、layout/内容/Room/save/Undo/Redo保持と終了後30frame安定を照合した。両制御runはowned/sourceUnchanged true、介入0。制御timestamp/logは通常fixtureへ含めない。
+
+T021/T023の補正はnative配信oracleと診断除去に閉じる。通常時刻のfocused、最終headの両CI/fresh source XML census/canonical/base/thread、mergeと最新AC closureはT022とIssue93のdelivery証跡で判定する。PR92/90は補正後のbase同期と再gateが必要で、成功をここでは先取りしない。
+
+通常時刻へ戻した最終fixtureのCANCEL→次panはrun20261004T051706Z-4c9769056f494ef58fc9a331b535f9fbで1/0/0/0。XML343665F790C0A1C1D48D99405FC8025985DB6ECAD7D15FD878D55D2F6B1F4800、owned/sourceUnchanged true、介入0。edge稼働中のCANCEL、30frame停止、Board/Room/履歴/save不変、次のnative配信/表示の一致と終了後安定を照合した。
+
+同じ最終fixtureで2026-10-04にlint、unit119/0/0/0、debug APK/androidTest APKのbuildが成功した。公開境界198候補、schema無変更、diff whitespaceを確認した。最終headのremote CIとreviewはT022として未完了のまま管理する。
+
+Issue93のdeliveryは[PR95](https://github.com/reitojike/think-canvas/pull/95)、merge `77f7dcde436f2f8c31fe7e4f99aa9ec5b4311297`で完了した。final head `618ae676b838f122362402e6b64851545b87f592`とmerge treeは同じ。両[CI37179865483](https://github.com/reitojike/think-canvas/actions/runs/37179865483)成功、fresh source/XML140/0/0/0、missing/extra/duplicate/error/skipped0、XML `BA681FA8D01D72931FDA1F7E1EABDBFC5F5F5B74BEAA6781B03EC32FB0046058`。最後の依頼より新しい[current-head canonical clean](https://github.com/reitojike/think-canvas/pull/95#issuecomment-5977057678)、main最新/behind0、全thread0を照合し、[最新6AC closure](https://github.com/reitojike/think-canvas/issues/93#issuecomment-5977070810)でCOMPLETED close済み。T022を実完了に同期した。PR92/90の新head再gateと親81の実機確認は別途残る。
+
+delivery完了後のconvergeは10 FR・4 SC・12操作scenario・設計6項目・Constitution5原則・全23 taskを現在のcodeへ照合した。missing/partial/contradicts/unrequestedのbuildable残差はいずれも0、Convergeではtasks.mdをbyte-for-byte変更しなかった。診断専用timestamp/log/historyが通常fixtureへ残っていないこと、配信oracle/内容/保存/layout/停止後の不変条件も確認した。

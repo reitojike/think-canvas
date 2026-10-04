@@ -1,5 +1,13 @@
 # 検証と収束
 
+## PR92統合後の最終gate（2026-10-04）
+
+[PR95 / Issue93](https://github.com/reitojike/think-canvas/issues/93#issuecomment-5977070810)と[PR92 / Issue91](https://github.com/reitojike/think-canvas/issues/91#issuecomment-5977858342)はmerge済み。main `a116374b3f39fe3ad46b200a05d49296f38efd68`をPR90へ競合なく統合した。IMEのfollow-upは独立したdeliveryとして完了しており、Issue79のPO判断はIssue77のgateへ含めない。
+
+統合後のread-only convergeは10FR/4SC/12scenario、有限設計5項目、Constitution5原則と既存15taskを再照合し、追加buildable残差0。Spec010 tasks.mdはbyte-identical（SHA256 `C151E1607A61A88446AE2E1BE6A7FA11820D90EC1D69BBAE80A85EF996F9B5BC`）、空phase追加なし。T012/T013のCI/review/merge/closureは実際のdeliveryまでpendingを維持する。native sourceは153、unit sourceは139。過去のhead60fのCI失敗は履歴として保持し、最終gateには統合後の新headの両CI/fresh XML/canonical/base/threadだけを使う。
+
+統合working treeのlocal lint/unit/debug/androidTest buildは成功（1m47s）、unit XMLは139/0/0/0、公開境界214ファイルPASS、schema/依存/CI/launcher差分なし。標準focused `ViewportHistoryInteractionTest#blankDoubleTapAndRegionFitHaveOneEntry` はrun `20261004T075838Z-c5108353442542cdb6be6763bc70ccdd`で1/0/0/0、owned/sourceUnchanged=true、介入0、XML SHA256 `3E7C1D09834FC7E378FA1326E35015BD1DDCF0E355F779F472ACE16D00F2A0DB`。最小倍率のback/forwardとregion fitの1entryを統合後も確認した。GMD終了までsource/docs固定、以後は検証記録だけ更新。最終merge gateのfull CI/reviewはcommit済み新headについてPR90へ記録する。
+
 作業用worktreeで実施、primaryの利用者変更を触らない。Gradle/GMDは一つずつ、GMD中はsource/docs固定。結果とlocal設定はignored private配下。
 
 - 既存runtimeで `./gradlew.bat :app:lintDebug :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --offline --no-daemon`。

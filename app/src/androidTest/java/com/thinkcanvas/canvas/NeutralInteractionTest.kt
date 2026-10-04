@@ -1,13 +1,18 @@
 package com.thinkcanvas.canvas
 
 import android.content.Intent
+import android.app.Dialog
 import android.os.SystemClock
+import android.widget.TextView
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.WindowInsets
+import android.view.WindowManager
+import android.view.WindowInsetsController
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.swipe
@@ -28,6 +33,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.espresso.Espresso
+import androidx.test.espresso.action.ViewActions
 import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.espresso.matcher.ViewMatchers.isRoot
 import com.thinkcanvas.BoardSaveState
@@ -72,7 +78,8 @@ class NeutralInteractionTest {
         }
         fun dialogBack(hideKeyboard: Boolean = true) {
             // Read the focused dialog window, not the underlying Activity's insets.
-            if (hideKeyboard) Espresso.closeSoftKeyboard()
+            if (hideKeyboard) Espresso.onView(isRoot()).inRoot(isDialog())
+                .perform(ViewActions.closeSoftKeyboard())
             composeRule.waitUntil(5_000) {
                 var hidden = false
                 Espresso.onView(isRoot()).inRoot(isDialog()).check { view, failure ->
@@ -83,7 +90,7 @@ class NeutralInteractionTest {
                 }
                 hidden
             }
-            Espresso.pressBack()
+            Espresso.onView(isRoot()).inRoot(isDialog()).perform(ViewActions.pressBack())
             composeRule.waitUntil(5_000) {
                 composeRule.onAllNodesWithText("編集内容を破棄しますか？")
                     .fetchSemanticsNodes().isEmpty()
@@ -103,12 +110,32 @@ class NeutralInteractionTest {
             }
             instrumentation.waitForIdleSync()
             composeRule.waitForIdle()
+            assertNoDialog()
             waitEditorReady()
+        }
+        fun blockingWindow(aboveIme: Boolean = false): Dialog {
+            lateinit var dialog: Dialog
+            scenario.onActivity { activity ->
+                dialog = Dialog(activity).apply {
+                    setContentView(TextView(activity).apply { text = "Another window" })
+                    if (aboveIme) window!!.addFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
+                    show()
+                }
+            }
+            composeRule.waitUntil(5_000) {
+                var ownsFocus = false
+                scenario.onActivity {
+                    ownsFocus = dialog.window?.decorView?.hasWindowFocus() == true &&
+                        !it.window.decorView.hasWindowFocus()
+                }
+                ownsFocus
+            }
+            return dialog
         }
         fun waitEditorReady(label: String = editor.draft.value?.let {
                 if (it.id == null) "新しいテキスト" else "テキストを編集"
             } ?: "囲みの名前") {
-            composeRule.waitUntil(10_000) {
+            try { composeRule.waitUntil(10_000) {
                 val nodes = composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes()
                 val focused = nodes.singleOrNull()?.config?.getOrNull(SemanticsProperties.Focused) == true
                 var ready = false
@@ -117,11 +144,27 @@ class NeutralInteractionTest {
                     val input = activity.getSystemService(InputMethodManager::class.java)
                     val view = root.findFocus()
                     val insets = root.rootWindowInsets
-                    ready = root.hasWindowFocus() && view != null && input.isActive(view) &&
-                        input.isAcceptingText && insets?.isVisible(WindowInsets.Type.ime()) == true &&
-                        insets.getInsets(WindowInsets.Type.ime()).bottom > 0
+                    ready = focused && root.hasWindowFocus() && view != null &&
+                        insets?.isVisible(WindowInsets.Type.ime()) == true &&
+                        insets.getInsets(WindowInsets.Type.ime()).bottom > 0 &&
+                        input.isActive(view) && input.isAcceptingText
                 }
                 focused && ready
+            } } catch (timeout: ComposeTimeoutException) {
+                val nodes = composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes()
+                val focused = nodes.singleOrNull()?.config?.getOrNull(SemanticsProperties.Focused)
+                var native = ""
+                scenario.onActivity { activity ->
+                    val root = activity.window.decorView
+                    val input = activity.getSystemService(InputMethodManager::class.java)
+                    val view = root.findFocus()
+                    val insets = root.rootWindowInsets
+                    native = "windowFocus=${root.hasWindowFocus()}, view=${view?.javaClass?.simpleName}, " +
+                        "active=${view?.let { input.isActive(it) }}, accepting=${input.isAcceptingText}, " +
+                        "imeVisible=${insets?.isVisible(WindowInsets.Type.ime())}, " +
+                        "imeBottom=${insets?.getInsets(WindowInsets.Type.ime())?.bottom}"
+                }
+                throw AssertionError("Editor readiness: nodes=${nodes.size}, focused=$focused, $native", timeout)
             }
             composeRule.waitForIdle()
         }
@@ -669,6 +712,265 @@ class NeutralInteractionTest {
         assertOriginalContent()
         continueEditing()
         assertEquals("Keep the pending outside tap", editor.draft.value?.text)
+    }
+
+    @Test fun editorWaitsForWindowOwnerAndDoesNotReshowHiddenImeOnWindowReturn() = withBoard {
+        val first = blockingWindow()
+        try {
+            scenario.onActivity { editor.draft.value = Draft(null, 500f, 1200f, "Window owner draft") }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithContentDescription("新しいテキスト").assertIsNotFocused()
+            assertOriginalContent()
+        } finally { scenario.onActivity { first.dismiss() } }
+        waitEditorReady()
+        assertEquals("Window owner draft", editor.draft.value?.text)
+
+        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(
+            android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        composeRule.waitUntil(5_000) {
+            var hidden = false
+            scenario.onActivity {
+                hidden = it.window.decorView.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == false
+            }
+            hidden
+        }
+        val second = blockingWindow()
+        try { assertEquals("Window owner draft", editor.draft.value?.text) }
+        finally { scenario.onActivity { second.dismiss() } }
+        composeRule.waitUntil(5_000) {
+            var ready = false
+            scenario.onActivity {
+                val root = it.window.decorView
+                ready = root.hasWindowFocus() && root.findFocus()?.let { view ->
+                    it.getSystemService(InputMethodManager::class.java).isActive(view)
+                } == true
+            }
+            ready
+        }
+        composeRule.waitForIdle()
+        scenario.onActivity {
+            assertFalse(it.window.decorView.rootWindowInsets.isVisible(WindowInsets.Type.ime()))
+        }
+        assertEquals("Window owner draft", editor.draft.value?.text)
+        assertOriginalContent()
+    }
+
+    @Test fun lateWindowLossDuringInputFrameResumesTextRegionAndSearch() {
+        for (label in listOf("新しいテキスト", "囲みの名前", "ボード内を探す")) withBoard {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val first = blockingWindow()
+            var second: Dialog? = null
+            var controlMask = 0
+            var controller: WindowInsetsController? = null
+            val listener = WindowInsetsController.OnControllableInsetsChangedListener { _, mask ->
+                controlMask = mask
+            }
+            try {
+                if (label == "ボード内を探す") {
+                    composeRule.onNodeWithContentDescription("ボード内を検索").performClick()
+                } else scenario.onActivity {
+                    if (label == "新しいテキスト") {
+                        editor.draft.value = Draft(null, 500f, 1200f, "Late window draft")
+                    } else {
+                        editor.regionNameDraft.value = RegionNameDraft(region.id, region.name)
+                            .copy(name = "Late window name")
+                    }
+                }
+                composeRule.waitForIdle()
+                composeRule.onNodeWithContentDescription(label).assertIsNotFocused()
+                val draft = editor.draft.value
+                val regionDraft = editor.regionNameDraft.value
+                composeRule.mainClock.autoAdvance = false
+                scenario.onActivity {
+                    controller = checkNotNull(it.window.decorView.windowInsetsController)
+                    controller?.addOnControllableInsetsChangedListener(listener)
+                    first.dismiss()
+                }
+                // The field is focused and the platform IME is controllable, while the
+                // Compose frame awaited by the unfinished input request is still paused.
+                composeRule.waitUntil(5_000) {
+                    val focused = composeRule.onAllNodesWithContentDescription(label)
+                        .fetchSemanticsNodes().singleOrNull()?.config
+                        ?.getOrNull(SemanticsProperties.Focused) == true
+                    var ready = false
+                    scenario.onActivity {
+                        ready = it.window.decorView.hasWindowFocus() &&
+                            controlMask and WindowInsets.Type.ime() != 0
+                    }
+                    focused && ready
+                }
+                instrumentation.waitForIdleSync()
+                second = blockingWindow()
+                composeRule.mainClock.advanceTimeByFrame()
+                instrumentation.waitForIdleSync()
+                assertEquals(draft, editor.draft.value)
+                assertEquals(regionDraft, editor.regionNameDraft.value)
+                assertOriginalContent()
+                scenario.onActivity { second?.dismiss() }
+                composeRule.mainClock.autoAdvance = true
+                waitEditorReady(label)
+                assertEquals(draft, editor.draft.value)
+                assertEquals(regionDraft, editor.regionNameDraft.value)
+                assertOriginalContent()
+            } finally {
+                scenario.onActivity {
+                    first.dismiss()
+                    second?.dismiss()
+                    controller?.removeOnControllableInsetsChangedListener(listener)
+                }
+                composeRule.mainClock.autoAdvance = true
+                composeRule.waitForIdle()
+            }
+        }
+    }
+
+    @Test fun endedPendingEditorDoesNotRegainFocusBeforeRecomposition() = withBoard {
+        val blocker = blockingWindow()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        try {
+            scenario.onActivity { editor.draft.value = Draft(null, 500f, 1200f, "Pending input") }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithContentDescription("新しいテキスト").assertIsNotFocused()
+            composeRule.mainClock.autoAdvance = false
+            scenario.onActivity {
+                editor.draft.value = null
+                blocker.dismiss()
+            }
+            composeRule.waitUntil(5_000) {
+                var ownsFocus = false
+                scenario.onActivity { ownsFocus = it.window.decorView.hasWindowFocus() }
+                ownsFocus
+            }
+            instrumentation.waitForIdleSync()
+            composeRule.waitForIdle()
+            // The old field is still mounted until the next composition frame.
+            composeRule.onNodeWithContentDescription("新しいテキスト").assertIsNotFocused()
+            scenario.onActivity {
+                assertFalse(it.window.decorView.rootWindowInsets.isVisible(WindowInsets.Type.ime()))
+            }
+            assertEquals(null, editor.draft.value)
+            assertOriginalContent()
+        } finally {
+            scenario.onActivity { blocker.dismiss() }
+            composeRule.mainClock.autoAdvance = true
+            composeRule.waitForIdle()
+        }
+        assertEquals(0, composeRule.onAllNodesWithContentDescription("新しいテキスト")
+            .fetchSemanticsNodes().size)
+
+        val replacementWindow = blockingWindow()
+        try {
+            scenario.onActivity { editor.draft.value = Draft(null, 500f, 1200f, "Old session") }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithContentDescription("新しいテキスト").assertIsNotFocused()
+            composeRule.mainClock.autoAdvance = false
+            scenario.onActivity {
+                editor.draft.value = Draft(null, 500f, 1200f, "Replacement session")
+                replacementWindow.dismiss()
+            }
+            composeRule.waitUntil(5_000) {
+                var ownsFocus = false
+                scenario.onActivity { ownsFocus = it.window.decorView.hasWindowFocus() }
+                ownsFocus
+            }
+            instrumentation.waitForIdleSync()
+            composeRule.waitForIdle()
+            composeRule.onNodeWithContentDescription("新しいテキスト").assertIsNotFocused()
+            assertOriginalContent()
+        } finally {
+            scenario.onActivity { replacementWindow.dismiss() }
+            composeRule.mainClock.autoAdvance = true
+            composeRule.waitForIdle()
+        }
+        waitEditorReady()
+        assertEquals("Replacement session", editor.draft.value?.text)
+        assertOriginalContent()
+    }
+
+    @Test fun pendingInputIsCanceledByConfirmationAndAcceptedImeBack() = withBoard {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val blocker = blockingWindow()
+        try {
+            composeRule.onNodeWithContentDescription("ボード内を検索").performClick()
+            scenario.onActivity {
+                editor.regionNameDraft.value = RegionNameDraft(region.id, region.name).copy(name = "Pending name")
+            }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithContentDescription("ボード内を探す").assertIsNotFocused()
+            composeRule.onNodeWithContentDescription("囲みの名前").assertIsNotFocused()
+            scenario.onActivity {
+                assertFalse(it.window.decorView.rootWindowInsets.isVisible(WindowInsets.Type.ime()))
+                assertEquals(0, it.window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.ime()).bottom)
+            }
+            composeRule.mainClock.autoAdvance = false
+            scenario.onActivity {
+                it.onBackPressedDispatcher.onBackPressed()
+                blocker.dismiss()
+            }
+            composeRule.waitUntil(5_000) {
+                var focused = false
+                scenario.onActivity { focused = it.window.decorView.hasWindowFocus() }
+                focused
+            }
+            instrumentation.waitForIdleSync()
+            composeRule.waitForIdle()
+            // Confirmation was accepted, but its native window is not composed yet.
+            composeRule.onNodeWithContentDescription("ボード内を探す").assertIsNotFocused()
+            composeRule.onNodeWithContentDescription("囲みの名前").assertIsNotFocused()
+            scenario.onActivity {
+                assertFalse(it.window.decorView.rootWindowInsets.isVisible(WindowInsets.Type.ime()))
+            }
+            assertEquals("Pending name", editor.regionNameDraft.value?.name)
+            assertOriginalContent()
+        } finally {
+            scenario.onActivity { blocker.dismiss() }
+            composeRule.mainClock.autoAdvance = true
+            composeRule.waitForIdle()
+        }
+        assertDiscardDialog()
+        dialogBack()
+
+        // Keep the existing IME visible while another native window owns focus.
+        val aboveIme = blockingWindow(aboveIme = true)
+        lateinit var pending: RegionNameDraft
+        try {
+            scenario.onActivity {
+                assertTrue(it.window.decorView.rootWindowInsets.isVisible(WindowInsets.Type.ime()))
+                pending = RegionNameDraft(region.id, "Pending name", originalName = region.name)
+                editor.regionNameDraft.value = pending
+            }
+            composeRule.waitForIdle()
+            scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+            composeRule.waitUntil(5_000) {
+                var hidden = false
+                scenario.onActivity {
+                    val insets = it.window.decorView.rootWindowInsets
+                    hidden = !insets.isVisible(WindowInsets.Type.ime()) &&
+                        insets.getInsets(WindowInsets.Type.ime()).bottom == 0
+                }
+                hidden
+            }
+            assertEquals(pending, editor.regionNameDraft.value)
+            assertNoDialog()
+        } finally { scenario.onActivity { aboveIme.dismiss() } }
+        composeRule.waitUntil(5_000) {
+            var ready = false
+            scenario.onActivity {
+                val root = it.window.decorView
+                ready = root.hasWindowFocus() && root.findFocus()?.let { view ->
+                    it.getSystemService(InputMethodManager::class.java).isActive(view)
+                } == true
+            }
+            ready
+        }
+        composeRule.waitForIdle()
+        scenario.onActivity {
+            val insets = it.window.decorView.rootWindowInsets
+            assertFalse(insets.isVisible(WindowInsets.Type.ime()))
+            assertEquals(0, insets.getInsets(WindowInsets.Type.ime()).bottom)
+        }
+        assertEquals(pending, editor.regionNameDraft.value)
+        assertOriginalContent()
     }
 
     private fun Harness.assertOriginalContent() {
