@@ -122,3 +122,12 @@ MainのDeferred候補照会は現在のPage/requestを捕捉し、boards/last照
 ### 一覧画像共有Loading fixtureの初期表示前提
 
 既存回帰は初期一覧の表示を待ってからStore actor gateを挿入し、startupのrestore/list読み込みをgateに巻き込まない。finallyの解除を保証し、製品のserialized actor/Loading guardと既存assert/待機上限を維持する。
+
+## checkpoint IO の限定 follow-up
+
+PR #97 の CI で空の共有 picker から作成後の preview 待ちが失敗し、同時期に AtomicFile rename failure を観測した。因果を断定せず、別 PR の shared checkpoint / picker 操作 readiness に閉じて扱う。
+[Android AtomicFile](https://developer.android.com/reference/android/util/AtomicFile) は排他制御を提供せず、呼出し側の保護を要求する。現行の ViewModel IO と Store の finishing-task cleanup を維持し、単一 app process の checkpoint read / write（read-back まで）/ discard を共有 JVM monitor で保護する。UI thread へ IO を移さず、Room / save writer / task restoration / 要求 identity / schema は変更しない。
+
+回帰は native AtomicFile の startWrite を latch で固定し、同 token の別 owner read と、別 token への task discard を割り込ませる。公開の2引数 constructor は維持し、internal constructor だけで同じ native primitive を渡せるようにする。generic storage backend や test専用状態ownerは追加しない。旧 file が破棄される前の write/read-back 完了と、current token の本文保持を照合する。
+
+picker の操作前提は visible text だけでなく phase=PICKER / writing=false と利用可能な button を確認する。既存 raw guard、操作回数、10秒上限、preview / content / 保存の期待値を維持する。
