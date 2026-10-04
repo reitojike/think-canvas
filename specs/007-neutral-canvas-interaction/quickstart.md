@@ -34,3 +34,11 @@ focusedは1回。host blockerなら分類し、CIの独立Pixel9/API37 full XML�
 - 修正前`2311c46`のpreview前selected textは編集の意図しない再オープンを実測（1/1/0/0、XML SHA256 `4F38165A136400E63E2BFB07079E4A0B28A0579F526C8398C10F04FFCE0BFB94`）。修正後`fccc12a`のtext tap/grip/shape MOVE/resizeは1/0/0/0、run `20261003T145013Z-c5a74e4237734b5589d036117e92cf1c`、XML `1A0A19DC81DB3B48B215C546A3F891BAC9BDAC52BA202B8581DB062DB230D3E5`。同headのoutside DOWN→Back確認保持は1/0/0/0、run `20261003T145410Z-7e52448e4a41456a9b4ef6f39601c98e`、XML `18B7453263830DD3E9350971CBA562065B359E0DDFADCB5CE2597FE174F08CFF`。menu/search/expandedのpending tap取消も1/0/0/0、run `20261003T145705Z-cd80406a505a466d973bb26405f432c1`、XML `5A7667796A12C0FABC7C1538D498806D741B0EE8E5C978A6AE8CE5E10963F534`。全runでownershipPassed/sourceUnchanged=true、manualInterventions=0。Board/Room/Undo不変と次の通常操作を確認した。
 - 現在のsource censusは110 identities（新規23、Spec006の21を維持）。旧headの107 greenとreviewは使わず、final candidateの両CIとfresh110 XML、最後の依頼より新しいcanonical review、base/thread、merge/最新ACはPR/Issueへ記録する。T009/T011はfinal deliveryの証跡で判定する。
 T009/T011は[post-merge closure](https://github.com/reitojike/think-canvas/issues/73#issuecomment-5970533783)で完了。merge d56c098のtreeは検証head c4b5df7と一致し、両CI37131698617成功・fresh110/0/0/0・canonical clean・thread0・最新17 ACを確認済み。物理端末の横断UXは親81で継続する。
+
+## Issue91 IME window-owner復帰
+
+PR90のfull CIで既存Continue/outside復帰のtimeoutを確認し、editor/IMEの独立responsibilityとして[family checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5975452167)から[Issue91](https://github.com/reitojike/think-canvas/issues/91)へ分離した。text/search/region focus効果はmain cb8aa72と同一で、PO authorityは変更しない。
+
+main productionに新規native回帰のみ追加した標準focused run20261004T014050Z-0aaa7ca777744acf99d557fcee444cfeは、別Dialogがwindow focusを持つ間に背後editorがFocused=trueとなり1/1/0/0。owned/source unchanged、介入0、XML SHA-256 `EB4B4528253EF9924A776A8361B18A99182F978009A1D5EBB437ABBD61F688CE`。既存trigger内のone-shot window待機とframe適用をT016で追加し、Backで隠したIMEをwindow往復だけで再表示しない回帰も維持する。dialog hide/Backのfixtureはdefault Activity rootを避け明示dialog rootを使う。
+
+更新headのfocused、基本検証、全体141 identities（Spec006/007/008/009を保持）とcanonical review、merge/最新7 ACはIssue91のPR/closureで確定する。未検証の成功を推定せず、deliveryのT017はpendingのまま記録する。

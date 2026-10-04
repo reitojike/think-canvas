@@ -83,6 +83,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
@@ -118,6 +119,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -188,6 +190,7 @@ fun CanvasScreen(
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
+    val windowInfo = LocalWindowInfo.current
     val regionNameFocusRequester = remember { FocusRequester() }
     val canvasTextStyle = LocalTextStyle.current
     val regionLabelStyle = canvasTextStyle.copy(fontSize = DetailedRenderFacts.REGION_LABEL_SIZE_SP.sp)
@@ -838,13 +841,19 @@ fun CanvasScreen(
 
     LaunchedEffect(draft?.id, draft?.x, draft?.y, discardTarget) {
         if (draft != null && discardTarget == null) {
+            snapshotFlow { windowInfo.isWindowFocused }.first { it }
             focusRequester.requestFocus()
+            withFrameNanos { }
+            snapshotFlow { windowInfo.isWindowFocused }.first { it }
             keyboard?.show()
         }
     }
     LaunchedEffect(searchOpen) {
         if (searchOpen) {
+            snapshotFlow { windowInfo.isWindowFocused }.first { it }
             searchFocusRequester.requestFocus()
+            withFrameNanos { }
+            snapshotFlow { windowInfo.isWindowFocused }.first { it }
             keyboard?.show()
         } else chromeBounds.remove("search")
     }
@@ -869,7 +878,10 @@ fun CanvasScreen(
     }
     LaunchedEffect(regionNameId, discardTarget) {
         if (regionNameId != null && discardTarget == null) {
+            snapshotFlow { windowInfo.isWindowFocused }.first { it }
             regionNameFocusRequester.requestFocus()
+            withFrameNanos { }
+            snapshotFlow { windowInfo.isWindowFocused }.first { it }
             keyboard?.show()
         }
     }

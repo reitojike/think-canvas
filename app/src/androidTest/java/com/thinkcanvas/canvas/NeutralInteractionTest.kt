@@ -1,7 +1,9 @@
 package com.thinkcanvas.canvas
 
 import android.content.Intent
+import android.app.Dialog
 import android.os.SystemClock
+import android.widget.TextView
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.WindowInsets
@@ -28,6 +30,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.espresso.Espresso
+import androidx.test.espresso.action.ViewActions
 import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.espresso.matcher.ViewMatchers.isRoot
 import com.thinkcanvas.BoardSaveState
@@ -72,7 +75,8 @@ class NeutralInteractionTest {
         }
         fun dialogBack(hideKeyboard: Boolean = true) {
             // Read the focused dialog window, not the underlying Activity's insets.
-            if (hideKeyboard) Espresso.closeSoftKeyboard()
+            if (hideKeyboard) Espresso.onView(isRoot()).inRoot(isDialog())
+                .perform(ViewActions.closeSoftKeyboard())
             composeRule.waitUntil(5_000) {
                 var hidden = false
                 Espresso.onView(isRoot()).inRoot(isDialog()).check { view, failure ->
@@ -83,7 +87,7 @@ class NeutralInteractionTest {
                 }
                 hidden
             }
-            Espresso.pressBack()
+            Espresso.onView(isRoot()).inRoot(isDialog()).perform(ViewActions.pressBack())
             composeRule.waitUntil(5_000) {
                 composeRule.onAllNodesWithText("編集内容を破棄しますか？")
                     .fetchSemanticsNodes().isEmpty()
@@ -669,6 +673,65 @@ class NeutralInteractionTest {
         assertOriginalContent()
         continueEditing()
         assertEquals("Keep the pending outside tap", editor.draft.value?.text)
+    }
+
+    @Test fun editorWaitsForWindowOwnerAndDoesNotReshowHiddenImeOnWindowReturn() = withBoard {
+        fun blockingWindow(): Dialog {
+            lateinit var dialog: Dialog
+            scenario.onActivity { activity ->
+                dialog = Dialog(activity).apply {
+                    setContentView(TextView(activity).apply { text = "Another window" })
+                    show()
+                }
+            }
+            composeRule.waitUntil(5_000) {
+                var ownsFocus = false
+                scenario.onActivity {
+                    ownsFocus = dialog.window?.decorView?.hasWindowFocus() == true &&
+                        !it.window.decorView.hasWindowFocus()
+                }
+                ownsFocus
+            }
+            return dialog
+        }
+        val first = blockingWindow()
+        try {
+            scenario.onActivity { editor.draft.value = Draft(null, 500f, 1200f, "Window owner draft") }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithContentDescription("新しいテキスト").assertIsNotFocused()
+            assertOriginalContent()
+        } finally { scenario.onActivity { first.dismiss() } }
+        waitEditorReady()
+        assertEquals("Window owner draft", editor.draft.value?.text)
+
+        InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(
+            android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        composeRule.waitUntil(5_000) {
+            var hidden = false
+            scenario.onActivity {
+                hidden = it.window.decorView.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == false
+            }
+            hidden
+        }
+        val second = blockingWindow()
+        try { assertEquals("Window owner draft", editor.draft.value?.text) }
+        finally { scenario.onActivity { second.dismiss() } }
+        composeRule.waitUntil(5_000) {
+            var ready = false
+            scenario.onActivity {
+                val root = it.window.decorView
+                ready = root.hasWindowFocus() && root.findFocus()?.let { view ->
+                    it.getSystemService(InputMethodManager::class.java).isActive(view)
+                } == true
+            }
+            ready
+        }
+        composeRule.waitForIdle()
+        scenario.onActivity {
+            assertFalse(it.window.decorView.rootWindowInsets.isVisible(WindowInsets.Type.ime()))
+        }
+        assertEquals("Window owner draft", editor.draft.value?.text)
+        assertOriginalContent()
     }
 
     private fun Harness.assertOriginalContent() {
