@@ -40,6 +40,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -74,6 +75,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInParent
@@ -368,6 +371,34 @@ fun CanvasScreen(
         lastBlankTap = null
     }
 
+    fun observeMove(event: String, extra: Map<String, Any?> = emptyMap()) {
+        val observer = EdgeAutoPanDiagnosticObservation
+        if (!observer.enabled) return
+        // UI threadの同じcallback内でV・owner・preview・contentを一組として採取する。
+        val observedViewport = viewport
+        val observedOwner = moveOwner
+        val observedPreview = movePreview
+        val content = board.snapshot()
+        observer.state(event, mapOf(
+            "viewport" to observer.viewport(observedViewport),
+            "generation" to gestureGeneration,
+            "pointerId" to observer.pointerId,
+            "ownerIdentity" to observedOwner?.let { System.identityHashCode(it) },
+            "ownerGeneration" to observedOwner?.generation,
+            "selectedIds" to (observedOwner?.ids ?: selectedIds).sorted(),
+            "ownerPointer" to observedOwner?.pointer?.let { observer.point(it) },
+            "anchor" to observedOwner?.anchor?.let { observer.point(it) },
+            "originalMovingWorld" to observedOwner?.source?.texts?.firstOrNull { it.id == "edge-moving" }
+                ?.let { mapOf("x" to it.x, "y" to it.y) },
+            "movePreview" to observedPreview?.let { mapOf(
+                "ids" to it.first.sorted(), "delta" to observer.point(it.second)) },
+            "canvasSize" to mapOf("width" to canvasSize.width, "height" to canvasSize.height),
+            "density" to density.density,
+            "board" to observer.board(content, board.canUndo, board.canRedo),
+        ) + extra)
+    }
+
+
     fun moveIsLive(owner: MoveDragSession): Boolean = moveOwner === owner &&
         gestureGeneration == owner.generation && !exitBlocked() && owner.hasSameContent(board) &&
         editorSession.draft.value == null && editorSession.regionNameDraft.value == null &&
@@ -390,6 +421,8 @@ fun CanvasScreen(
                 var previousFrame: Long? = null
                 while (moveIsLive(owner)) {
                     withFrameNanos { frame ->
+                        EdgeAutoPanDiagnosticObservation.beginFrame(frame)
+                        observeMove("AUTO_PAN_FRAME_BEFORE", mapOf("previousFrameNanos" to previousFrame))
                         // Queued frames can arrive before coroutine cancellation/recomposition.
                         if (moveIsLive(owner)) {
                             val velocity = edgeAutoPanVelocity(owner.pointer, canvasSize,
@@ -401,6 +434,7 @@ fun CanvasScreen(
                                 movePreview = owner.ids to worldDragDelta(viewport, owner.anchor, owner.pointer)
                             }
                         }
+                        observeMove("AUTO_PAN_FRAME_AFTER")
                     }
                 }
                 cancelMove(owner)
@@ -812,6 +846,11 @@ fun CanvasScreen(
     Box(
         modifier = Modifier.fillMaxSize().background(paper).safeDrawingPadding()
             .onSizeChanged { canvasSize = it }.clipToBounds()
+            .then(if (EdgeAutoPanDiagnosticObservation.enabled) Modifier.onGloballyPositioned { coordinates ->
+                EdgeAutoPanDiagnosticObservation.record("CANVAS_LAYOUT_PUBLISHED", mapOf(
+                    "canvasPositionInWindow" to EdgeAutoPanDiagnosticObservation.point(coordinates.positionInWindow()),
+                    "canvasBoundsInWindow" to EdgeAutoPanDiagnosticObservation.rect(coordinates.boundsInWindow())))
+            } else Modifier)
             .semantics {
                 contentDescription = "キャンバス"
                 customActions = listOf(
@@ -975,6 +1014,14 @@ fun CanvasScreen(
                     else -> "tap"
                 }
                 val startWorld = viewport.screenToWorld(start.x, start.y).let { WorldPoint(it.first, it.second) }
+                if (EdgeAutoPanDiagnosticObservation.enabled)
+                    EdgeAutoPanDiagnosticObservation.pointerId = down.id.value
+                observeMove("DOWN_ADMITTED", mapOf(
+                    "eventPointer" to EdgeAutoPanDiagnosticObservation.point(down.position),
+                    "pointerId" to down.id.value, "downAnchor" to EdgeAutoPanDiagnosticObservation.point(startWorld),
+                    "mode" to mode, "moveIds" to moveIds.sorted(),
+                    "originalMovingWorld" to gestureSnapshot.texts.firstOrNull { it.id == "edge-moving" }
+                        ?.let { mapOf("x" to it.x, "y" to it.y) }))
                 fun previewMove(pointer: Offset) {
                     if (moveIds.isEmpty()) return
                     if (!dragAdmitted) {
@@ -982,10 +1029,15 @@ fun CanvasScreen(
                         return
                     }
                     val owner = gestureMove ?: MoveDragSession(moveIds, startWorld, admittedGeneration,
-                        gestureSnapshot, pointer).also { gestureMove = it; moveOwner = it }
+                        gestureSnapshot, pointer).also {
+                            gestureMove = it; moveOwner = it
+                            observeMove("MOVE_OWNER_CREATED")
+                        }
                     if (moveIsLive(owner)) {
                         owner.pointer = pointer
+                        observeMove("POINTER_UPDATED", mapOf("eventPointer" to EdgeAutoPanDiagnosticObservation.point(pointer)))
                         movePreview = owner.ids to worldDragDelta(viewport, owner.anchor, pointer)
+                        observeMove("POINTER_PREVIEW_AFTER")
                     } else cancelMove(owner)
                 }
                 if (mode == "ink") inkPreview = InkPreview(drawingKind!!, drawingInput, drawingPoints)
@@ -1026,6 +1078,10 @@ fun CanvasScreen(
                         }
                         end = event.changes.firstOrNull { it.id == drawingPointer }?.position
                             ?: event.changes.firstOrNull()?.position ?: end
+                        observeMove("UP_RECEIVED", mapOf(
+                            "eventPointer" to EdgeAutoPanDiagnosticObservation.point(end),
+                            "pointerId" to event.changes.firstOrNull()?.id?.value,
+                            "nativeAction" to event.motionEvent?.actionMasked, "mode" to mode))
                         when (mode) {
                             "ink" -> if (drawingKind != null && drawingPoints.isNotEmpty()) {
                                 val endTime = SystemClock.uptimeMillis()
@@ -1107,9 +1163,17 @@ fun CanvasScreen(
                                     val owner = gestureMove ?: break
                                     if (!moveIsLive(owner)) break
                                     val delta = worldDragDelta(viewport, owner.anchor, end)
+                                    observeMove("RELEASE_DELTA_BEFORE_COMMIT", mapOf(
+                                        "releaseViewport" to EdgeAutoPanDiagnosticObservation.viewport(viewport),
+                                        "releaseAnchor" to EdgeAutoPanDiagnosticObservation.point(owner.anchor),
+                                        "eventPointer" to EdgeAutoPanDiagnosticObservation.point(end),
+                                        "actualCommitDelta" to EdgeAutoPanDiagnosticObservation.point(delta), "mode" to mode))
                                     moveOwner = null
                                     val beforeSnapshot = board.snapshot()
-                                    if (board.moveSelection(owner.ids, delta.x, delta.y)) {
+                                    if (board.moveSelection(owner.ids, delta.x, delta.y).also { changed ->
+                                        observeMove("BOARD_COMMIT_AFTER", mapOf("changed" to changed,
+                                            "actualCommitDelta" to EdgeAutoPanDiagnosticObservation.point(delta)))
+                                    }) {
                                         val afterSnapshot = board.snapshot()
                                         val changedIds = (beforeSnapshot.texts.zip(afterSnapshot.texts)
                                             .filter { (old, new) -> old != new }.map { it.first.id } +
@@ -1147,8 +1211,16 @@ fun CanvasScreen(
                                         val owner = gestureMove
                                         if (owner != null && !moveIsLive(owner)) break
                                         val delta = worldDragDelta(viewport, startWorld, end)
+                                        observeMove("RELEASE_DELTA_BEFORE_COMMIT", mapOf(
+                                            "releaseViewport" to EdgeAutoPanDiagnosticObservation.viewport(viewport),
+                                            "releaseAnchor" to EdgeAutoPanDiagnosticObservation.point(startWorld),
+                                            "eventPointer" to EdgeAutoPanDiagnosticObservation.point(end),
+                                            "actualCommitDelta" to EdgeAutoPanDiagnosticObservation.point(delta), "mode" to mode))
                                         moveOwner = null
-                                        board.moveSelection(owner?.ids ?: moveIds, delta.x, delta.y)
+                                        board.moveSelection(owner?.ids ?: moveIds, delta.x, delta.y).also { changed ->
+                                            observeMove("BOARD_COMMIT_AFTER", mapOf("changed" to changed,
+                                                "actualCommitDelta" to EdgeAutoPanDiagnosticObservation.point(delta)))
+                                        }
                                     }
                                     else -> board.apply(previewHandle(gestureSnapshot, activeId, handle, end))
                                 }
@@ -1276,6 +1348,7 @@ fun CanvasScreen(
                 } finally {
                     if (moveOwner === gestureMove) moveOwner = null
                     clearInteractionPreviews()
+                    observeMove("MOVE_CLEANUP")
                 }
             }
         },
@@ -1303,6 +1376,20 @@ fun CanvasScreen(
                 sourceSnapshot.withGap(start, horizontal, if (horizontal) dx else dy)
             }
             else -> sourceSnapshot
+        }
+        val diagnosticEpoch = EdgeAutoPanDiagnosticObservation.beginComposition()
+        val diagnosticDisplay = if (diagnosticEpoch != 0L) displaySnapshot.texts
+            .firstOrNull { it.id == "edge-moving" }?.let { target ->
+                val screen = viewport.worldToScreen(target.x, target.y)
+                mapOf<String, Any?>(
+                    "compositionEpoch" to diagnosticEpoch,
+                    "viewport" to EdgeAutoPanDiagnosticObservation.viewport(viewport),
+                    "delta" to movingPreview?.second?.let { EdgeAutoPanDiagnosticObservation.point(it) },
+                    "world" to mapOf("x" to target.x, "y" to target.y),
+                    "calculatedScreen" to mapOf("x" to screen.first, "y" to screen.second))
+            } else null
+        if (diagnosticDisplay != null) SideEffect {
+            observeMove("DISPLAY_STATE_COMMITTED", mapOf("display" to diagnosticDisplay))
         }
         val ghostIds = if (pendingGap == null) emptySet() else {
             (displaySnapshot.texts.filterIndexed { index, it -> it != sourceSnapshot.texts[index] }.map { it.id } +
@@ -1483,6 +1570,11 @@ fun CanvasScreen(
                             } else Modifier)
                         .then(if (selected) Modifier.selectionFrame(element.id in movingIds) else Modifier)
                         .onSizeChanged { elementSizes[element.id] = it }
+                         .then(if (diagnosticDisplay != null && element.id == "edge-moving")
+                             Modifier.onGloballyPositioned { coordinates ->
+                                 EdgeAutoPanDiagnosticObservation.layout(diagnosticEpoch, diagnosticDisplay,
+                                     coordinates.positionInWindow(), coordinates.boundsInWindow())
+                             } else Modifier)
                         .semantics {
                             contentDescription = element.text
                             stateDescription = if (selected) selectedLabel else unselectedLabel

@@ -61,6 +61,76 @@ class EdgeAutoPanTest {
     private val freeArrow = ArrowElement(id = "edge-free", from = ArrowEnd.Free(750f, 1300f),
         to = ArrowEnd.Free(1000f, 1550f))
 
+
+    private val diagnosticScreenshots = linkedMapOf<String, ByteArray>()
+
+    private fun diagnosticCapture(name: String) {
+        val observer = EdgeAutoPanDiagnosticObservation
+        if (!observer.enabled) return
+        observer.record("CAPTURE_START", mapOf("filename" to name))
+        try {
+            val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            if (bitmap == null) {
+                observer.record("CAPTURE_ERROR", mapOf("filename" to name, "reason" to "null bitmap"))
+            } else {
+                try {
+                    val bytes = java.io.ByteArrayOutputStream()
+                    val compressed = bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, bytes)
+                    if (compressed && diagnosticScreenshots.size < 5) {
+                        diagnosticScreenshots[name] = bytes.toByteArray()
+                    } else observer.record("CAPTURE_ERROR", mapOf("filename" to name, "reason" to "compression/buffer"))
+                    observer.record("CAPTURE_BITMAP_READY", mapOf(
+                        "filename" to name, "width" to bitmap.width, "height" to bitmap.height,
+                        "bytes" to bytes.size(), "compressed" to compressed))
+                } finally { bitmap.recycle() }
+            }
+        } catch (error: Throwable) {
+            observer.record("CAPTURE_ERROR", mapOf("filename" to name, "error" to error.toString()))
+        } finally {
+            observer.record("CAPTURE_END", mapOf("filename" to name))
+        }
+    }
+
+    private fun observeExactlyOnce(block: () -> Unit) {
+        val observer = EdgeAutoPanDiagnosticObservation
+        diagnosticScreenshots.clear()
+        observer.enable({ composeRule.mainClock.currentTime }, { composeRule.mainClock.autoAdvance })
+        observer.record("TEST_START", mapOf(
+            "identity" to "com.thinkcanvas.canvas.EdgeAutoPanTest#multiSelectionTranslatesTextShapeAndFreeArrowTogether",
+            "productBaseline" to "d33ed2e7b6a5242c5821169c642e169a882c1b52"))
+        var outcome = "PASS"
+        var failure: String? = null
+        try {
+            block()
+        } catch (error: Throwable) {
+            outcome = "FAIL"
+            failure = error.toString()
+            throw error
+        } finally {
+            observer.record("TEST_END", mapOf("outcome" to outcome, "failure" to failure))
+            try {
+                val jsonl = observer.finishJsonLines()
+                val storage = PlatformTestStorageRegistry.getInstance()
+                storage.openOutputFile("edge-auto-pan-observation.jsonl").use {
+                    it.write(jsonl.toByteArray(Charsets.UTF_8))
+                }
+                diagnosticScreenshots.forEach { (name, bytes) ->
+                    try {
+                        storage.openOutputFile(name).use { it.write(bytes) }
+                    } catch (error: Throwable) {
+                        android.util.Log.e("EdgeAutoPanDiagnostic", "output failed: $name", error)
+                    }
+                }
+            } catch (error: Throwable) {
+                android.util.Log.e("EdgeAutoPanDiagnostic", "observation output failed", error)
+            } finally {
+                diagnosticScreenshots.clear()
+                observer.clear()
+            }
+        }
+    }
+
+
     private inner class Harness(val scenario: ActivityScenario<MainActivity>,
                                val sessions: BoardSessionViewModel, val database: CanvasDatabase) {
         val board get() = sessions.stateFor(1L, BoardSnapshot())
@@ -70,8 +140,20 @@ class EdgeAutoPanTest {
             .fetchSemanticsNode().boundsInWindow
         fun bounds(label: String) = composeRule.onNodeWithContentDescription(label)
             .fetchSemanticsNode().boundsInWindow
-        fun position(label: String) = composeRule.onNodeWithContentDescription(label)
-            .fetchSemanticsNode().positionInWindow
+        fun position(label: String): Offset {
+            val observer = EdgeAutoPanDiagnosticObservation
+            val observe = observer.enabled && label == moving.text && observer.semanticsPhase.isNotEmpty()
+            if (observe) observer.record(if (observer.semanticsPhase == "PREVIEW")
+                "PREVIEW_QUERY_BEFORE" else "FINAL_SEMANTICS_QUERY_BEFORE")
+            val node = composeRule.onNodeWithContentDescription(label).fetchSemanticsNode()
+            val result = node.positionInWindow
+            if (observe) observer.record(if (observer.semanticsPhase == "PREVIEW")
+                "PREVIEW_QUERY_RESULT" else "FINAL_SEMANTICS_POSITION", mapOf(
+                    "semanticsNodeId" to node.id,
+                    "semanticsPositionInWindow" to observer.point(result),
+                    "semanticsBoundsInWindow" to observer.rect(node.boundsInWindow)))
+            return result
+        }
         fun frames(count: Int) { repeat(count) { composeRule.mainClock.advanceTimeByFrame() } }
         fun savedSnapshot() = runBlocking { checkNotNull(CanvasStore.get(instrumentation.targetContext).savedBoard(1L)).snapshot }
         fun select(label: String) {
@@ -111,6 +193,19 @@ class EdgeAutoPanTest {
                     // This gesture begins with a finger DOWN; keep its native stream source stable.
                     // The added pointer's toolType carries the stylus takeover to Compose.
                     InputDevice.SOURCE_TOUCHSCREEN, 0)
+                if (EdgeAutoPanDiagnosticObservation.enabled) {
+                    val eventName = when (action) {
+                        MotionEvent.ACTION_DOWN -> "DOWN_SENT"
+                        MotionEvent.ACTION_MOVE -> "MOVE_TO_EDGE_SENT"
+                        MotionEvent.ACTION_UP -> "UP_SENT"
+                        else -> "NATIVE_EVENT_SENT"
+                    }
+                    EdgeAutoPanDiagnosticObservation.record(eventName, mapOf(
+                        "windowPointer" to EdgeAutoPanDiagnosticObservation.point(point),
+                        "screenPointer" to mapOf("x" to coords[0].x, "y" to coords[0].y),
+                        "windowOriginOnScreen" to mapOf("x" to origin[0], "y" to origin[1]),
+                        "nativeAction" to action, "pointerId" to properties[0].id))
+                }
                 try {
                     if (activity == null) {
                         assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
@@ -128,6 +223,7 @@ class EdgeAutoPanTest {
                 frames(2)
                 gesture.send(MotionEvent.ACTION_MOVE, edge)
                 frames(12)
+                diagnosticCapture("01-edge-entered.png")
                 block(gesture)
             } finally {
                 if (!gesture.ended) gesture.send(MotionEvent.ACTION_CANCEL)
@@ -307,6 +403,8 @@ class EdgeAutoPanTest {
             lateinit var sessions: BoardSessionViewModel
             scenario.onActivity { sessions = ViewModelProvider(it)[BoardSessionViewModel::class.java] }
             val harness = Harness(scenario, sessions, database)
+            if (EdgeAutoPanDiagnosticObservation.enabled)
+                EdgeAutoPanDiagnosticObservation.saveCount = { harness.saves.get() }
             if (profile != null) {
                 scenario.onActivity { activity -> activity.setContent {
                     MaterialTheme {
@@ -472,7 +570,7 @@ class EdgeAutoPanTest {
         }
     }
 
-    @Test fun multiSelectionTranslatesTextShapeAndFreeArrowTogether() = withBoard(
+    @Test fun multiSelectionTranslatesTextShapeAndFreeArrowTogether() = observeExactlyOnce { withBoard(
         defaults.copy(shapes = listOf(rectangle), arrows = listOf(freeArrow))) {
         select(moving.text)
         action("四角: Movable", "選択に追加")
@@ -485,12 +583,21 @@ class EdgeAutoPanTest {
             frames(40)
             assertEquals(before, board.snapshot())
             assertEquals(0, saves.get())
+            EdgeAutoPanDiagnosticObservation.semanticsPhase = "PREVIEW"
             preview = position(moving.text)
+            EdgeAutoPanDiagnosticObservation.semanticsPhase = ""
+            diagnosticCapture("02-preview-observed.png")
             gesture.send(MotionEvent.ACTION_UP)
+            diagnosticCapture("03-up-immediate.png")
             frames(3)
+            diagnosticCapture("04-up-plus-3-frames.png")
         }
         waitSaved()
         val after = board.snapshot()
+        EdgeAutoPanDiagnosticObservation.record("SAVE_COMPLETED", mapOf(
+            "committedBoard" to EdgeAutoPanDiagnosticObservation.board(after, board.canUndo, board.canRedo)))
+        diagnosticCapture("05-save-complete.png")
+        EdgeAutoPanDiagnosticObservation.semanticsPhase = "FINAL"
         val noteAfter = after.texts.single { it.id == moving.id }
         val dx = noteAfter.x - moving.x
         val dy = noteAfter.y - moving.y
@@ -507,7 +614,7 @@ class EdgeAutoPanTest {
         assertEquals(preview.x, position(moving.text).x, 2f)
         assertEquals(preview.y, position(moving.text).y, 2f)
         assertOneHistory(before, after)
-    }
+    } }
 
     @Test fun regionMoveKeepsInitialNestedContentsInkAndAttachedArrowRules() {
         val region = ShapeElement(id = "edge-region", kind = ShapeKind.REGION,
