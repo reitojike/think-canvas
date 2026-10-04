@@ -9,11 +9,15 @@ import java.io.IOException
 import java.util.UUID
 
 /** A task reference, never a payload inbox. All methods run outside the UI thread. */
-class ShareImportCheckpoint(private val directory: File, val token: String) {
+class ShareImportCheckpoint internal constructor(
+    private val directory: File, val token: String, private val file: AtomicFile,
+) {
+    constructor(directory: File, token: String) : this(directory, token, AtomicFile(File(directory, "$token.pending")))
     init { UUID.fromString(token) }
-    private val file = AtomicFile(File(directory, "$token.pending"))
 
-    fun read(): ShareImportRequest? = DataInputStream(file.openRead()).use { input ->
+    fun read(): ShareImportRequest? = synchronized(ioLock) { readRecord() }
+
+    private fun readRecord(): ShareImportRequest? = DataInputStream(file.openRead()).use { input ->
         check(input.readInt() == 1)
         if (!input.readBoolean()) return@use null
         val requestId = input.readUTF()
@@ -27,7 +31,7 @@ class ShareImportCheckpoint(private val directory: File, val token: String) {
         ShareImportRequest(requestId, elementId, text, destination, position)
     }
 
-    fun write(request: ShareImportRequest?) {
+    fun write(request: ShareImportRequest?): Unit = synchronized(ioLock) {
         val textBytes = request?.text?.toByteArray(Charsets.UTF_8)
         if (request != null && textBytes?.toString(Charsets.UTF_8) != request.text)
             throw IOException("共有本文をUTF-8で保持できません")
@@ -55,16 +59,19 @@ class ShareImportCheckpoint(private val directory: File, val token: String) {
             file.failWrite(stream)
             throw error
         }
-        if (read() != request)
+        if (readRecord() != request)
             throw IOException("共有状態を保存内容へ反映できません")
     }
 
     companion object {
+        // AtomicFile has no locking; all owners and task cleanup share this IO boundary.
+        private val ioLock = Any()
+
         fun validToken(value: String?): String? = value?.takeIf {
             runCatching { UUID.fromString(it).toString() == it }.getOrDefault(false)
         }
 
-        fun discardOtherTasks(directory: File, currentToken: String) {
+        fun discardOtherTasks(directory: File, currentToken: String): Unit = synchronized(ioLock) {
             // Only app-owned records in this fixed private directory, never board assets.
             directory.listFiles()?.filter { it.isFile && !it.name.startsWith("$currentToken.") }
                 ?.forEach { it.delete() }

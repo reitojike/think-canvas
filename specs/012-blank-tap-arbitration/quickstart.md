@@ -185,3 +185,11 @@ editor / lifecycle / tool / save / external block の失効、成立済み #71 �
 final candidate 固定後に unit/lint/debug/androidTest build と full Pixel9/API37 GMD を行う。
 source testcase 集合と fresh XML の class#method 全件、device、counter、head / source 不変を照合する。
 current-head canonical review と unresolved thread 0 の証跡がない間は MERGE_READY としない。
+
+## shared checkpoint follow-up 完了と final-head 更新
+
+8e50adc の required CI は191/1/0/0で、共有 empty-create preview timeout / AtomicFile rename failure を観測した。read-only checkpoint は別の保存責務として FOLLOW_UP とし、利用者の許可により PR #98 へ分離した。共有 IO の排他と操作 readiness 補正が main be735496 に merge された。PR #98 の required CI は fresh source/XML exact185/0/0/0、current-head canonical review は指摘なし、最新base/未解決thread0を確認済み。
+
+PR #98 local full185/1/0/0の唯一の失敗は旧 nearbyOutsideTapIsConsumedBeforeBlankDoubleTapZoom の入力 interval precondition。これは今回の依頼で明示された旧 first-tap/editor 契約の再評価対象で、この PR の native shifted pair 回帰へ置換済み。共有PRへgesture補正は広げず、独立して実行中だった同一headのrequired CI185件成功を確認した。blind rerun は行わない。
+
+main更新の有限 surface は共有 checkpoint の5ファイル、Canvas の既存 external/save readiness、blank pending、置換済み shifted native 回帰、source/XML census。競合なしで共有側の authority を取り込み、blank arbitration の製品処理は8e50adcから変更しない。判定は BOUNDED_CORRECTION。追加1roundはbase更新と証跡更新のみ。旧headの成功を新候補へ流用せず、固定final headでunit163、Pixel9/API37全193件、current-head CI/canonical/fresh base/unresolved thread0を確認する。新しいmaterial findingはHOLD/checkpoint。
