@@ -44,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
@@ -172,6 +173,8 @@ fun CanvasScreen(
     onShareSelection: (Set<String>) -> Unit,
     edgeAutoPanProfile: EdgeAutoPanProfile = EdgeAutoPanProfile.Default,
     viewportHistory: ViewportHistory? = null,
+    externalInteractionBlocked: () -> Boolean = { false },
+    onImportReadiness: ((Boolean, () -> Boolean) -> Unit)? = null,
 ) {
     val navigation = viewportHistory ?: remember(board) { ViewportHistory() }
     var viewport by navigation.viewportState
@@ -199,9 +202,13 @@ fun CanvasScreen(
     var moveOwner by remember { mutableStateOf<MoveDragSession?>(null) }
     var handlePreview by remember { mutableStateOf<BoardSnapshot?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    var manualGestureActive by remember { mutableStateOf(false) }
+    var viewportAnimating by remember { mutableStateOf(false) }
     var pendingDraftAcknowledgement by editorSession.pendingDraftAcknowledgement
     val currentSaveState by saveState.collectAsState()
-    val saving = currentSaveState is BoardSaveState.Running
+    val latestExternalBlock = rememberUpdatedState(externalInteractionBlocked)
+    fun saveBlocked(): Boolean = saveState.value != BoardSaveState.Idle || latestExternalBlock.value()
+    val saving = currentSaveState is BoardSaveState.Running || latestExternalBlock.value()
     val saveFailed = currentSaveState is BoardSaveState.Failed
     var pendingNewElementId by editorSession.pendingNewElementId
     var searchOpen by remember { mutableStateOf(false) }
@@ -301,6 +308,7 @@ fun CanvasScreen(
     }
     val latestRegionLabelSizes = rememberUpdatedState(measuredRegionLabelSizes)
     fun stopViewportAnimation(record: Boolean = true) {
+        viewportAnimating = false
         animationBoundary.job?.cancel()
         animationBoundary.generation++
         val origin = animationBoundary.origin
@@ -372,13 +380,26 @@ fun CanvasScreen(
     val latestInkTool = rememberUpdatedState(inkTool)
     val latestDraft = rememberUpdatedState(draft)
 
-    fun indicatorsAllowed(): Boolean = saveState.value == BoardSaveState.Idle &&
+
+    fun baseNavigationAllowed(): Boolean = saveState.value == BoardSaveState.Idle &&
         editorSession.pendingDraftAcknowledgement.value == null &&
         editorSession.draft.value == null && editorSession.regionNameDraft.value == null &&
         discardTarget == null && menuTarget == null && attachmentEditor == null &&
         tool == SpatialTool.NONE && inkTool == null && !toolsExpanded && moveOwner == null && movePreview == null &&
         handlePreview == null && spatialPreview == null && lassoPoints.isEmpty() &&
         gapPreview == null && inkPreview == null && imeInsets.getBottom(density) == 0
+
+    fun indicatorsAllowed(): Boolean = !latestExternalBlock.value() && baseNavigationAllowed()
+    fun importReady(): Boolean = baseNavigationAllowed() && !searchOpen && !manualGestureActive &&
+        !viewportAnimating && navigation.focus() != null
+    if (onImportReadiness != null) {
+        val latestReadiness = rememberUpdatedState(onImportReadiness)
+        val readyForImport = importReady()
+        SideEffect { onImportReadiness(readyForImport, ::importReady) }
+        DisposableEffect(Unit) {
+            onDispose { latestReadiness.value(false) { false } }
+        }
+    }
 
     val indicatorNames = remember(snapshot.texts, snapshot.shapes, snapshot.ink, snapshot.arrows) {
         buildMap {
@@ -440,7 +461,7 @@ fun CanvasScreen(
         pending.generation == gestureGeneration &&
         lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
         editorSession.draft.value == null && editorSession.regionNameDraft.value == pending.regionDraft &&
-        editorSession.pendingDraftAcknowledgement.value == null && saveState.value == BoardSaveState.Idle &&
+        editorSession.pendingDraftAcknowledgement.value == null && !saveBlocked() &&
         tool == SpatialTool.NONE && inkTool == null && discardTarget == null &&
         menuTarget == null && attachmentEditor == null && moveOwner == null &&
         board.snapshot() == pending.content && selectedId == pending.selectedId &&
@@ -466,7 +487,7 @@ fun CanvasScreen(
             // Observe authority changes independently of the confirmation job's final check.
             listOf(draft, regionDraft, pendingDraftAcknowledgement, currentSaveState, tool, inkTool,
                 discardTarget, menuTarget, attachmentEditor, moveOwner, gestureGeneration,
-                board.snapshot(), selectedId, selectedIds, searchOpen)
+                board.snapshot(), selectedId, selectedIds, searchOpen, latestExternalBlock.value())
         }.collect {
             blankTapBoundary.pending?.let { if (!blankTapIsLive(it)) cancelBlankTap() }
         }
@@ -498,7 +519,7 @@ fun CanvasScreen(
         discardTarget = null
     }
 
-    fun exitBlocked(): Boolean = saveState.value != BoardSaveState.Idle ||
+    fun exitBlocked(): Boolean = saveBlocked() ||
         editorSession.pendingDraftAcknowledgement.value != null
 
     fun requestEditorExit(target: String, changed: Boolean, close: () -> Unit) {
@@ -628,22 +649,27 @@ fun CanvasScreen(
         animationBoundary.origin = if (record) navigation.focus() else null
         animationBoundary.group = group
         val generation = animationBoundary.generation
+        viewportAnimating = true
         animationBoundary.job = uiScope.launch {
-            animate(0f, 1f, animationSpec = tween(340)) { fraction, _ ->
-                viewport = Viewport(
-                    (origin.scale + (target.scale - origin.scale) * fraction).coerceIn(.15f, 3f),
-                    origin.panX + (target.panX - origin.panX) * fraction,
-                    origin.panY + (target.panY - origin.panY) * fraction,
-                )
-            }
-            if (generation == animationBoundary.generation) {
-                // Float interpolation can round below the legal minimum on its final frame.
-                // A completed navigation must restore the exact target before history observes it.
-                viewport = target
-                val historyOrigin = animationBoundary.origin
-                animationBoundary.origin = null
-                navigation.record(historyOrigin, animationBoundary.group)
-                animationBoundary.group = null
+            try {
+                animate(0f, 1f, animationSpec = tween(340)) { fraction, _ ->
+                    viewport = Viewport(
+                        (origin.scale + (target.scale - origin.scale) * fraction).coerceIn(.15f, 3f),
+                        origin.panX + (target.panX - origin.panX) * fraction,
+                        origin.panY + (target.panY - origin.panY) * fraction,
+                    )
+                }
+                if (generation == animationBoundary.generation) {
+                    // Float interpolation can round below the legal minimum on its final frame.
+                    // A completed navigation must restore the exact target before history observes it.
+                    viewport = target
+                    val historyOrigin = animationBoundary.origin
+                    animationBoundary.origin = null
+                    navigation.record(historyOrigin, animationBoundary.group)
+                    animationBoundary.group = null
+                }
+            } finally {
+                if (generation == animationBoundary.generation) viewportAnimating = false
             }
         }
     }
@@ -670,7 +696,7 @@ fun CanvasScreen(
     }
 
     fun focusMatch(index: Int, group: Any? = null) {
-        if (searchMatches.isEmpty()) return
+        if (saveBlocked() || searchMatches.isEmpty()) return
         searchPosition = searchIndex(index, 0, searchMatches.size)
         focusTarget(searchMatches[searchPosition], group)
     }
@@ -963,7 +989,7 @@ fun CanvasScreen(
     }
 
     fun nudge(id: String, dx: Float, dy: Float): Boolean {
-        if (saving || saveFailed) return false
+        if (saveBlocked()) return false
         if (board.elements.none { it.id == id }) return false
         val ids = if (id in selectedIds) selectedIds else setOf(id)
         if (!board.moveSelection(ids, dx, dy)) return false
@@ -972,6 +998,7 @@ fun CanvasScreen(
     }
 
     fun removeSelection(id: String): Boolean {
+        if (saveBlocked()) return false
         if (id !in selectedIds) return false
         selectedIds = selectedIds - id
         if (selectedId == id) selectedId = null
@@ -980,6 +1007,7 @@ fun CanvasScreen(
     }
 
     fun commitDraft() {
+        if (latestExternalBlock.value()) return
         if (pendingDraftAcknowledgement != null) {
             if (saveFailed) onRetrySave()
             return
@@ -1002,7 +1030,7 @@ fun CanvasScreen(
     }
 
     fun finalizeDraft() {
-        if (saveState.value != BoardSaveState.Idle || pendingDraftAcknowledgement != null) return
+        if (saveBlocked() || pendingDraftAcknowledgement != null) return
         val current = draft ?: return
         if (current.id == null && current.text.isEmpty()) cancelDraft()
         else commitDraft()
@@ -1056,7 +1084,8 @@ fun CanvasScreen(
         }
     }
 
-    val inputAllowed = currentSaveState == BoardSaveState.Idle && pendingDraftAcknowledgement == null
+    val inputAllowed = currentSaveState == BoardSaveState.Idle && pendingDraftAcknowledgement == null &&
+        !latestExternalBlock.value()
     LaunchedEffect(draft?.sessionId, draft?.id, draft?.x, draft?.y, discardTarget, inputAllowed) {
         val current = draft
         if (current != null && discardTarget == null) {
@@ -1140,13 +1169,13 @@ fun CanvasScreen(
                 contentDescription = "キャンバス"
                 customActions = listOf(
                     CustomAccessibilityAction("中央から右に余白を作る") {
-                        if (saving || saveFailed || canvasSize == IntSize.Zero) false else {
+                        if (saveBlocked() || canvasSize == IntSize.Zero) false else {
                             val (x, y) = viewport.screenToWorld(canvasSize.width / 2f, canvasSize.height / 2f)
                             board.insertGap(WorldPoint(x, y), true, 40f).also { if (it) saveSnapshot() }
                         }
                     },
                     CustomAccessibilityAction("中央から下に余白を作る") {
-                        if (saving || saveFailed || canvasSize == IntSize.Zero) false else {
+                        if (saveBlocked() || canvasSize == IntSize.Zero) false else {
                             val (x, y) = viewport.screenToWorld(canvasSize.width / 2f, canvasSize.height / 2f)
                             board.insertGap(WorldPoint(x, y), false, 40f).also { if (it) saveSnapshot() }
                         }
@@ -1200,6 +1229,8 @@ fun CanvasScreen(
                 var gestureMove: MoveDragSession? = null
                 try {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                manualGestureActive = true
+                if (latestExternalBlock.value()) return@awaitEachGesture
                 val admittedGeneration = gestureGeneration
                 if (admittedGeneration != pointerGeneration) {
                     down.consume()
@@ -1616,6 +1647,7 @@ fun CanvasScreen(
                     if (mode != "tap") event.changes.forEach { it.consume() }
                 }
                 } finally {
+                    manualGestureActive = false
                     if (moveOwner === gestureMove) moveOwner = null
                     clearInteractionPreviews()
                 }
@@ -1663,14 +1695,14 @@ fun CanvasScreen(
         val displayBoundaryShapes = displaySnapshot.shapes.filter { displayProjection.visible(it.id) }
         InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.MARKER,
             viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
-            onSelect = { id -> selectedIds = setOf(id); selectedId = null },
+            onSelect = { id -> if (!saveBlocked()) { selectedIds = setOf(id); selectedId = null } },
             onMove = { id, dx, dy ->
-                if (saving || saveFailed) false else board.moveSelection(
+                if (saveBlocked()) false else board.moveSelection(
                     if (id in selectedIds) selectedIds else setOf(id), dx, dy,
                 ).also { if (it) saveSnapshot() }
             },
             onDelete = { id ->
-                if (saving || saveFailed) false else board.delete(setOf(id)).also {
+                if (saveBlocked()) false else board.delete(setOf(id)).also {
                     if (it) { selectedIds = emptySet(); selectedId = null; saveSnapshot() }
                 }
             })
@@ -1678,7 +1710,7 @@ fun CanvasScreen(
             gapPreview, ghostIds, displayProjection, matchIds, currentMatch?.id,
             searchOpen && searchQuery.isNotBlank(), canvasSize.width,
             onHandle = { id, kind ->
-            if (saving || saveFailed) false else {
+            if (saveBlocked()) false else {
                 val changed = when (kind) {
                     HandleKind.MOVE -> board.moveSelection(setOf(id), 16f, 0f)
                     HandleKind.RESIZE -> board.shapes.firstOrNull { it.id == id }?.let {
@@ -1701,20 +1733,22 @@ fun CanvasScreen(
             }
             },
             onConnect = { id, kind ->
-                if (saving || saveFailed || board.arrows.none { it.id == id }) false else {
+                if (saveBlocked() || board.arrows.none { it.id == id }) false else {
                     attachmentEditor = id to kind
                     true
                 }
             },
             onSelect = { id ->
-                val region = board.shapes.firstOrNull { it.id == id && it.kind == ShapeKind.REGION }
-                if (region != null && projection.farLikeRegion(id) && canvasSize != IntSize.Zero)
-                    animateViewport(viewport.fitRegion(region,
-                        canvasSize.width.toFloat(), canvasSize.height.toFloat(), density.density))
-                else { selectedIds = setOf(id); selectedId = null }
+                if (!saveBlocked()) {
+                    val region = board.shapes.firstOrNull { it.id == id && it.kind == ShapeKind.REGION }
+                    if (region != null && projection.farLikeRegion(id) && canvasSize != IntSize.Zero)
+                        animateViewport(viewport.fitRegion(region,
+                            canvasSize.width.toFloat(), canvasSize.height.toFloat(), density.density))
+                    else { selectedIds = setOf(id); selectedId = null }
+                }
             },
             onAdd = { id ->
-                if (id in selectedIds) false else {
+                if (saveBlocked() || id in selectedIds) false else {
                     selectedIds = selectedIds + id
                     guidance = "${selectedIds.size}個を選択"
                     true
@@ -1723,30 +1757,30 @@ fun CanvasScreen(
             onRemove = { id -> removeSelection(id) },
             onRename = { id ->
                 val shape = board.shapes.firstOrNull { it.id == id && it.kind == ShapeKind.REGION }
-                if (shape == null || saving || saveFailed) false else {
+                if (shape == null || saveBlocked()) false else {
                     openRegionName(id, shape.name)
                     true
                 }
             },
             onColor = { id ->
                 val shape = board.shapes.firstOrNull { it.id == id && it.kind != ShapeKind.REGION }
-                if (shape == null || saving || saveFailed) false else
+                if (shape == null || saveBlocked()) false else
                     board.updateShape(id, color = if (shape.color == TextColor.INK)
                         TextColor.VERMILION else TextColor.INK).also { if (it) saveSnapshot() }
             },
             onMove = { id, dx, dy ->
                 val ids = if (id in selectedIds) selectedIds else setOf(id)
-                if (saving || saveFailed) false else board.moveSelection(ids, dx, dy).also {
+                if (saveBlocked()) false else board.moveSelection(ids, dx, dy).also {
                     if (it) saveSnapshot()
                 }
             },
             onDelete = { id ->
-                if (saving || saveFailed) false else board.delete(setOf(id)).also {
+                if (saveBlocked()) false else board.delete(setOf(id)).also {
                     if (it) { selectedIds = emptySet(); selectedId = null; saveSnapshot() }
                 }
             },
             onReverse = { id ->
-                if (saving || saveFailed) false else board.updateArrow(id, reverse = true).also {
+                if (saveBlocked()) false else board.updateArrow(id, reverse = true).also {
                     if (it) saveSnapshot()
                 }
             },
@@ -1757,7 +1791,7 @@ fun CanvasScreen(
                 ArrowAttachmentDialog(board.snapshot(), projection, arrow, endKind,
                     onDismiss = { attachmentEditor = null },
                     onAttach = { end ->
-                        if (saving || saveFailed || !projection.visible(end.targetId)) false else {
+                        if (saveBlocked() || !projection.visible(end.targetId)) false else {
                             val current = if (endKind == HandleKind.FROM) arrow.from else arrow.to
                             if (current == end) return@ArrowAttachmentDialog true
                             val changed = if (endKind == HandleKind.FROM)
@@ -1783,7 +1817,7 @@ fun CanvasScreen(
                     ?.let { with(density) { it.toDp() } }
                 val (screenX, screenY) = viewport.worldToScreen(element.x, element.y)
                 val selected = element.id in selectedIds || element.id in movingIds
-                val elementActionsEnabled = !saving && !saveFailed
+                val elementActionsEnabled = !saveBlocked()
                 val baseSize = if (title) 15.sp else 14.sp
                 val minimumDp = when (tier) {
                     SemanticTier.NEAR -> if (title) 11f else 10f
@@ -1837,9 +1871,11 @@ fun CanvasScreen(
                                     if (element.id in selectedIds)
                                         CustomAccessibilityAction("選択から外す") { removeSelection(element.id) }
                                     else CustomAccessibilityAction("選択に追加") {
-                                        selectedIds = selectedIds + element.id
-                                        guidance = "${selectedIds.size}個を選択"
-                                        true
+                                        if (saveBlocked()) false else {
+                                            selectedIds = selectedIds + element.id
+                                            guidance = "${selectedIds.size}個を選択"
+                                            true
+                                        }
                                     },
                                     CustomAccessibilityAction(moveUpLabel) { nudge(element.id, 0f, -16f) },
                                     CustomAccessibilityAction(moveDownLabel) { nudge(element.id, 0f, 16f) },
@@ -1878,8 +1914,8 @@ fun CanvasScreen(
             val (screenX, screenY) = viewport.worldToScreen(current.x, current.y)
             BasicTextField(
                 value = current.text,
-                onValueChange = { draft = current.copy(text = it) },
-                readOnly = saving || saveFailed,
+                onValueChange = { if (!latestExternalBlock.value()) draft = current.copy(text = it) },
+                readOnly = saveBlocked(),
                 textStyle = TextStyle(
                     color = if (current.color == TextColor.INK) ink else vermilion,
                     fontSize = if (current.kind == TextKind.TITLE) 15.sp else 14.sp,
@@ -1912,14 +1948,14 @@ fun CanvasScreen(
 
         InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.PEN,
             viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
-            onSelect = { id -> selectedIds = setOf(id); selectedId = null },
+            onSelect = { id -> if (!saveBlocked()) { selectedIds = setOf(id); selectedId = null } },
             onMove = { id, dx, dy ->
-                if (saving || saveFailed) false else board.moveSelection(
+                if (saveBlocked()) false else board.moveSelection(
                     if (id in selectedIds) selectedIds else setOf(id), dx, dy,
                 ).also { if (it) saveSnapshot() }
             },
             onDelete = { id ->
-                if (saving || saveFailed) false else board.delete(setOf(id)).also {
+                if (saveBlocked()) false else board.delete(setOf(id)).also {
                     if (it) { selectedIds = emptySet(); selectedId = null; saveSnapshot() }
                 }
             })
@@ -1962,8 +1998,10 @@ fun CanvasScreen(
                     .onGloballyPositioned { chromeBounds["search"] = it.boundsInParent() },
                     verticalAlignment = Alignment.CenterVertically) {
                     BasicTextField(searchQuery, onValueChange = {
-                        searchQuery = it
-                        searchPosition = 0
+                        if (!latestExternalBlock.value()) {
+                            searchQuery = it
+                            searchPosition = 0
+                        }
                     }, singleLine = true,
                         textStyle = TextStyle(color = ink, fontSize = 15.sp),
                         cursorBrush = SolidColor(vermilion),
@@ -2006,7 +2044,7 @@ fun CanvasScreen(
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = 8.dp)
                     .height(44.dp).background(Color.White, RoundedCornerShape(24.dp))
                     .pillBorder(24f).padding(horizontal = 14.dp)
-                    .clickable(enabled = !saving && !saveFailed && draft == null && regionNameId == null) {
+                    .clickable(enabled = !saveBlocked() && draft == null && regionNameId == null) {
                         onOpenList()
                     }
                     .semantics { contentDescription = "ボード一覧を開く" }
@@ -2015,9 +2053,11 @@ fun CanvasScreen(
             ) { Text("‹ $boardName", color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
 
             if (inkTool == null) IconButton(onClick = {
-                finishToolInteraction()
-                searchOpen = true; searchQuery = ""; searchPosition = 0
-                selectedId = null; selectedIds = emptySet()
+                if (!saveBlocked()) {
+                    finishToolInteraction()
+                    searchOpen = true; searchQuery = ""; searchPosition = 0
+                    selectedId = null; selectedIds = emptySet()
+                }
             }, modifier = Modifier.align(Alignment.TopEnd).padding(end = 14.dp, top = 8.dp)
                 .size(44.dp).background(Color.White, CircleShape).pillBorder(22f)
                 .onGloballyPositioned { chromeBounds["searchButton"] = it.boundsInParent() }
@@ -2032,11 +2072,11 @@ fun CanvasScreen(
                     .padding(horizontal = 4.dp)
                     .onGloballyPositioned { chromeBounds["ink"] = it.boundsInParent() },
                     verticalAlignment = Alignment.CenterVertically) {
-                    EditorOption("ペン", inkTool == InkKind.PEN, false, !saving && !saveFailed) {
-                        inkTool = InkKind.PEN
+                    EditorOption("ペン", inkTool == InkKind.PEN, false, !saveBlocked()) {
+                        if (!saveBlocked()) inkTool = InkKind.PEN
                     }
-                    EditorOption("マーカー", inkTool == InkKind.MARKER, true, !saving && !saveFailed) {
-                        inkTool = InkKind.MARKER
+                    EditorOption("マーカー", inkTool == InkKind.MARKER, true, !saveBlocked()) {
+                        if (!saveBlocked()) inkTool = InkKind.MARKER
                     }
                     EditorOption("やめる", false, false, true) { finishToolInteraction() }
                 }
@@ -2050,15 +2090,15 @@ fun CanvasScreen(
             ) {
                 IconButton(
                     onClick = { editHistory(redo = false) },
-                    enabled = board.canUndo && !saving && !saveFailed,
+                    enabled = board.canUndo && !saveBlocked(),
                     modifier = Modifier.size(48.dp).semantics { contentDescription = undoLabel },
-                ) { Text("↶", color = if (board.canUndo && !saving && !saveFailed) ink else muted.copy(alpha = 0.4f), fontSize = 25.sp) }
+                ) { Text("↶", color = if (board.canUndo && !saveBlocked()) ink else muted.copy(alpha = 0.4f), fontSize = 25.sp) }
                 Box(Modifier.width(1.dp).height(20.dp).background(outline))
                 IconButton(
                     onClick = { editHistory(redo = true) },
-                    enabled = board.canRedo && !saving && !saveFailed,
+                    enabled = board.canRedo && !saveBlocked(),
                     modifier = Modifier.size(48.dp).semantics { contentDescription = redoLabel },
-                ) { Text("↷", color = if (board.canRedo && !saving && !saveFailed) ink else muted.copy(alpha = 0.4f), fontSize = 25.sp) }
+                ) { Text("↷", color = if (board.canRedo && !saveBlocked()) ink else muted.copy(alpha = 0.4f), fontSize = 25.sp) }
             }
             if (viewControlsVisible) {
                 DisposableEffect(navigation) {
@@ -2088,8 +2128,8 @@ fun CanvasScreen(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 22.dp)
                     .background(Color.White, RoundedCornerShape(16.dp)).pillBorder(16f)
                     .heightIn(min = 44.dp).padding(horizontal = 10.dp, vertical = 5.dp)
-                    .clickable {
-                        if (canvasSize != IntSize.Zero) animateViewport(viewport.cycleZoom(bodyDp,
+                    .clickable(enabled = !saveBlocked()) {
+                        if (!saveBlocked() && canvasSize != IntSize.Zero) animateViewport(viewport.cycleZoom(bodyDp,
                             canvasSize.width.toFloat(), canvasSize.height.toFloat()))
                     }
                     .semantics { contentDescription = "倍率を切り替える、$zoomText" }
@@ -2106,17 +2146,21 @@ fun CanvasScreen(
                 DisposableEffect(Unit) {
                     onDispose { chromeBounds.remove("tools") }
                 }
-                SpatialTools(tool, toolsExpanded, !saving && !saveFailed,
+                SpatialTools(tool, toolsExpanded, !saveBlocked(),
                     onExpand = {
-                        if (tool == SpatialTool.NONE) toolsExpanded = !toolsExpanded
-                        else finishToolInteraction()
+                        if (!saveBlocked()) {
+                            if (tool == SpatialTool.NONE) toolsExpanded = !toolsExpanded
+                            else finishToolInteraction()
+                        }
                     }, onSelect = {
-                        finishToolInteraction()
-                        tool = it
-                        guidance = "${it.label}を配置"
+                        if (!saveBlocked()) {
+                            finishToolInteraction()
+                            tool = it
+                            guidance = "${it.label}を配置"
+                        }
                     },
                     onAccessibleAction = { item ->
-                        if (saving || saveFailed || canvasSize == IntSize.Zero) false else {
+                        if (saveBlocked() || canvasSize == IntSize.Zero) false else {
                             val (x, y) = viewport.screenToWorld(
                                 canvasSize.width / 2f, canvasSize.height / 2f)
                             val created = when (item) {
@@ -2164,10 +2208,12 @@ fun CanvasScreen(
                             created
                         }
                     }, onInkSelect = { kind ->
-                        finishToolInteraction()
-                        inkTool = kind
-                        selectedIds = emptySet()
-                        selectedId = null
+                        if (!saveBlocked()) {
+                            finishToolInteraction()
+                            inkTool = kind
+                            selectedIds = emptySet()
+                            selectedId = null
+                        }
                     })
             }
 
@@ -2193,7 +2239,7 @@ fun CanvasScreen(
                     DisposableEffect(Unit) {
                         onDispose { chromeBounds.remove("shareSelection") }
                     }
-                    val enabled = !saving && !saveFailed
+                    val enabled = !saveBlocked()
                     Button(onClick = { onShareSelection(selectedIds.toSet()) }, enabled = enabled,
                         modifier = Modifier.height(48.dp).semantics {
                             contentDescription = "選択範囲を画像で共有"
@@ -2221,14 +2267,16 @@ fun CanvasScreen(
                     .pillBorder(10f).padding(6.dp)
                     .onGloballyPositioned { chromeBounds["menu"] = it.boundsInParent() }) {
                     if (board.arrows.any { it.id == id }) {
-                        EditorOption(stringResource(R.string.menu_reverse), false, false, enabled = !saving && !saveFailed) {
+                        EditorOption(stringResource(R.string.menu_reverse), false, false, enabled = !saveBlocked()) {
+                            if (saveBlocked()) return@EditorOption
                             if (board.updateArrow(id, reverse = true)) saveSnapshot()
                             menuTarget = null
                         }
                     } else if (board.shapes.any { it.id == id }) {
                         if (board.shapes.any { it.id == id && it.kind != ShapeKind.REGION }) {
                             EditorOption(stringResource(R.string.menu_color), false, true,
-                                enabled = !saving && !saveFailed) {
+                                enabled = !saveBlocked()) {
+                                if (saveBlocked()) return@EditorOption
                                 val shape = board.shapes.first { it.id == id }
                                 if (board.updateShape(id, color = if (shape.color == TextColor.INK)
                                     TextColor.VERMILION else TextColor.INK)) saveSnapshot()
@@ -2236,19 +2284,22 @@ fun CanvasScreen(
                             }
                         }
                         if (board.shapes.any { it.id == id && it.kind == ShapeKind.REGION }) {
-                            EditorOption(stringResource(R.string.menu_name), false, false, enabled = !saving && !saveFailed) {
+                            EditorOption(stringResource(R.string.menu_name), false, false, enabled = !saveBlocked()) {
+                                if (saveBlocked()) return@EditorOption
                                 openRegionName(id, board.shapes.first { it.id == id }.name)
                                 menuTarget = null
                             }
                         }
                     } else if (board.elements.any { it.id == id }) {
-                        EditorOption(stringResource(R.string.edit), false, false, enabled = !saving && !saveFailed) {
+                        EditorOption(stringResource(R.string.edit), false, false, enabled = !saveBlocked()) {
+                            if (saveBlocked()) return@EditorOption
                             val element = board.elements.first { it.id == id }
                             draft = Draft(id, element.x, element.y, element.text, element.kind, element.color)
                             menuTarget = null
                         }
                     }
-                    EditorOption(stringResource(R.string.menu_delete), false, true, enabled = !saving && !saveFailed) {
+                    EditorOption(stringResource(R.string.menu_delete), false, true, enabled = !saveBlocked()) {
+                        if (saveBlocked()) return@EditorOption
                         if (board.delete(if (id in selectedIds) selectedIds else setOf(id))) saveSnapshot()
                         selectedIds = emptySet(); selectedId = null; menuTarget = null
                     }
@@ -2263,8 +2314,10 @@ fun CanvasScreen(
                         chromeBounds["regionName"] = it.boundsInParent()
                     }, verticalAlignment = Alignment.CenterVertically) {
                     BasicTextField(regionName, onValueChange = {
-                        cancelBlankTap()
-                        regionDraft = regionDraft?.copy(name = it)
+                        if (!latestExternalBlock.value()) {
+                            cancelBlankTap()
+                            regionDraft = regionDraft?.copy(name = it)
+                        }
                     },
                         singleLine = true, modifier = Modifier.width(140.dp).padding(8.dp)
                             .focusRequester(regionNameFocusRequester)
@@ -2275,7 +2328,8 @@ fun CanvasScreen(
                                 inner()
                             }
                         })
-                    EditorOption(stringResource(R.string.done), false, true, enabled = !saving && !saveFailed) {
+                    EditorOption(stringResource(R.string.done), false, true, enabled = !saveBlocked()) {
+                        if (saveBlocked()) return@EditorOption
                         if (board.updateShape(editingRegionId, name = regionName)) saveSnapshot()
                         closeRegionName()
                     }
@@ -2291,15 +2345,15 @@ fun CanvasScreen(
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(3.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val editingEnabled = !saving && !saveFailed
+                val editingEnabled = !saveBlocked()
                 EditorOption(stringResource(R.string.title_kind), draft!!.kind == TextKind.TITLE, false, enabled = editingEnabled) {
-                    if (!saving && !saveFailed) draft = draft?.copy(kind = TextKind.TITLE)
+                    if (!saveBlocked()) draft = draft?.copy(kind = TextKind.TITLE)
                 }
                 EditorOption(stringResource(R.string.body_kind), draft!!.kind == TextKind.BODY, false, enabled = editingEnabled) {
-                    if (!saving && !saveFailed) draft = draft?.copy(kind = TextKind.BODY)
+                    if (!saveBlocked()) draft = draft?.copy(kind = TextKind.BODY)
                 }
                 EditorOption(stringResource(R.string.vermilion_short), draft!!.color == TextColor.VERMILION, true, enabled = editingEnabled) {
-                    if (!saving && !saveFailed) draft = draft?.copy(
+                    if (!saveBlocked()) draft = draft?.copy(
                         color = if (draft?.color == TextColor.VERMILION) TextColor.INK else TextColor.VERMILION,
                     )
                 }
@@ -2333,7 +2387,7 @@ fun CanvasScreen(
                 },
             )
         }
-        if (saving || saveFailed) {
+        if (currentSaveState is BoardSaveState.Running || saveFailed) {
             val saveFailedLabel = stringResource(R.string.save_failed)
             Box(
                 modifier = Modifier.align(Alignment.TopEnd)

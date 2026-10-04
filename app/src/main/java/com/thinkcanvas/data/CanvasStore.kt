@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import com.thinkcanvas.board.duplicated
 import com.thinkcanvas.canvas.ArrowEnd
 import com.thinkcanvas.canvas.BoardSnapshot
+import com.thinkcanvas.share.executeShareOperation
+import com.thinkcanvas.share.ShareImportCheckpoint
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -61,6 +63,17 @@ class CanvasStore private constructor(context: Context) {
 
     suspend fun boards(): List<BoardRow> = submit { dao.boards() }.await()
 
+    /** Sharing must not trigger the normal launcher's first-board creation. */
+    suspend fun lastOpenedBoard(): StoredBoard? = submit {
+        dao.board(preferences.getLong("lastOpenedBoardId", -1))?.let { read(it) }
+    }.await()
+
+    suspend fun shareReceipt(requestId: String): ShareImportReceiptRow? =
+        submit { dao.shareReceipt(requestId) }.await()
+
+    /** Auxiliary task cleanup uses the existing IO actor and never alters board content. */
+    fun clearShareCheckpoint(record: ShareImportCheckpoint): Deferred<Unit> = submit { record.write(null) }
+
     suspend fun boardsWithContent(): List<StoredBoard> = submit {
         dao.boards().map { read(it) }
     }.await()
@@ -113,10 +126,7 @@ class CanvasStore private constructor(context: Context) {
     }.await()
 
     fun save(boardId: Long, snapshot: BoardSnapshot): Deferred<Unit> {
-        val targets = (snapshot.texts.map { it.id } + snapshot.shapes.map { it.id }).toSet()
-        require(snapshot.arrows.all { arrow ->
-            listOf(arrow.from, arrow.to).all { it !is ArrowEnd.Attached || it.targetId in targets }
-        }) { "矢印の接続先が見つかりません" }
+        validateSnapshot(snapshot)
         return submit {
             dao.replaceAll(boardId,
                 snapshot.texts.map { TextElementRow.fromModel(boardId, it) },
@@ -124,6 +134,29 @@ class CanvasStore private constructor(context: Context) {
                 snapshot.arrows.map { ArrowElementRow.fromModel(boardId, it) },
                 snapshot.ink.flatMap { InkStrokeRow.fromModel(boardId, it) })
         }
+    }
+
+    fun saveShare(boardId: Long, snapshot: BoardSnapshot, receipt: ShareImportReceiptRow): Deferred<Unit> {
+        require(receipt.boardId == boardId)
+        validateSnapshot(snapshot)
+        val result = CompletableDeferred<Unit>()
+        check(operations.trySend {
+            executeShareOperation(result) {
+                dao.replaceAllForShare(receipt,
+                    snapshot.texts.map { TextElementRow.fromModel(boardId, it) },
+                    snapshot.shapes.map { SpatialElementRow.fromModel(boardId, it) },
+                    snapshot.arrows.map { ArrowElementRow.fromModel(boardId, it) },
+                    snapshot.ink.flatMap { InkStrokeRow.fromModel(boardId, it) })
+            }
+        }.isSuccess)
+        return result
+    }
+
+    private fun validateSnapshot(snapshot: BoardSnapshot) {
+        val targets = (snapshot.texts.map { it.id } + snapshot.shapes.map { it.id }).toSet()
+        require(snapshot.arrows.all { arrow ->
+            listOf(arrow.from, arrow.to).all { it !is ArrowEnd.Attached || it.targetId in targets }
+        }) { "矢印の接続先が見つかりません" }
     }
 
     // 既存の単一ボード画面は読み書きとも ID 1 に固定する。複数ボードは ID 指定 API を使う。

@@ -21,4 +21,4 @@ Process #36 に従って focused → lint/unit/debug/androidTest build → final
 
 ## 非対象
 
-zoom 倍率・animation、editor UX、generic gesture coordinator、long press timing、pan/pinch、#79/#80。
+zoom 倍率・animation、editor UX、generic gesture coordinator、long press timing、pan/pinch、#79/#80 の新規実装。

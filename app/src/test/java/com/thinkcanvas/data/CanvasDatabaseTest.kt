@@ -53,12 +53,149 @@ class CanvasDatabaseTest {
 
         val database = Room.databaseBuilder<CanvasDatabase>(file.absolutePath)
             .setDriver(BundledSQLiteDriver())
-            .addMigrations(CanvasDatabase.MIGRATION_1_2)
+            .addMigrations(CanvasDatabase.MIGRATION_1_2, CanvasDatabase.MIGRATION_2_3)
             .build()
         assertEquals("既存ボード", database.canvasDao().board(1)?.name)
         assertEquals("既存の考え", database.canvasDao().elements(1).single().text)
         assertEquals(12.5f, database.canvasDao().elements(1).single().x)
         assertEquals(emptyList<InkStrokeRow>(), database.canvasDao().inkStrokes(1))
+        assertEquals(null, database.canvasDao().shareReceipt("request"))
+        database.close()
+        file.delete()
+    } }
+
+    @Test
+    fun versionTwoMigrationPreservesBoardAndAllElementTables() { runBlocking {
+        val file = Files.createTempFile("think-canvas-migration-v2-", ".db").toFile()
+        file.delete()
+        val legacy = BundledSQLiteDriver().open(file.absolutePath)
+        legacy.execSQL("CREATE TABLE boards (id INTEGER NOT NULL, name TEXT NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(id))")
+        legacy.execSQL("CREATE TABLE text_elements (id TEXT NOT NULL, boardId INTEGER NOT NULL, text TEXT NOT NULL, kind TEXT NOT NULL, color TEXT NOT NULL, x REAL NOT NULL, y REAL NOT NULL, PRIMARY KEY(id))")
+        legacy.execSQL("CREATE TABLE spatial_elements (id TEXT NOT NULL, boardId INTEGER NOT NULL, kind TEXT NOT NULL, x REAL NOT NULL, y REAL NOT NULL, width REAL NOT NULL, height REAL NOT NULL, color TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY(id))")
+        legacy.execSQL("CREATE TABLE arrow_elements (id TEXT NOT NULL, boardId INTEGER NOT NULL, fromTargetId TEXT, fromU REAL, fromV REAL, fromX REAL, fromY REAL, toTargetId TEXT, toU REAL, toV REAL, toX REAL, toY REAL, bend REAL NOT NULL, PRIMARY KEY(id))")
+        legacy.execSQL("CREATE TABLE ink_strokes (id TEXT NOT NULL, boardId INTEGER NOT NULL, groupId TEXT NOT NULL, sequence INTEGER NOT NULL, kind TEXT NOT NULL, startedAt INTEGER NOT NULL, endedAt INTEGER NOT NULL, inputType TEXT NOT NULL, inputs BLOB NOT NULL, PRIMARY KEY(id))")
+        legacy.execSQL("INSERT INTO boards VALUES (1, 'v2 board', 123)")
+        legacy.execSQL("INSERT INTO text_elements VALUES ('text', 1, '本文', 'BODY', 'INK', 12.5, -8.0)")
+        legacy.execSQL("INSERT INTO spatial_elements VALUES ('shape', 1, 'RECTANGLE', 1, 2, 30, 40, 'INK', '')")
+        legacy.execSQL("INSERT INTO arrow_elements VALUES ('arrow', 1, 'text', 0.5, 0.5, NULL, NULL, NULL, NULL, NULL, 80, 90, 0)")
+        legacy.execSQL("INSERT INTO ink_strokes VALUES ('ink', 1, 'ink-group', 0, 'PEN', 1, 2, 'TOUCH', X'00')")
+        legacy.execSQL("PRAGMA user_version = 2")
+        legacy.close()
+
+        val database = Room.databaseBuilder<CanvasDatabase>(file.absolutePath)
+            .setDriver(BundledSQLiteDriver())
+            .addMigrations(CanvasDatabase.MIGRATION_1_2, CanvasDatabase.MIGRATION_2_3)
+            .build()
+        val dao = database.canvasDao()
+        assertEquals("v2 board", dao.board(1)?.name)
+        assertEquals("本文", dao.elements(1).single().text)
+        assertEquals("shape", dao.spatialElements(1).single().id)
+        assertEquals("arrow", dao.arrows(1).single().id)
+        assertEquals("ink", dao.inkStrokes(1).single().id)
+        assertEquals(null, dao.shareReceipt("request"))
+        database.close()
+        file.delete()
+    } }
+
+    @Test
+    fun shareSaveRollbackLeavesBoardContentAndReceiptUnchanged() { runBlocking {
+        val file = Files.createTempFile("think-canvas-share-rollback-", ".db").toFile()
+        file.delete()
+        fun open() = Room.databaseBuilder<CanvasDatabase>(file.absolutePath)
+            .setDriver(BundledSQLiteDriver()).build()
+        val initial = open()
+        val initialDao = initial.canvasDao()
+        initialDao.putBoard(BoardRow())
+        val before = TextElementRow("before", 1, "保存済み", "BODY", "INK", 1f, 2f)
+        initialDao.replaceAll(1, listOf(before), emptyList(), emptyList())
+        initial.close()
+
+        val raw = BundledSQLiteDriver().open(file.absolutePath)
+        raw.execSQL("""CREATE TRIGGER fail_share_receipt_insert
+            BEFORE INSERT ON share_import_receipts
+            BEGIN SELECT RAISE(ABORT, 'forced receipt failure'); END""".trimIndent())
+        raw.close()
+
+        val database = open()
+        val dao = database.canvasDao()
+        val receipt = ShareImportReceiptRow("request", 1, "shared")
+        val shared = TextElementRow("shared", 1, "取り込み", "BODY", "INK", 3f, 4f)
+        val missingElement = runCatching {
+            dao.replaceAllForShare(receipt, listOf(before), emptyList(), emptyList())
+        }
+        assertTrue(missingElement.isFailure)
+        assertEquals(listOf(before), dao.elements(1))
+        assertEquals(null, dao.shareReceipt("request"))
+        val result = runCatching {
+            dao.replaceAllForShare(receipt, listOf(before, shared), emptyList(), emptyList())
+        }
+        assertTrue(result.isFailure)
+        assertEquals(listOf(before), dao.elements(1))
+        assertEquals(null, dao.shareReceipt("request"))
+        database.close()
+        file.delete()
+    } }
+
+    @Test
+    fun committedShareReceiptSurvivesUndoAndPreventsOldRequestReplay() { runBlocking {
+        val file = Files.createTempFile("think-canvas-share-replay-", ".db").toFile()
+        file.delete()
+        val database = Room.databaseBuilder<CanvasDatabase>(file.absolutePath)
+            .setDriver(BundledSQLiteDriver()).build()
+        val dao = database.canvasDao()
+        dao.putBoard(BoardRow())
+        val receipt = ShareImportReceiptRow("request", 1, "shared")
+        val shared = TextElementRow("shared", 1, "重複しない", "BODY", "INK", 3f, 4f)
+        dao.replaceAllForShare(receipt, listOf(shared), emptyList(), emptyList())
+        assertEquals(receipt, dao.shareReceipt("request"))
+
+        // 通常のUndo相当の全置換で要素を消しても、完了receiptは残る。
+        dao.replaceAll(1, emptyList(), emptyList(), emptyList())
+        val afterUndo = dao.board(1)?.updatedAt
+        dao.replaceAllForShare(receipt, listOf(shared), emptyList(), emptyList())
+        assertEquals(emptyList<TextElementRow>(), dao.elements(1))
+        assertEquals(afterUndo, dao.board(1)?.updatedAt)
+        assertEquals(receipt, dao.shareReceipt("request"))
+
+        val mismatch = runCatching {
+            dao.replaceAllForShare(receipt.copy(elementId = "other"),
+                listOf(shared.copy(id = "other")), emptyList(), emptyList())
+        }
+        assertTrue(mismatch.isFailure)
+        assertEquals(emptyList<TextElementRow>(), dao.elements(1))
+        val boardMismatch = runCatching {
+            dao.replaceAllForShare(receipt.copy(boardId = 2),
+                listOf(shared.copy(boardId = 2)), emptyList(), emptyList())
+        }
+        assertTrue(boardMismatch.isFailure)
+        assertEquals(emptyList<TextElementRow>(), dao.elements(1))
+        assertTrue(dao.deleteBoard(1))
+        assertEquals(receipt, dao.shareReceipt("request"))
+        dao.replaceAllForShare(receipt, listOf(shared), emptyList(), emptyList())
+        assertEquals(null, dao.board(1))
+        assertEquals(emptyList<TextElementRow>(), dao.elements(1))
+        database.close()
+        file.delete()
+    } }
+
+    @Test
+    fun identicalTextWithFreshRequestIdCommitsAsSeparateShare() { runBlocking {
+        val file = Files.createTempFile("think-canvas-share-distinct-", ".db").toFile()
+        file.delete()
+        val database = Room.databaseBuilder<CanvasDatabase>(file.absolutePath)
+            .setDriver(BundledSQLiteDriver()).build()
+        val dao = database.canvasDao()
+        dao.putBoard(BoardRow())
+        val first = TextElementRow("element-1", 1, "同じ本文", "BODY", "INK", 1f, 2f)
+        val second = TextElementRow("element-2", 1, "同じ本文", "BODY", "INK", 3f, 4f)
+        val firstReceipt = ShareImportReceiptRow("request-1", 1, first.id)
+        val secondReceipt = ShareImportReceiptRow("request-2", 1, second.id)
+        dao.replaceAllForShare(firstReceipt, listOf(first), emptyList(), emptyList())
+        dao.replaceAllForShare(secondReceipt, listOf(first, second), emptyList(), emptyList())
+
+        assertEquals(listOf("element-1", "element-2"), dao.elements(1).map { it.id })
+        assertEquals(firstReceipt, dao.shareReceipt("request-1"))
+        assertEquals(secondReceipt, dao.shareReceipt("request-2"))
         database.close()
         file.delete()
     } }

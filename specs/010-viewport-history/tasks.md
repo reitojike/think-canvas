@@ -21,8 +21,8 @@
 
 ## US3 P2 / Polish
 - [x] T011 [US3] `ViewportHistoryInteractionTest.kt` の再生成/board別session/guard/stale action/hidden chrome/次gestureを実装し、既存runbookのlint/unit/build/focused GMDをsource固定で実行する。証拠は `specs/010-viewport-history/quickstart.md`。
-- [ ] T012 convergeでspec/plan/tasksと実装を突合し残差を `tasks.md` に追記・解消する。現行完成済Spec009状態を事実ベースで同期し、公開差分確認後PRを作る。最終head両CI/canonical reviewを収束しmergeする。
-- [ ] T013 merge後に最新Issue77 ACを個別検証しproof/checkbox/close、親81の子状態を同期する。親の実機dogfoodingを子のCIから推定しない。
+- [x] T012 convergeでspec/plan/tasksと実装を突合し残差を `tasks.md` に追記・解消する。現行完成済Spec009状態を事実ベースで同期し、公開差分確認後PRを作る。最終head両CI/canonical reviewを収束しmergeする。
+- [x] T013 merge後に最新Issue77 ACを個別検証しproof/checkbox/close、親81の子状態を同期する。親の実機dogfoodingを子のCIから推定しない。
 
 ## 依存と実行方針
 T001→T002→tests T003/T004/T008→T005/T006→T007→T009/T010→T011→T012→T013。
@@ -36,19 +36,23 @@ MVPはUS1。US2の内容操作/保存不変を確認しUS3の寿命/guardへ広�
 
 ## Phase 5: Convergence
 
-- [ ] T016 HIGH: `ViewportHistoryInteractionTest.kt` の検索entryと検索中Undo/Redoで、native入力readinessと保存Running→Idleの再開境界を明示する。実Room保存を保持したtest用request gateでRunningを観測し、durable完了後のIME復帰→一段階IME Back→native非表示を待ってからview操作する。内容/Room/保存数/Redo/camera/一entryのassertとproduction guardを維持し、標準focusedと最終153件CIを確認する。FR-005/006/007/010、SC-002/003/004（partial）。[統合後family checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5978097837)の同PR追加一roundに限定する。
-- [ ] T017 HIGH: `EdgeAutoPanTest#multiSelectionTranslatesTextShapeAndFreeArrowTogether` の最初の高速native MOVEとreleaseの座標を軽いWindow.Callback delegateで観測し、開始→previewとpreview→実配達UPのrenderを元2pxで比較する。全選択delta・Room/save/Undo/Redo一回とlayout/scale不変を維持する。既存Spec008 FR-004/005/006/010、SC-002/004のnative oracle不足を同PRの有限test/docs差分で補正する。制御RED/GREENのtimestamp/probeをfinalから除去し、更新head全153件CIで収束する。旧Issue78の原因未確定の歴史を変更しない。
-- [ ] T018 HIGH: `ViewportHistoryInteractionTest#unchangedOffscreenAttachedArrowDoesNotMoveVisibleColorUndo` で、色edit後の検索focusとUndoの前後を分離する。既存waitForIdle後に対象の画面内preconditionをassertし、Undo直前のworld focusを基準に同じ許容差・内容/保存assertで比較する。FR-006/SC-003（partial）。観測非再現の限界を記録し、probeを除去してfocusedと最終全CIを確認する。製品/search effect/geometry filter/入力/CI/launcherは変更しない。
+- [x] T016 HIGH: `ViewportHistoryInteractionTest.kt` の検索entryと検索中Undo/Redoで、native入力readinessと保存Running→Idleの再開境界を明示する。実Room保存を保持したtest用request gateでRunningを観測し、durable完了後のIME復帰→一段階IME Back→native非表示を待ってからview操作する。内容/Room/保存数/Redo/camera/一entryのassertとproduction guardを維持し、標準focusedと最終153件CIを確認する。FR-005/006/007/010、SC-002/003/004（partial）。[統合後family checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5978097837)の同PR追加一roundに限定する。
+- [x] T017 HIGH: `EdgeAutoPanTest#multiSelectionTranslatesTextShapeAndFreeArrowTogether` の最初の高速native MOVEとreleaseの座標を軽いWindow.Callback delegateで観測し、開始→previewとpreview→実配達UPのrenderを元2pxで比較する。全選択delta・Room/save/Undo/Redo一回とlayout/scale不変を維持する。既存Spec008 FR-004/005/006/010、SC-002/004のnative oracle不足を同PRの有限test/docs差分で補正する。制御RED/GREENのtimestamp/probeをfinalから除去し、更新head全153件CIで収束する。旧Issue78の原因未確定の歴史を変更しない。
+- [x] T018 HIGH: `ViewportHistoryInteractionTest#unchangedOffscreenAttachedArrowDoesNotMoveVisibleColorUndo` で、色edit後の検索focusとUndoの前後を分離する。既存waitForIdle後に対象の画面内preconditionをassertし、Undo直前のworld focusを基準に同じ許容差・内容/保存assertで比較する。FR-006/SC-003（partial）。観測非再現の限界を記録し、probeを除去してfocusedと最終全CIを確認する。製品/search effect/geometry filter/入力/CI/launcherは変更しない。
 
 ## Phase 6: canonical review convergence
 
-- [ ] T019 HIGH: `ViewportHistory.record` の無移動更新で未開始検索groupを消費する不足を補正し、`ViewportHistoryTest` に既存履歴のあるnear→最初の実移動→同group継続→往復を追加する。Spec010 FR-003/004、SC-001。[検索family checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5978808072)の同PR追加一round。
-- [ ] T020 HIGH: `CanvasScreen` のUndo/Redo検索再focus抑止時に現在位置だけを新件数へclampする。`ViewportHistoryInteractionTest` に2→1→0→1→2の件数/現在位置/current indicator、visible camera、内容/Room/saveのnative回帰を追加する。Spec010 FR-005/006/007、merge済Spec004 FR-013/014/016、SC-003/004。camera/内容authorityを変えず、更新head全154件CIとcanonicalを再収束する。
+- [x] T019 HIGH: `ViewportHistory.record` の無移動更新で未開始検索groupを消費する不足を補正し、`ViewportHistoryTest` に既存履歴のあるnear→最初の実移動→同group継続→往復を追加する。Spec010 FR-003/004、SC-001。[検索family checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5978808072)の同PR追加一round。
+- [x] T020 HIGH: `CanvasScreen` のUndo/Redo検索再focus抑止時に現在位置だけを新件数へclampする。`ViewportHistoryInteractionTest` に2→1→0→1→2の件数/現在位置/current indicator、visible camera、内容/Room/saveのnative回帰を追加する。Spec010 FR-005/006/007、merge済Spec004 FR-013/014/016、SC-003/004。camera/内容authorityを変えず、更新head全154件CIとcanonicalを再収束する。
 
 ## Phase 7: native IME Back convergence
 
-- [ ] T021 HIGH: `ViewportHistoryInteractionTest.Harness.hideSearchIme` のIME表示確認後の直接Activity dispatcherを、既存Neutral回帰と同じplatform `GLOBAL_ACTION_BACK` に合わせる。mergedSpec007のIMEだけ閉じ入力維持、Spec010 FR-005/006/007/010の観測経路を補正し、field/query・native IME非表示・内容/Room/save/cameraのassertを維持する。[native Back checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5979053043)の追加一round。旧CIの具体的なinsets timing原因は未確定として保持し、標準focusedと更新head全154件CI/reviewで再確認する。
+- [x] T021 HIGH: `ViewportHistoryInteractionTest.Harness.hideSearchIme` のIME表示確認後の直接Activity dispatcherを、既存Neutral回帰と同じplatform `GLOBAL_ACTION_BACK` に合わせる。mergedSpec007のIMEだけ閉じ入力維持、Spec010 FR-005/006/007/010の観測経路を補正し、field/query・native IME非表示・内容/Room/save/cameraのassertを維持する。[native Back checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5979053043)の追加一round。旧CIの具体的なinsets timing原因は未確定として保持し、標準focusedと更新head全154件CI/reviewで再確認する。
 
 ## Phase 8: search group cycle convergence
 
-- [ ] T022 HIGH: `ViewportHistory.kt` で同一検索groupの始点復帰時にそのgroupが積んだanchorだけを除去し、近似重複で保持された既存履歴を守る。`ViewportHistoryTest.kt` にowned/unowned始点復帰、再開始、capacity、別boundaryの回帰を追加する。Spec010 FR-003/004、SC-001。[group cycle checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5979349931)の追加一round。旧実装RED→unit/basic・標準focused→更新head全154件CI/canonicalで再収束する。
+- [x] T022 HIGH: `ViewportHistory.kt` で同一検索groupの始点復帰時にそのgroupが積んだanchorだけを除去し、近似重複で保持された既存履歴を守る。`ViewportHistoryTest.kt` にowned/unowned始点復帰、再開始、capacity、別boundaryの回帰を追加する。Spec010 FR-003/004、SC-001。[group cycle checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5979349931)の追加一round。旧実装RED→unit/basic・標準focused→更新head全154件CI/canonicalで再収束する。
+
+## Delivery同期（2026-10-04）
+
+T012/T013/T016〜T022は[PR90](https://github.com/reitojike/think-canvas/pull/90)のhead 2dd8b354a3でCI154件/canonicalを収束し、merge 047b0a1、[Issue77完了proof](https://github.com/reitojike/think-canvas/issues/77#issuecomment-5979642387)でdelivery完了を確認した。次の必要な統合でcheckboxを同期するという記録に従い、本変更で反映する。過去CIの未確定原因を新しい証拠から推定し直さない。

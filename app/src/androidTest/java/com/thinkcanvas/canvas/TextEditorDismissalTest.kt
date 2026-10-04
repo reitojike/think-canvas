@@ -34,6 +34,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.BoardSaveState
 import com.thinkcanvas.BoardSessionViewModel
 import com.thinkcanvas.MainActivity
+import com.thinkcanvas.share.ShareImportPhase
+import com.thinkcanvas.share.ShareImportViewModel
 import com.thinkcanvas.R
 import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.CanvasDatabase
@@ -803,6 +805,50 @@ class TextEditorDismissalTest {
                 }
             }
         }
+    }
+
+    @Test fun pendingBlankSingleRejectsExistingExternalInteractionBlock() = withBoard {
+        val saves = trackSaves()
+        lateinit var imports: ShareImportViewModel
+        scenario.onActivity { imports = ViewModelProvider(it)[ShareImportViewModel::class.java] }
+        composeRule.waitUntil(5_000) { imports.state.phase == ShareImportPhase.EMPTY && !imports.state.writing }
+        val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+            .fetchSemanticsNode().layoutInfo.viewConfiguration
+        val location = point(.1f, .23f)
+        val clock = composeRule.mainClock
+        val autoAdvance = clock.autoAdvance
+        val started = clock.currentTime
+        try {
+            clock.autoAdvance = false
+            nativeBlankSingle(location)
+            repeat(3) { clock.advanceTimeByFrame() }
+            scenario.onActivity {
+                assertEquals(null, editor.draft.value)
+                assertTrue(imports.receive("Interrupt the pending blank tap"))
+            }
+            composeRule.waitUntil(5_000) {
+                imports.state.phase == ShareImportPhase.DEFERRED && !imports.state.writing
+            }
+            scenario.onActivity {
+                // Exercise the existing preview block independently of its asynchronous admission UI.
+                imports.present(1L)
+                assertTrue(imports.state.blocksCanvas)
+            }
+            assertTrue(clock.currentTime - started < configuration.doubleTapTimeoutMillis)
+            clock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+        } finally {
+            clock.autoAdvance = autoAdvance
+        }
+        composeRule.waitUntil(5_000) {
+            imports.state.phase == ShareImportPhase.PREVIEW && !imports.state.writing
+        }
+        assertEquals(null, editor.draft.value)
+        scenario.onActivity { imports.cancel() }
+        composeRule.waitUntil(5_000) { imports.state.phase == ShareImportPhase.EMPTY && !imports.state.writing }
+        clock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+        assertClosed()
+        assertUnchanged()
+        assertEquals(0, saves.get())
     }
 
     private fun nativeBlankSingle(point: Offset): Long {

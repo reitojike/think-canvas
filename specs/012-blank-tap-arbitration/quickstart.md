@@ -137,6 +137,26 @@ production、倍率・animation、履歴の authority、他 gesture の入力は
 **10/0/0/0**。platform interval / shifted slop の前提、double zoom と region fit の
 1 entry、他の history regression を確認した。production は `0cd6dd5` から不変。
 
+## main 更新の HOLD / authority completeness checkpoint
+
+作業中に main が `5b5c7d6`（PR #96、共有取り込み）へ進み、旧 base の PR が conflict になった。
+旧 base 向け `a806a77` full は中断し、最終証跡に採用しない。旧 head の CI も再利用しない。
+
+有限 surface は CanvasScreen の merge conflict、既存 externalInteractionBlocked / saveBlocked、
+import readiness と manual gesture / animation guard、pending の final check / observer、
+external block の stale single 回帰、Spec 番号と source/XML census。
+main の共有・保存・schema・readiness authority を保持し、pending は既存 external block でも取消す。
+新しい共有機能の設計・保存経路は変更しない。Spec 011 は main の共有機能に割当済みなので、
+この作業成果物を Spec 012 へ移す。初期 baseline の RED はそのまま有効な歴史的証跡とする。
+
+判定: **BOUNDED_CORRECTION**。追加1 round は main の取り込み、上記 pending guard の適合と
+その回帰、Spec rename / census に限定する。新候補を固定して focused / floor / full GMD /
+current-head CI を確認してから canonical review を依頼する。新たな material correction は HOLD/checkpoint。
+
+main 適合後の external block stale / native shifted pair は各 fresh exact XML **1/0/0/0**。
+lint / unit **163/0/0/0** / debug / androidTest build は成功。Room schema は最新 main との差分なし。
+新しい source census は重複なしの **191 class#method**。旧 head の161件結果とは区別する。
+
 ## 最終 gate
 
 final candidate 固定後に unit/lint/debug/androidTest build と full Pixel9/API37 GMD を行う。

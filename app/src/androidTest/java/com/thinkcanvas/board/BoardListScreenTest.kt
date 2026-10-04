@@ -2,8 +2,10 @@ package com.thinkcanvas.board
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Rect
 import android.os.SystemClock
 import android.view.MotionEvent
+import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.assertIsDisplayed
@@ -492,6 +494,24 @@ class BoardListScreenTest {
             val nameField = composeRule.onNode(hasSetTextAction())
             nameField.performTextClearance()
             nameField.performTextInput("変更後")
+            var previousBounds: Rect? = null
+            var stableBounds = 0
+            composeRule.waitUntil(5_000) {
+                var imeVisible = false
+                scenario.onActivity {
+                    imeVisible = it.window.decorView.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true
+                }
+                val nativeSave = find(automation.rootInActiveWindow) {
+                    it.isVisibleToUser && it.text?.toString() == "保存"
+                }
+                val bounds = Rect().also { nativeSave?.getBoundsInScreen(it) }
+                stableBounds = if (imeVisible && !bounds.isEmpty && bounds == previousBounds)
+                    stableBounds + 1 else 0
+                previousBounds = bounds
+                stableBounds >= 2
+            }
+            nameField.assertTextEquals("変更後")
+            composeRule.onNodeWithText("保存").assertIsDisplayed()
             composeRule.onNodeWithText("保存").performClick()
             runBlocking { withTimeout(5_000) {
                 assertEquals(BoardListAction.Rename(11, "変更後"), started.await())
@@ -1097,11 +1117,13 @@ class BoardListScreenTest {
         val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
         lateinit var vm: BoardListActionViewModel
         scenario.onActivity { vm = listActions(it) }
-        val (queueStarted, releaseQueue) = blockCanvasStoreQueue()
+        var releaseQueue: CompletableDeferred<Unit>? = null
         val database = CanvasDatabase.open(context)
         try {
-            runBlocking { withTimeout(5_000) { queueStarted.await() } }
             awaitDescription("共有元、", substring = true)
+            val (queueStarted, release) = blockCanvasStoreQueue()
+            releaseQueue = release
+            runBlocking { withTimeout(5_000) { queueStarted.await() } }
             composeRule.onNodeWithContentDescription("共有元、", substring = true)
                 .performSemanticsAction(SemanticsActions.OnLongClick)
             composeRule.onNodeWithText("画像で共有")
@@ -1124,7 +1146,7 @@ class BoardListScreenTest {
             assertEquals(-1L, context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
                 .getLong("lastOpenedBoardId", -1))
 
-            releaseQueue.complete(Unit)
+            release.complete(Unit)
             awaitDescription("共有元 の共有画像プレビュー")
             assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
                 .GLOBAL_ACTION_BACK))
@@ -1132,7 +1154,7 @@ class BoardListScreenTest {
             composeRule.onNodeWithContentDescription("開けない別案、", substring = true).performClick()
             awaitText("‹ 開けない別案")
         } finally {
-            releaseQueue.complete(Unit)
+            releaseQueue?.complete(Unit)
             scenario.close()
             database.close()
         }
