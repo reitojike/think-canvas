@@ -52,3 +52,7 @@ T001→T002→T003/T004→US1→US2→検証・converge。US1はeditorからの�
 - [x] T018 HIGH: `CanvasScreen.kt` のtext/search/regionName focus要求を、window復帰とframe適用後に同じnative host viewのactive input connection/acceptingText成立まで取消可能なframe待機にする。showは一回だけとし、effect keyとBackで隠したIMEの保持を維持する。`NeutralInteractionTest.kt` のreadiness timeoutにfield/native window/接続/insetsの診断をfailure時だけ追加しassert/timeoutを維持する。Spec007 FR-003/007/009、Issue91 AC1/2/3/4、[bounded checkpoint](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5975731094)（partial）。
 
 - [x] T019 HIGH: `NeutralInteractionTest.kt` で別native window所有中のpending editorを終了し、再composition前のwindow帰還でも古いeditorへfocus/IMEを戻さないことを検証する。必要なら `CanvasScreen.kt` の三focus要求で既存session/search/確認のlive stateをawait後に照合する。Issue91 AC3、Spec007 FR-003/009（pending要求の取消検証不足）。
+
+## Phase 10: Issue91 input owner Convergence
+
+- [ ] T020 HIGH: `CanvasScreen.kt` の三focus ownerをlive save/ack admissionと実在fieldで保護し、blocked状態のkey変化で待機を取消す。IMM active/acceptingTextの無期限frame pollを除去し、API30以降は標準IME-controllabilityの取消可能な通知、API26〜29はwindow focus/frame経路を使い、entry/resumeごとの一回showとwindow focus非keyを維持する。`NeutralInteractionTest.kt` のwindow/継続/pending終了・置換および `TextEditorDismissalTest.kt` のRunning/Failed再生成をnative focused/fullで検証する。Spec007 FR-003/004/007/009、Spec006 FR-006/007、Issue91 AC1〜5、[第三bounded checkpoint](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5976059426)（partial）。

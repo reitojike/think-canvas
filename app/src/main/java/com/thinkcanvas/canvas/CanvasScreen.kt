@@ -1,8 +1,9 @@
 package com.thinkcanvas.canvas
 
+import android.os.Build
 import android.os.SystemClock
 import android.view.MotionEvent
-import android.view.inputmethod.InputMethodManager
+import android.view.WindowInsetsController
 import androidx.activity.compose.BackHandler
 import com.thinkcanvas.board.fittedViewport
 import com.thinkcanvas.board.RegionLabelSize
@@ -122,6 +123,8 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -194,9 +197,6 @@ fun CanvasScreen(
     val focusRequester = remember { FocusRequester() }
     val windowInfo = LocalWindowInfo.current
     val inputView = LocalView.current
-    val inputMethod = remember(inputView) {
-        inputView.context.getSystemService(InputMethodManager::class.java)
-    }
     val regionNameFocusRequester = remember { FocusRequester() }
     val canvasTextStyle = LocalTextStyle.current
     val regionLabelStyle = canvasTextStyle.copy(fontSize = DetailedRenderFacts.REGION_LABEL_SIZE_SP.sp)
@@ -846,31 +846,47 @@ fun CanvasScreen(
     val latestFinalizeDraft = rememberUpdatedState({ finalizeDraft() })
 
     suspend fun focusEditorInput(requester: FocusRequester, isCurrent: () -> Boolean) {
-        if (!isCurrent()) return
+        if (!isCurrent() || exitBlocked()) return
         snapshotFlow { windowInfo.isWindowFocused }.first { it }
-        if (!isCurrent()) return
+        if (!isCurrent() || exitBlocked()) return
         requester.requestFocus()
-        do {
-            withFrameNanos { }
-            if (!isCurrent()) return
-        } while (!inputView.hasWindowFocus() || !inputMethod.isActive(inputView) ||
-            !inputMethod.isAcceptingText)
-        keyboard?.show()
+        if (Build.VERSION.SDK_INT >= 30) {
+            val controller = inputView.windowInsetsController ?: return
+            suspendCancellableCoroutine<Unit> { continuation ->
+                val listener = object : WindowInsetsController.OnControllableInsetsChangedListener {
+                    override fun onControllableInsetsChanged(controller: WindowInsetsController, typeMask: Int) {
+                        if (continuation.isActive && inputView.hasWindowFocus() &&
+                            typeMask and android.view.WindowInsets.Type.ime() != 0) {
+                            // Do not mutate the platform listener list during its dispatch.
+                            inputView.post { controller.removeOnControllableInsetsChangedListener(this) }
+                            continuation.resume(Unit)
+                        }
+                    }
+                }
+                continuation.invokeOnCancellation {
+                    controller.removeOnControllableInsetsChangedListener(listener)
+                }
+                if (continuation.isActive) controller.addOnControllableInsetsChangedListener(listener)
+            }
+        }
+        withFrameNanos { }
+        if (isCurrent() && !exitBlocked() && inputView.hasWindowFocus()) keyboard?.show()
     }
 
-    LaunchedEffect(draft?.sessionId, draft?.id, draft?.x, draft?.y, discardTarget) {
+    val inputAllowed = currentSaveState == BoardSaveState.Idle && pendingDraftAcknowledgement == null
+    LaunchedEffect(draft?.sessionId, draft?.id, draft?.x, draft?.y, discardTarget, inputAllowed) {
         val current = draft
-        if (current != null && discardTarget == null) {
+        if (current != null && discardTarget == null && inputAllowed) {
             val sessionId = current.sessionId
             focusEditorInput(focusRequester) {
                 editorSession.draft.value?.sessionId == sessionId && discardTarget == null
             }
         }
     }
-    LaunchedEffect(searchOpen) {
-        if (searchOpen) {
-            focusEditorInput(searchFocusRequester) { searchOpen }
-        } else chromeBounds.remove("search")
+    LaunchedEffect(searchOpen, inputAllowed) {
+        if (searchOpen && inputAllowed) {
+            focusEditorInput(searchFocusRequester) { searchOpen && editorSession.draft.value == null }
+        } else if (!searchOpen) chromeBounds.remove("search")
     }
     LaunchedEffect(searchOpen, searchQuery, board.elements, board.shapes) {
         if (searchOpen && searchQuery.isNotBlank() && searchMatches.isNotEmpty()) focusMatch(0)
@@ -891,12 +907,13 @@ fun CanvasScreen(
             closeRegionName()
         }
     }
-    LaunchedEffect(regionDraft?.sessionId, regionNameId, discardTarget) {
+    LaunchedEffect(regionDraft?.sessionId, regionNameId, discardTarget, inputAllowed) {
         val current = regionDraft
-        if (regionNameId != null && current != null && discardTarget == null) {
+        if (regionNameId != null && current != null && discardTarget == null && inputAllowed) {
             val sessionId = current.sessionId
             focusEditorInput(regionNameFocusRequester) {
-                editorSession.regionNameDraft.value?.sessionId == sessionId && discardTarget == null
+                editorSession.regionNameDraft.value?.sessionId == sessionId &&
+                    editorSession.draft.value == null && discardTarget == null
             }
         }
     }

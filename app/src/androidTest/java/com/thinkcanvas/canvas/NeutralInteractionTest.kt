@@ -141,9 +141,10 @@ class NeutralInteractionTest {
                     val input = activity.getSystemService(InputMethodManager::class.java)
                     val view = root.findFocus()
                     val insets = root.rootWindowInsets
-                    ready = root.hasWindowFocus() && view != null && input.isActive(view) &&
-                        input.isAcceptingText && insets?.isVisible(WindowInsets.Type.ime()) == true &&
-                        insets.getInsets(WindowInsets.Type.ime()).bottom > 0
+                    ready = focused && root.hasWindowFocus() && view != null &&
+                        insets?.isVisible(WindowInsets.Type.ime()) == true &&
+                        insets.getInsets(WindowInsets.Type.ime()).bottom > 0 &&
+                        input.isActive(view) && input.isAcceptingText
                 }
                 focused && ready
             } } catch (timeout: ComposeTimeoutException) {
