@@ -9,7 +9,10 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.AnnotatedString
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.MainActivity
@@ -59,7 +62,18 @@ class ConditionalChromeLifecycleTest {
             assertEquals("former point tap 前も囲みは選択中", "選択中",
                 waitForRegionState(instrumentation, "選択中"))
 
-            tap(instrumentation, shareCenter.first, shareCenter.second)
+            val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+                .fetchSemanticsNode().layoutInfo.viewConfiguration
+            composeRule.mainClock.autoAdvance = false
+            try {
+                tap(instrumentation, shareCenter.first, shareCenter.second)
+                repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
+                assertEquals("confirmed single 前は選択を維持する", "選択中",
+                    waitForRegionState(instrumentation, "選択中"))
+                composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+            } finally {
+                composeRule.mainClock.autoAdvance = true
+            }
             assertEquals("former share Button center から囲み選択が解除される", "未選択",
                 waitForRegionState(instrumentation, "未選択"))
             assertNotNull("選択解除後も囲み名 editor は active",
@@ -73,6 +87,48 @@ class ConditionalChromeLifecycleTest {
             assertNotNull("再選択後に共有 Button が再表示される",
                 waitForActionable(instrumentation, "選択範囲を画像で共有"))
         } finally {
+            activity.finish()
+            instrumentation.waitForIdleSync()
+        }
+    }
+
+    @Test
+    fun pendingBlankSingleRejectsRegionNameInputChange() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        seedBoard(context)
+        showBoardOneAtStartup(context)
+        val activity = instrumentation.startActivitySync(
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        try {
+            clickActionable(instrumentation, "囲み: Cluster")
+            val formerPoint = center(bounds(waitForActionable(instrumentation, "選択範囲を画像で共有")))
+            val (region, renameAction) = waitForRegionRenameAction(instrumentation)
+            assertTrue(region.performAction(renameAction.id))
+            waitForGone(instrumentation, "選択範囲を画像で共有")
+            val changeName = checkNotNull(composeRule.onNodeWithContentDescription("囲みの名前")
+                .fetchSemanticsNode().config[SemanticsActions.SetText].action)
+            val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+                .fetchSemanticsNode().layoutInfo.viewConfiguration
+            composeRule.mainClock.autoAdvance = false
+            try {
+                tap(instrumentation, formerPoint.first, formerPoint.second)
+                repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
+                assertEquals("pending 中は選択を維持する", "選択中",
+                    waitForRegionState(instrumentation, "選択中"))
+                instrumentation.runOnMainSync { assertTrue(changeName(AnnotatedString("Changed"))) }
+                composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+            } finally {
+                composeRule.mainClock.autoAdvance = true
+            }
+            assertEquals("囲み名変更で old single の選択解除を取消す", "選択中",
+                waitForRegionState(instrumentation, "選択中"))
+            composeRule.onNodeWithContentDescription("囲みの名前").assertTextEquals("Changed")
+            assertNull("old single から text editor を生成しない",
+                findExact(instrumentation.uiAutomation.rootInActiveWindow, "新しいテキスト"))
+        } finally {
+            composeRule.mainClock.autoAdvance = true
             activity.finish()
             instrumentation.waitForIdleSync()
         }

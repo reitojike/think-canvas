@@ -439,7 +439,7 @@ fun CanvasScreen(
     fun blankTapIsLive(pending: BlankTap): Boolean = blankTapBoundary.active &&
         pending.generation == gestureGeneration &&
         lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
-        editorSession.draft.value == null && editorSession.regionNameDraft.value == null &&
+        editorSession.draft.value == null && editorSession.regionNameDraft.value == pending.regionDraft &&
         editorSession.pendingDraftAcknowledgement.value == null && saveState.value == BoardSaveState.Idle &&
         tool == SpatialTool.NONE && inkTool == null && discardTarget == null &&
         menuTarget == null && attachmentEditor == null && moveOwner == null &&
@@ -487,6 +487,7 @@ fun CanvasScreen(
     }
 
     fun openRegionName(id: String, name: String) {
+        cancelBlankTap()
         regionDraft = RegionNameDraft(id, name)
     }
 
@@ -929,11 +930,11 @@ fun CanvasScreen(
         val (element, spatial) = hitCanvas(point)
         if (latestInkTool.value != null) return
         if (element == null && spatial == null) {
-            if (eventUptimeMillis == null || tool != SpatialTool.NONE || regionDraft != null) return
+            if (eventUptimeMillis == null || tool != SpatialTool.NONE) return
             cancelBlankTap()
             val (x, y) = latestViewport.value.screenToWorld(point.x, point.y)
             val pending = BlankTap(eventUptimeMillis, point, WorldPoint(x, y), gestureGeneration,
-                board.snapshot(), selectedId, selectedIds.toSet(), searchOpen)
+                board.snapshot(), selectedId, selectedIds.toSet(), searchOpen, editorSession.regionNameDraft.value)
             blankTapBoundary.pending = pending
             blankTapBoundary.confirmation = uiScope.launch {
                 delay(doubleTapTimeoutMillis)
@@ -2261,7 +2262,10 @@ fun CanvasScreen(
                     .pillBorder(10f).padding(8.dp).onGloballyPositioned {
                         chromeBounds["regionName"] = it.boundsInParent()
                     }, verticalAlignment = Alignment.CenterVertically) {
-                    BasicTextField(regionName, onValueChange = { regionDraft = regionDraft?.copy(name = it) },
+                    BasicTextField(regionName, onValueChange = {
+                        cancelBlankTap()
+                        regionDraft = regionDraft?.copy(name = it)
+                    },
                         singleLine = true, modifier = Modifier.width(140.dp).padding(8.dp)
                             .focusRequester(regionNameFocusRequester)
                             .semantics { contentDescription = regionNameLabel },

@@ -6,6 +6,7 @@ LocalViewConfiguration の doubleTapTimeoutMillis / doubleTapMinTimeMillis と A
 無効な second DOWN は first を confirmed single として一度確定してから、最新 editor / selection authority で次の gesture の可否を判断する。Android GestureDetector の空白外連続 tap で first confirmed callback が消える部分は採用せず、明示された first action を保持する。
 
 Job は raw editorSession / saveState と現在の interaction、first の generation / content を再確認する。observer と STOP/dispose および既存 invalidation で破棄する。保存・schema・dependency・workflow は変更しない。
+tap 前から成立した region name editor は captured context として保持し、同じ session / 内容のままなら従来の selection clear を confirmed single で実行する。pending 中の開始・入力変更・終了は取消す。成立済み text editor の #71 admission は維持する。
 Constitution の standard-first と位置保持を満たす。first world 座標を再投影しない。editor lifecycle と保存の責務は変更しない。
 
 停止境界は MERGE_READY。merge / Issue close は含まない。

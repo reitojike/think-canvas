@@ -66,6 +66,52 @@ production / dependency / workflow は変更しない。補正後の新しい ma
 
 ここまで production の追加補正は行っていない。final-head full suite / canonical review は別 gate。
 
+## region editor authority の HOLD / family completeness checkpoint
+
+候補 `7b3ae7b` の full 実行は中断され、完了 XML / exit / source-after がない。
+回収した88 testcase の logcat では、既存の
+`ConditionalChromeLifecycleTest#regionNameTransitionRemovesFormerSelectionSharePointUntilReselected`
+だけに TestRunner failure がある。全件成功の証跡には採用しない。
+
+原因は pending admission / final guard が既存の regionNameDraft まで null 必須にしたこと。
+従来、囲み名 editor が成立した状態でも空白 single は選択を解除できた。
+「pending 中に editor が変更されたら失効」と「tap 前から安定した region editor」は区別する。
+
+有限 surface は BlankTap の captured region context、tap admission / final guard、
+region editor 開始・入力・終了、conditional chrome の former point 回帰。
+text editor は従来どおり admission を拒否する。保存、viewport、pointer ownership、
+focus / IME、region editor の UX は変更しない。開始/入力/終了 edge は pending だけを取消す。
+region context の identity と content の一致を final guard に加え、stable editor の
+confirmed single と pending 中の region input 変更による取消を検証する。
+
+判定: **BOUNDED_CORRECTION**。同じ blank arbitration authority / review / rollback 境界の
+追加1 roundに限定する。補正後に material correction が必要なら再び HOLD/checkpoint。
+中断された full の blind rerun はせず、補正後に新候補を固定して全件を検証する。
+
+region 補正後の class focused は fresh exact XML **3/0/0/0**。
+続く TextEditorDismissalTest は exact **27/1/0/0**。
+失敗は selected single の line 658、selection semantics 読取り後の real uptime < timeout 前提。
+選択保持の assertion は通過し、deadline 前の読み取りにかかる native 操作時間が timeout を超えた。
+
+## single 観測 clock の HOLD / completeness checkpoint
+
+family は single confirmation の検証 clock。有限 surface は new Draft single と selected single の
+2 testcase、共通の native first tap、既存 stale / region single の clock 制御、native double pair。
+single coroutine は Compose mainClock、double eligibility は MotionEvent uptime を authority とする。
+single の期限前の semantics / Activity 読取り完了を wall clock 300ms以内と仮定しない。
+stale / region single と同じく clock を固定し、first UP 後に固定3 frameを処理して
+deadline 未満・Draft 不在・選択保持を観測し、platform timeout 分だけ進めて確定を確認する。
+
+判定: **BOUNDED_CORRECTION**。追加1 round はこの2 testcase の clock のみ。
+production、double pair の native timing/slop、既存 #71 の期待値は変更しない。
+再検証後に新しい material correction が必要なら再び HOLD/checkpoint。
+
+補正後の selected single / new Draft single はそれぞれ単一 selector の fresh exact XML
+**1/0/0/0**。region class **3/0/0/0**、文字 class の他26件の成功と併せて focused の
+coverage を確認した。全 class の27/0/0/0とは記録しない。
+lint / unit **147/0/0/0** / debug / androidTest build は別 invocation で成功。
+最終候補の instrumentation source census は重複なしの **161 class#method**。
+
 ## 最終検証
 
 final candidate 固定後に unit/lint/debug/androidTest build と full Pixel9/API37 GMD を行う。

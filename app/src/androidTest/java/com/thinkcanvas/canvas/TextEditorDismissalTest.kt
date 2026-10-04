@@ -632,17 +632,24 @@ class TextEditorDismissalTest {
         val expected = history.viewportState.value.screenToWorld(location.x - origin.x, location.y - origin.y)
         val configuration = composeRule.onNodeWithContentDescription("キャンバス")
             .fetchSemanticsNode().layoutInfo.viewConfiguration
-        val up = nativeBlankSingle(location)
-        scenario.onActivity {
-            assertTrue(SystemClock.uptimeMillis() - up < configuration.doubleTapTimeoutMillis)
-            assertEquals(null, editor.draft.value)
+        val clock = composeRule.mainClock
+        val autoAdvance = clock.autoAdvance
+        val started = clock.currentTime
+        try {
+            clock.autoAdvance = false
+            nativeBlankSingle(location)
+            repeat(3) { clock.advanceTimeByFrame() }
+            assertTrue(clock.currentTime - started < configuration.doubleTapTimeoutMillis)
+            scenario.onActivity { assertEquals(null, editor.draft.value) }
+            clock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+        } finally {
+            clock.autoAdvance = autoAdvance
         }
-        Thread.sleep(configuration.doubleTapTimeoutMillis)
         awaitEditor(newEditor)
         val confirmed = checkNotNull(editor.draft.value)
         assertEquals(expected.first, confirmed.x, .01f)
         assertEquals(expected.second, confirmed.y, .01f)
-        Thread.sleep(configuration.doubleTapTimeoutMillis)
+        clock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
         assertEquals(confirmed.sessionId, editor.draft.value?.sessionId)
         assertEquals(1, composeRule.onAllNodesWithContentDescription(newEditor).fetchSemanticsNodes().size)
         assertUnchanged()
@@ -653,12 +660,21 @@ class TextEditorDismissalTest {
         composeRule.onNodeWithContentDescription(original.text).performClick()
         val configuration = composeRule.onNodeWithContentDescription("キャンバス")
             .fetchSemanticsNode().layoutInfo.viewConfiguration
-        val up = nativeBlankSingle(point(.1f, .23f))
-        assertExistingSelected(original)
-        assertTrue(SystemClock.uptimeMillis() - up < configuration.doubleTapTimeoutMillis)
-        scenario.onActivity { assertEquals(null, editor.draft.value) }
-        Thread.sleep(configuration.doubleTapTimeoutMillis)
-        composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+        val location = point(.1f, .23f)
+        val clock = composeRule.mainClock
+        val autoAdvance = clock.autoAdvance
+        val started = clock.currentTime
+        try {
+            clock.autoAdvance = false
+            nativeBlankSingle(location)
+            repeat(3) { clock.advanceTimeByFrame() }
+            assertExistingSelected(original)
+            assertTrue(clock.currentTime - started < configuration.doubleTapTimeoutMillis)
+            scenario.onActivity { assertEquals(null, editor.draft.value) }
+            clock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+        } finally {
+            clock.autoAdvance = autoAdvance
+        }
         composeRule.waitForIdle()
         val node = composeRule.onNodeWithContentDescription(original.text).fetchSemanticsNode()
         assertEquals(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.unselected),
