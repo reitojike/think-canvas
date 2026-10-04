@@ -114,6 +114,31 @@ lint / unit **147/0/0/0** / debug / androidTest build は別 invocation で成�
 
 ## 最終検証
 
+候補 `0cd6dd5` の full Pixel9/API37 は fresh exact source/XML **161/1/0/0**。
+実行前後の head と source hash は一致した。唯一の failure は
+`ViewportHistoryInteractionTest#blankDoubleTapAndRegionFitHaveOneEntry` の zoom 不成立。
+
+## native double fixture の HOLD / completeness checkpoint
+
+blank double の有限 surface は TextEditorDismissalTest の platform interval / 8px pair、
+SemanticNavigationTest の 0/40/80/120ms MotionEvent sequence、ViewportHistoryInteractionTest
+の待ち時間なし2 pair。最初の2 surface は同じ full で成功し、viewport / content history も不変。
+失敗した fixture は first UP → second DOWN の platform minimum を保証していない。
+実測 interval の記録もないため、過去の「double」名だけで valid double と判定しない。
+
+判定: **BOUNDED_CORRECTION**。追加1 round は ViewportHistoryInteractionTest の native
+event timestamp を返す helper と当該 testcase のみ。platform minimum を待ち、native
+UP/DOWN interval を minimum..timeout で検証し、8pxの shifted pair が slop 内であることを
+確認する。settled animation 後に既存の history 1 entry / content 不変を観測する。
+production、倍率・animation、履歴の authority、他 gesture の入力は変更しない。
+再検証後の新しい material correction は再び HOLD/checkpoint。
+
+補正後の ViewportHistoryInteractionTest class focused は fresh source/XML exact
+**10/0/0/0**。platform interval / shifted slop の前提、double zoom と region fit の
+1 entry、他の history regression を確認した。production は `0cd6dd5` から不変。
+
+## 最終 gate
+
 final candidate 固定後に unit/lint/debug/androidTest build と full Pixel9/API37 GMD を行う。
 source testcase 集合と fresh XML の class#method 全件、device、counter、head / source 不変を照合する。
 current-head canonical review と unresolved thread 0 の証跡がない間は MERGE_READY としない。
