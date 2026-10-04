@@ -91,3 +91,6 @@ US1が最小の利用者導線だが、lifecycleを欠く状態ではmergeしな
 
 - [x] T029 `app/src/main/java/com/thinkcanvas/MainActivity.kt` のDeferred宛先照会後に、同じPage/requestとlive中立状態を再確認してからpreviewを表示する。`share/SharePreviewAdmission.kt` に既存UI scope内の照会・直前確認だけを切り出し、`SharePreviewAdmissionTest.kt` でboards照会中の編集開始とlast照会中のPage変更を制御して、保留維持/最新ownerでの再試行を検証する。FR-007、US3/AC1/2、plan: 既存編集保護（partial、HIGH）。
 - [x] T030 `app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.kt` のzoom clickと検索移動のfocusMatchへlive操作制限を追加する。`ShareImportInteractionTest.kt` の既存captured action/検索保留テストで、preview後の古いzoomと保存制限中の検索actionが視点/履歴を変えず、制限終了後は通常操作できることを検証する。Spec010 FR-010、FR-007、US3/AC2（partial、HIGH）。pointer chrome dispatchは変更せず、検索入力の既存external guardを維持する。
+## Phase 11: Convergence
+
+- [x] T031 `app/src/androidTest/java/com/thinkcanvas/canvas/SemanticNavigationTest.kt` の検索終了後にnative IME非表示/inset0とCanvas bounds安定を観測してから既存zoom actionを実行する。失敗時は観測したzoomも診断へ記録する。同じ25%表示、遠景の本文非表示、囲みfocus、保存内容不変のoracleと待機上限を維持する。SC-005、plan: 既存検索/viewport回帰（partial、MEDIUM）。CI183件の一失敗をfamily checkpointで照合し、追加1roundはfixture前提観測へ限定する。IME終了によるanimation中断は可能性として扱い、製品コードを推測で変更しない。

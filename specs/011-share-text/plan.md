@@ -113,3 +113,7 @@ app/schemas/com.thinkcanvas.data.CanvasDatabase/3.json
 ### 非同期admissionと古いchrome操作の限定補正
 
 MainのDeferred候補照会は現在のPage/requestを捕捉し、boards/last照会後にもlive guardを検査してpreviewを表示する。`share/SharePreviewAdmission.kt` は同じUI scope内のこの境界を単体で制御するための関数で、状態ownerや保存writerを追加しない。Canvasはzoom clickと検索移動focusMatchにlive制限を接続する。pointerのchrome DOWN-UP dispatchと既存検索入力は維持する。既存native回帰を拡張し、保存制限解除後の通常検索移動も確認する。
+
+### 検索終了後zoomの検証前提
+
+既存SemanticNavigationTestは検索終了後のnative IME非表示/inset0とCanvas bounds安定を観測してから同じzoom actionを行う。Canvas resizeによるanimation終了は変更せず、fixtureの通常操作前提を先に確認する。期待倍率・native accessibility oracle・wait上限は維持し、失敗時の現在zoomを診断する。

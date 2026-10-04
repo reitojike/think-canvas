@@ -69,3 +69,11 @@ read-only family checkpointはMainの各照会/継続とCanvas chrome/navigation
 - search/save/deferred tool: XML SHA256 `8F60EBD7AD60DE28744F65F044603641F29D690EAE20A01E568C2905EAFD8410`。Running中の検索callbackでfocus/content不変、Idle後は同callbackで通常移動でき、Deferred中の検索/toolを完了後にpreviewへ進める。
 
 最終read-only convergeはT029/T030を含む有限surfaceで新規実装残差0。T018〜T020は新headのCI/review/merge/Issue完了待ち。
+
+## CIの検索終了/zoom fixture補正
+
+補正head `bd4e34599c8f337d9cf997895cddc4bef2e37b2d` のCI37211169235はbasic成功、fresh native183/183で182成功/1失敗。欠落/extra/重複/error/skip0、XML SHA256 `D04CB4543B4AF51DD9DAFD5ABAFE091755BF9F7F7148F7F7819F8DFF6756B7E2`。#79追加29件は全成功。唯一の失敗は既存SemanticNavigationTestの検索終了後の25%表示待ち。
+
+read-only family checkpointで検索/IME/layout/viewport animationとnative oracleを照合し、追加1roundはT031のfixture前提観測へ限定した。検索終了後のnative IME非表示/inset0とCanvas bounds安定を確認し、同じzoom actionと期待倍率、本文非表示、囲みfocus、保存不変、待機上限を維持する。失敗logにはIME終了があるがanimation中断を直接観測していないため、製品コードを推測で変更しない。
+
+補正focusedは1件、失敗/error/skip0、sourceUnchanged=true、manual intervention0、FRESH_EXACT_XML。XML SHA256 `2DE69B7586292087D84163998E2F0E46702681B815F7F4AFEAC33F2CDAA89315`。local lint/unit161/debug/test APK build成功、schema3 SHA256は上記と一致。新headの必須CI/canonicalとdeliveryは実証待ち。
