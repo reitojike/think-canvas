@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="1" failures="0" errors="0" skipped="0" time="0.000" timestamp="2026-10-04T00:06:35" hostname="localhost">
+  <testsuite name="com.thinkcanvas.canvas.EdgeAutoPanTest" tests="1" failures="0" errors="0" skipped="0" time="29.522" timestamp="2026-10-04T00:06:35" hostname="localhost">
+    <properties>
+      <property name="device" value="_app_pixel9Api37DebugAndroidTest" />
+    </properties>
+    <testcase name="multiSelectionTranslatesTextShapeAndFreeArrowTogether" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="29.522" />
+  </testsuite>
+</testsuites>

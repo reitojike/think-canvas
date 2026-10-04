@@ -1,0 +1,748 @@
+{
+  "schema": "think-canvas.issue78.durable-evidence",
+  "version": 1,
+  "generatedAtUtc": "2026-10-04T01:48:12.668032Z",
+  "repository": "reitojike/think-canvas",
+  "issue": 78,
+  "featurePr": 87,
+  "diagnosticPr": 89,
+  "evidenceBranch": "evidence/issue-78-postmerge-failure",
+  "annotatedTag": "issue-78-evidence-20261004",
+  "historicalBaseline": {
+    "sha": "d33ed2e7b6a5242c5821169c642e169a882c1b52",
+    "tree": "1179dc2220d0ac7bae5c9c7bbdf8c4af8c7c799f"
+  },
+  "diagnosticBase": {
+    "sha": "343cb7d659073f98103c999c87d8b41de39eb1fb",
+    "tree": "557cd6dae0abad1a5e981483171b7db7d3018d1e"
+  },
+  "diagnosticHead": {
+    "sha": "ccbf58378163fa59bd4b7949378791cf4a0683bd",
+    "tree": "3cb97036ed142d7f62f30421bf1e61e4e2f9f76b"
+  },
+  "diagnosticActualCheckout": {
+    "sha": "fa7fdc5dc2328cdf58ba1c8b29a831aa484dc076",
+    "tree": "3cb97036ed142d7f62f30421bf1e61e4e2f9f76b"
+  },
+  "runs": [
+    {
+      "label": "success",
+      "runId": 37138090347,
+      "jobId": 111246643214,
+      "artifactId": 11279573054,
+      "attempt": 1,
+      "event": "pull_request",
+      "headSha": "0d3b8cd82ef12ba76e1f9790fd5f4d9db83d935b",
+      "headBranch": "codex/issue-78-edge-auto-pan",
+      "createdAt": "2026-10-03T16:46:30Z",
+      "updatedAt": "2026-10-03T17:02:35Z",
+      "jobConclusion": "success",
+      "artifactDigest": "sha256:81a7c8191c64231d07073277ddf0cbc432ae23693f67c1cefba234eea5a6d8b0",
+      "artifactExpiresAt": "2026-10-10T17:02:29Z",
+      "testcaseIdentity": "com.thinkcanvas.canvas.EdgeAutoPanTest#multiSelectionTranslatesTextShapeAndFreeArrowTogether",
+      "resultCounts": [
+        128,
+        0,
+        0,
+        0
+      ],
+      "originalArchive": "original-artifacts/37138090347-artifact-11279573054.zip",
+      "extractedFiles": [
+        "extracted-authority/success/TEST-pixel9Api37.xml",
+        "extracted-authority/success/target.logcat"
+      ]
+    },
+    {
+      "label": "failure",
+      "runId": 37139666885,
+      "jobId": 111251296527,
+      "artifactId": 11280401281,
+      "attempt": 1,
+      "event": "push",
+      "headSha": "d33ed2e7b6a5242c5821169c642e169a882c1b52",
+      "headBranch": "main",
+      "createdAt": "2026-10-03T17:12:35Z",
+      "updatedAt": "2026-10-03T17:30:37Z",
+      "jobConclusion": "failure",
+      "artifactDigest": "sha256:60c6e9a25d89a80d9a4ec1c6d3b67d8b3bf3ab89a98ee6d708b1e03499cfbde8",
+      "artifactExpiresAt": "2026-10-10T17:30:31Z",
+      "testcaseIdentity": "com.thinkcanvas.canvas.EdgeAutoPanTest#multiSelectionTranslatesTextShapeAndFreeArrowTogether",
+      "resultCounts": [
+        128,
+        1,
+        0,
+        0
+      ],
+      "originalArchive": "original-artifacts/37139666885-artifact-11280401281.zip",
+      "extractedFiles": [
+        "extracted-authority/failure/TEST-pixel9Api37.xml",
+        "extracted-authority/failure/target.logcat"
+      ]
+    },
+    {
+      "label": "diagnostic",
+      "runId": 37163627134,
+      "jobId": 111321993654,
+      "artifactId": 11288119741,
+      "attempt": 1,
+      "event": "pull_request",
+      "headSha": "ccbf58378163fa59bd4b7949378791cf4a0683bd",
+      "headBranch": "codex/issue-78-postmerge-diagnostic-observation",
+      "createdAt": "2026-10-04T00:01:40Z",
+      "updatedAt": "2026-10-04T00:06:44Z",
+      "jobConclusion": "success",
+      "artifactDigest": "sha256:d2479e32b65b3f624434011a4b1730041109fe94c9fb4a1397f5bc022536f2a5",
+      "artifactExpiresAt": "2026-10-11T00:06:38Z",
+      "testcaseIdentity": "com.thinkcanvas.canvas.EdgeAutoPanTest#multiSelectionTranslatesTextShapeAndFreeArrowTogether",
+      "resultCounts": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "originalArchive": "original-artifacts/37163627134-artifact-11288119741.zip",
+      "extractedFiles": [
+        "extracted-authority/diagnostic/TEST-pixel9Api37.xml",
+        "extracted-authority/diagnostic/target.logcat",
+        "extracted-authority/diagnostic/edge-auto-pan-observation.jsonl",
+        "extracted-authority/diagnostic/selector-gate.json",
+        "extracted-authority/diagnostic/pre-gmd-census.txt",
+        "extracted-authority/diagnostic/post-gmd-census.txt",
+        "extracted-authority/diagnostic/01-edge-entered.png",
+        "extracted-authority/diagnostic/02-preview-observed.png",
+        "extracted-authority/diagnostic/03-up-immediate.png",
+        "extracted-authority/diagnostic/04-up-plus-3-frames.png",
+        "extracted-authority/diagnostic/05-save-complete.png"
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "sha": "d33ed2e7b6a5242c5821169c642e169a882c1b52",
+      "parents": [
+        "d56c0980014bce1e30c615e3e9c7051e1a8c42ca",
+        "0d3b8cd82ef12ba76e1f9790fd5f4d9db83d935b"
+      ],
+      "tree": "1179dc2220d0ac7bae5c9c7bbdf8c4af8c7c799f"
+    },
+    {
+      "sha": "343cb7d659073f98103c999c87d8b41de39eb1fb",
+      "parents": [
+        "d33ed2e7b6a5242c5821169c642e169a882c1b52"
+      ],
+      "tree": "557cd6dae0abad1a5e981483171b7db7d3018d1e"
+    },
+    {
+      "sha": "ccbf58378163fa59bd4b7949378791cf4a0683bd",
+      "parents": [
+        "343cb7d659073f98103c999c87d8b41de39eb1fb"
+      ],
+      "tree": "3cb97036ed142d7f62f30421bf1e61e4e2f9f76b"
+    },
+    {
+      "sha": "fa7fdc5dc2328cdf58ba1c8b29a831aa484dc076",
+      "parents": [
+        "343cb7d659073f98103c999c87d8b41de39eb1fb",
+        "ccbf58378163fa59bd4b7949378791cf4a0683bd"
+      ],
+      "tree": "3cb97036ed142d7f62f30421bf1e61e4e2f9f76b"
+    },
+    {
+      "sha": "22e1f99b830d55c501e247272c75b0dc7b275d2f",
+      "parents": [
+        "d56c0980014bce1e30c615e3e9c7051e1a8c42ca",
+        "0d3b8cd82ef12ba76e1f9790fd5f4d9db83d935b"
+      ],
+      "tree": "1179dc2220d0ac7bae5c9c7bbdf8c4af8c7c799f"
+    }
+  ],
+  "testcaseIdentity": "com.thinkcanvas.canvas.EdgeAutoPanTest#multiSelectionTranslatesTextShapeAndFreeArrowTogether",
+  "classificationHistory": [
+    "POST_MERGE_TEST_FLAKE_UNKNOWN",
+    "ADDITIONAL_OBSERVATION_LOW_VALUE",
+    "NON_REPRODUCIBLE_POST_MERGE_TEST_FAILURE"
+  ],
+  "rootCause": "unconfirmed",
+  "correction": "none justified",
+  "reopenCriteriaReference": "https://github.com/reitojike/think-canvas/issues/78#issuecomment-5975437356",
+  "issueCloseStatus": "pending preservation gate; this archive does not close the Issue",
+  "selectedCommentIds": [
+    5971536596,
+    5974636978,
+    5974679075,
+    5974895079,
+    5975226300,
+    5975437356
+  ],
+  "hashConvention": {
+    "algorithm": "SHA256",
+    "fileHashes": "exact archived bytes",
+    "manifestSelfHash": "recorded in SHA256SUMS.txt; excluded from manifest file-hash records to avoid circularity",
+    "checksumFileSelfHash": "recorded in post-readback Issue index"
+  },
+  "files": [
+    {
+      "relativePath": ".gitattributes",
+      "bytes": 23,
+      "sha256": "aca07970df50b15cddb5333b18259deb2a0c6efb48c494c55a7dfdb37fcba5a5",
+      "expectedSha256": null,
+      "source": "archive-local byte-preserving Git attributes, no LFS/filter",
+      "retrievalRepresentation": "new preservation-only file",
+      "actualSha256": "aca07970df50b15cddb5333b18259deb2a0c6efb48c494c55a7dfdb37fcba5a5"
+    },
+    {
+      "relativePath": "README.md",
+      "bytes": 3792,
+      "sha256": "70426cf284abf66b25cbb6560b5ba8961732c4286976330fd9c435843cabfa2f",
+      "expectedSha256": null,
+      "source": {
+        "generatedFor": "Issue #78 durable preservation contract"
+      },
+      "retrievalRepresentation": "new Japanese evidence index, not a root-cause conclusion",
+      "actualSha256": "70426cf284abf66b25cbb6560b5ba8961732c4286976330fd9c435843cabfa2f"
+    },
+    {
+      "relativePath": "SENSITIVE_CONTENT_CENSUS.json",
+      "bytes": 582,
+      "sha256": "0ad2cd8379a47fdea72d1e5ac9ac494189e84153e9aecf62bc85cf195761f219",
+      "expectedSha256": null,
+      "source": "bounded precommit archive/ZIP member scan; final regenerated files are rescanned before commit",
+      "retrievalRepresentation": "new preservation-only file",
+      "actualSha256": "0ad2cd8379a47fdea72d1e5ac9ac494189e84153e9aecf62bc85cf195761f219"
+    },
+    {
+      "relativePath": "VERIFY_ARCHIVE.py",
+      "bytes": 4601,
+      "sha256": "df3040e01da5724684ab263577ac6138d488e43b2a5fd8244a8753cff6300581",
+      "expectedSha256": null,
+      "source": "stdlib-only integrity verifier; no product/test execution or network",
+      "retrievalRepresentation": "new preservation-only file",
+      "actualSha256": "df3040e01da5724684ab263577ac6138d488e43b2a5fd8244a8753cff6300581"
+    },
+    {
+      "relativePath": "diagnostic-source/commits.txt",
+      "bytes": 9649,
+      "sha256": "3f12ea1cf90320859270deef3fb66dd649126fa48beabebb034b0504cd332cd8",
+      "expectedSha256": null,
+      "source": {
+        "commits": [
+          {
+            "sha": "d33ed2e7b6a5242c5821169c642e169a882c1b52",
+            "parents": [
+              "d56c0980014bce1e30c615e3e9c7051e1a8c42ca",
+              "0d3b8cd82ef12ba76e1f9790fd5f4d9db83d935b"
+            ],
+            "tree": "1179dc2220d0ac7bae5c9c7bbdf8c4af8c7c799f"
+          },
+          {
+            "sha": "343cb7d659073f98103c999c87d8b41de39eb1fb",
+            "parents": [
+              "d33ed2e7b6a5242c5821169c642e169a882c1b52"
+            ],
+            "tree": "557cd6dae0abad1a5e981483171b7db7d3018d1e"
+          },
+          {
+            "sha": "ccbf58378163fa59bd4b7949378791cf4a0683bd",
+            "parents": [
+              "343cb7d659073f98103c999c87d8b41de39eb1fb"
+            ],
+            "tree": "3cb97036ed142d7f62f30421bf1e61e4e2f9f76b"
+          },
+          {
+            "sha": "fa7fdc5dc2328cdf58ba1c8b29a831aa484dc076",
+            "parents": [
+              "343cb7d659073f98103c999c87d8b41de39eb1fb",
+              "ccbf58378163fa59bd4b7949378791cf4a0683bd"
+            ],
+            "tree": "3cb97036ed142d7f62f30421bf1e61e4e2f9f76b"
+          },
+          {
+            "sha": "22e1f99b830d55c501e247272c75b0dc7b275d2f",
+            "parents": [
+              "d56c0980014bce1e30c615e3e9c7051e1a8c42ca",
+              "0d3b8cd82ef12ba76e1f9790fd5f4d9db83d935b"
+            ],
+            "tree": "1179dc2220d0ac7bae5c9c7bbdf8c4af8c7c799f"
+          }
+        ]
+      },
+      "retrievalRepresentation": "Git pretty metadata/stat outputs plus GitHub synthetic-commit metadata; exact recorded tree comparison",
+      "actualSha256": "3f12ea1cf90320859270deef3fb66dd649126fa48beabebb034b0504cd332cd8"
+    },
+    {
+      "relativePath": "diagnostic-source/diagnostic-base.patch",
+      "bytes": 5828,
+      "sha256": "869cd138b71eab42867c438863335dee66aec798ce042d61ef97f9fee2145ff1",
+      "expectedSha256": null,
+      "source": {
+        "fromCommit": "d33ed2e7b6a5242c5821169c642e169a882c1b52",
+        "toCommit": "343cb7d659073f98103c999c87d8b41de39eb1fb"
+      },
+      "retrievalRepresentation": "git diff --binary --full-index --no-ext-diff --no-textconv stdout; native-byte redirection",
+      "actualSha256": "869cd138b71eab42867c438863335dee66aec798ce042d61ef97f9fee2145ff1"
+    },
+    {
+      "relativePath": "diagnostic-source/diagnostic-observation.patch",
+      "bytes": 29291,
+      "sha256": "baecd46ed855df05c56fc11c4ef1188e2be3ff4dfb3405bbd8780bc81b1936ba",
+      "expectedSha256": null,
+      "source": {
+        "fromCommit": "343cb7d659073f98103c999c87d8b41de39eb1fb",
+        "toCommit": "ccbf58378163fa59bd4b7949378791cf4a0683bd"
+      },
+      "retrievalRepresentation": "git diff --binary --full-index --no-ext-diff --no-textconv stdout; native-byte redirection",
+      "actualSha256": "baecd46ed855df05c56fc11c4ef1188e2be3ff4dfb3405bbd8780bc81b1936ba"
+    },
+    {
+      "relativePath": "extracted-authority/diagnostic/01-edge-entered.png",
+      "bytes": 74208,
+      "sha256": "fc9a15d488822d7bad0150b0bcf4f165dd8304191c9eaa8e85176ff438c36f12",
+      "expectedSha256": "fc9a15d488822d7bad0150b0bcf4f165dd8304191c9eaa8e85176ff438c36f12",
+      "source": {
+        "originalArchive": "original-artifacts/37163627134-artifact-11288119741.zip",
+        "zipMember": "app/build/intermediates/managed_device_android_test_additional_output/debugAndroidTest/pixel9Api37DebugAndroidTest/01-edge-entered.png"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "fc9a15d488822d7bad0150b0bcf4f165dd8304191c9eaa8e85176ff438c36f12"
+    },
+    {
+      "relativePath": "extracted-authority/diagnostic/02-preview-observed.png",
+      "bytes": 74197,
+      "sha256": "ca1a7852e43d283069da68ff701d4c9f8963b0fb18aabbbaacd914c26219b6a5",
+      "expectedSha256": "ca1a7852e43d283069da68ff701d4c9f8963b0fb18aabbbaacd914c26219b6a5",
+      "source": {
+        "originalArchive": "original-artifacts/37163627134-artifact-11288119741.zip",
+        "zipMember": "app/build/intermediates/managed_device_android_test_additional_output/debugAndroidTest/pixel9Api37DebugAndroidTest/02-preview-observed.png"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "ca1a7852e43d283069da68ff701d4c9f8963b0fb18aabbbaacd914c26219b6a5"
+    },
+    {
+      "relativePath": "extracted-authority/diagnostic/03-up-immediate.png",
+      "bytes": 74197,
+      "sha256": "ca1a7852e43d283069da68ff701d4c9f8963b0fb18aabbbaacd914c26219b6a5",
+      "expectedSha256": "ca1a7852e43d283069da68ff701d4c9f8963b0fb18aabbbaacd914c26219b6a5",
+      "source": {
+        "originalArchive": "original-artifacts/37163627134-artifact-11288119741.zip",
+        "zipMember": "app/build/intermediates/managed_device_android_test_additional_output/debugAndroidTest/pixel9Api37DebugAndroidTest/03-up-immediate.png"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "ca1a7852e43d283069da68ff701d4c9f8963b0fb18aabbbaacd914c26219b6a5"
+    },
+    {
+      "relativePath": "extracted-authority/diagnostic/04-up-plus-3-frames.png",
+      "bytes": 72134,
+      "sha256": "a719bf31a5ae366bf64009f5f139d503e8f1e6cecf3c5b4daa6223bd74ea0ac7",
+      "expectedSha256": "a719bf31a5ae366bf64009f5f139d503e8f1e6cecf3c5b4daa6223bd74ea0ac7",
+      "source": {
+        "originalArchive": "original-artifacts/37163627134-artifact-11288119741.zip",
+        "zipMember": "app/build/intermediates/managed_device_android_test_additional_output/debugAndroidTest/pixel9Api37DebugAndroidTest/04-up-plus-3-frames.png"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "a719bf31a5ae366bf64009f5f139d503e8f1e6cecf3c5b4daa6223bd74ea0ac7"
+    },
+    {
+      "relativePath": "extracted-authority/diagnostic/05-save-complete.png",
+      "bytes": 72134,
+      "sha256": "a719bf31a5ae366bf64009f5f139d503e8f1e6cecf3c5b4daa6223bd74ea0ac7",
+      "expectedSha256": "a719bf31a5ae366bf64009f5f139d503e8f1e6cecf3c5b4daa6223bd74ea0ac7",
+      "source": {
+        "originalArchive": "original-artifacts/37163627134-artifact-11288119741.zip",
+        "zipMember": "app/build/intermediates/managed_device_android_test_additional_output/debugAndroidTest/pixel9Api37DebugAndroidTest/05-save-complete.png"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "a719bf31a5ae366bf64009f5f139d503e8f1e6cecf3c5b4daa6223bd74ea0ac7"
+    },
+    {
+      "relativePath": "extracted-authority/diagnostic/TEST-pixel9Api37.xml",
+      "bytes": 619,
+      "sha256": "362b26a2ab19c4ed5612b8cc6209757686b7ab4fefcced0349564c634b7e70b2",
+      "expectedSha256": "362b26a2ab19c4ed5612b8cc6209757686b7ab4fefcced0349564c634b7e70b2",
+      "source": {
+        "originalArchive": "original-artifacts/37163627134-artifact-11288119741.zip",
+        "zipMember": "app/build/outputs/androidTest-results/managedDevice/debug/pixel9Api37/TEST-pixel9Api37.xml"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "362b26a2ab19c4ed5612b8cc6209757686b7ab4fefcced0349564c634b7e70b2"
+    },
+    {
+      "relativePath": "extracted-authority/diagnostic/edge-auto-pan-observation.jsonl",
+      "bytes": 306099,
+      "sha256": "26e7c1cfb6bda959bd57cf011fac5f34b50cdee2a86ea972144864a20297a016",
+      "expectedSha256": "26e7c1cfb6bda959bd57cf011fac5f34b50cdee2a86ea972144864a20297a016",
+      "source": {
+        "originalArchive": "original-artifacts/37163627134-artifact-11288119741.zip",
+        "zipMember": "app/build/intermediates/managed_device_android_test_additional_output/debugAndroidTest/pixel9Api37DebugAndroidTest/edge-auto-pan-observation.jsonl"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "26e7c1cfb6bda959bd57cf011fac5f34b50cdee2a86ea972144864a20297a016"
+    },
+    {
+      "relativePath": "extracted-authority/diagnostic/post-gmd-census.txt",
+      "bytes": 683,
+      "sha256": "096eccf58727a4ab6f1a027261c2c81ce2a785b2bd5d2179717c43ccaea0df8d",
+      "expectedSha256": null,
+      "source": {
+        "originalArchive": "original-artifacts/37163627134-artifact-11288119741.zip",
+        "zipMember": "diagnostic-output/environment-after.txt"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "096eccf58727a4ab6f1a027261c2c81ce2a785b2bd5d2179717c43ccaea0df8d"
+    },
+    {
+      "relativePath": "extracted-authority/diagnostic/pre-gmd-census.txt",
+      "bytes": 3468,
+      "sha256": "6f409bb350de68406742c27a4f147781ef5ed51c17936c6beccd87e106a5f582",
+      "expectedSha256": null,
+      "source": {
+        "originalArchive": "original-artifacts/37163627134-artifact-11288119741.zip",
+        "zipMember": "diagnostic-output/environment-before.txt"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "6f409bb350de68406742c27a4f147781ef5ed51c17936c6beccd87e106a5f582"
+    },
+    {
+      "relativePath": "extracted-authority/diagnostic/selector-gate.json",
+      "bytes": 304,
+      "sha256": "f2bdc3433743768dafe5cee2171108594181e2de1579e47b5dbb0039e6a27fc3",
+      "expectedSha256": null,
+      "source": {
+        "originalArchive": "original-artifacts/37163627134-artifact-11288119741.zip",
+        "zipMember": "diagnostic-output/selector-gate.json"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "f2bdc3433743768dafe5cee2171108594181e2de1579e47b5dbb0039e6a27fc3"
+    },
+    {
+      "relativePath": "extracted-authority/diagnostic/target.logcat",
+      "bytes": 1833543,
+      "sha256": "122cc1a267995133ebb57fe03732e2be1668f3d87dfce9a8359ba5cada78c234",
+      "expectedSha256": "122cc1a267995133ebb57fe03732e2be1668f3d87dfce9a8359ba5cada78c234",
+      "source": {
+        "originalArchive": "original-artifacts/37163627134-artifact-11288119741.zip",
+        "zipMember": "app/build/outputs/androidTest-results/managedDevice/debug/pixel9Api37/logcat-com.thinkcanvas.canvas.EdgeAutoPanTest-multiSelectionTranslatesTextShapeAndFreeArrowTogether.txt"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "122cc1a267995133ebb57fe03732e2be1668f3d87dfce9a8359ba5cada78c234"
+    },
+    {
+      "relativePath": "extracted-authority/failure/TEST-pixel9Api37.xml",
+      "bytes": 23194,
+      "sha256": "8fc141700848028ddddbec5e8121e25db02fc1ae62d0c2799115dd1f949b8b5c",
+      "expectedSha256": "8fc141700848028ddddbec5e8121e25db02fc1ae62d0c2799115dd1f949b8b5c",
+      "source": {
+        "originalArchive": "original-artifacts/37139666885-artifact-11280401281.zip",
+        "zipMember": "outputs/androidTest-results/managedDevice/debug/pixel9Api37/TEST-pixel9Api37.xml"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "8fc141700848028ddddbec5e8121e25db02fc1ae62d0c2799115dd1f949b8b5c"
+    },
+    {
+      "relativePath": "extracted-authority/failure/target.logcat",
+      "bytes": 53495,
+      "sha256": "517aadbbe2857be6ce46b896dd92c331db553af3bad4078767dcd7a5d0d15e29",
+      "expectedSha256": "517aadbbe2857be6ce46b896dd92c331db553af3bad4078767dcd7a5d0d15e29",
+      "source": {
+        "originalArchive": "original-artifacts/37139666885-artifact-11280401281.zip",
+        "zipMember": "outputs/androidTest-results/managedDevice/debug/pixel9Api37/logcat-com.thinkcanvas.canvas.EdgeAutoPanTest-multiSelectionTranslatesTextShapeAndFreeArrowTogether.txt"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "517aadbbe2857be6ce46b896dd92c331db553af3bad4078767dcd7a5d0d15e29"
+    },
+    {
+      "relativePath": "extracted-authority/success/TEST-pixel9Api37.xml",
+      "bytes": 22366,
+      "sha256": "2f21941440513959e542f4cf9dce44d05cc1244862b742d63907d8e34ace655b",
+      "expectedSha256": "2f21941440513959e542f4cf9dce44d05cc1244862b742d63907d8e34ace655b",
+      "source": {
+        "originalArchive": "original-artifacts/37138090347-artifact-11279573054.zip",
+        "zipMember": "outputs/androidTest-results/managedDevice/debug/pixel9Api37/TEST-pixel9Api37.xml"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "2f21941440513959e542f4cf9dce44d05cc1244862b742d63907d8e34ace655b"
+    },
+    {
+      "relativePath": "extracted-authority/success/target.logcat",
+      "bytes": 61178,
+      "sha256": "f239ff4f5ac44dc81d6c0bf901cb51267e42c1d359ec0e92875e81515b83dc7e",
+      "expectedSha256": "f239ff4f5ac44dc81d6c0bf901cb51267e42c1d359ec0e92875e81515b83dc7e",
+      "source": {
+        "originalArchive": "original-artifacts/37138090347-artifact-11279573054.zip",
+        "zipMember": "outputs/androidTest-results/managedDevice/debug/pixel9Api37/logcat-com.thinkcanvas.canvas.EdgeAutoPanTest-multiSelectionTranslatesTextShapeAndFreeArrowTogether.txt"
+      },
+      "retrievalRepresentation": "exact uncompressed ZIP member bytes; convenient filename alias with provenance retained",
+      "actualSha256": "f239ff4f5ac44dc81d6c0bf901cb51267e42c1d359ec0e92875e81515b83dc7e"
+    },
+    {
+      "relativePath": "github/artifacts/11279573054.metadata.json",
+      "bytes": 724,
+      "sha256": "548a99c08cd1ee9654453b530a13b23c43ce140621829f1026951ee6cd2732d1",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/artifacts/11279573054",
+      "retrievalRepresentation": "gh api JSON stdout, fresh native-byte redirection",
+      "actualSha256": "548a99c08cd1ee9654453b530a13b23c43ce140621829f1026951ee6cd2732d1"
+    },
+    {
+      "relativePath": "github/artifacts/11280401281.metadata.json",
+      "bytes": 700,
+      "sha256": "5350530ec87adc9288e325ab80d09d583844b0686199e8afc11eb509ba8fd0c6",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/artifacts/11280401281",
+      "retrievalRepresentation": "gh api JSON stdout, fresh native-byte redirection",
+      "actualSha256": "5350530ec87adc9288e325ab80d09d583844b0686199e8afc11eb509ba8fd0c6"
+    },
+    {
+      "relativePath": "github/artifacts/11288119741.metadata.json",
+      "bytes": 747,
+      "sha256": "55b31478a45f2f749fc99521325173989379ec037b4c6eeb9d0414cc6d4940d8",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/artifacts/11288119741",
+      "retrievalRepresentation": "gh api JSON stdout, fresh native-byte redirection",
+      "actualSha256": "55b31478a45f2f749fc99521325173989379ec037b4c6eeb9d0414cc6d4940d8"
+    },
+    {
+      "relativePath": "github/commits/22e1f99b830d55c501e247272c75b0dc7b275d2f.json",
+      "bytes": 2683,
+      "sha256": "8c8d0a19f7367c64da81fac61e1655bd5ba90ff503b23b0068da92ab91317b37",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/git/commits/22e1f99b830d55c501e247272c75b0dc7b275d2f",
+      "retrievalRepresentation": "fresh GitHub git commit metadata",
+      "actualSha256": "8c8d0a19f7367c64da81fac61e1655bd5ba90ff503b23b0068da92ab91317b37"
+    },
+    {
+      "relativePath": "github/commits/fa7fdc5dc2328cdf58ba1c8b29a831aa484dc076.json",
+      "bytes": 2683,
+      "sha256": "bb4a0928e0781efb1e625e61d19e65603d68fe8c14925daa19be5c0ca0001bb3",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/git/commits/fa7fdc5dc2328cdf58ba1c8b29a831aa484dc076",
+      "retrievalRepresentation": "fresh GitHub git commit metadata",
+      "actualSha256": "bb4a0928e0781efb1e625e61d19e65603d68fe8c14925daa19be5c0ca0001bb3"
+    },
+    {
+      "relativePath": "github/issue-78-authority.json",
+      "bytes": 7838,
+      "sha256": "5f69f9d84f0c687ba285345d9751e761d2a02cf18b13242085f0329dc3a9ef82",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/issues/78",
+      "retrievalRepresentation": "gh api JSON stdout, fresh native-byte redirection",
+      "actualSha256": "5f69f9d84f0c687ba285345d9751e761d2a02cf18b13242085f0329dc3a9ef82"
+    },
+    {
+      "relativePath": "github/jobs/111246643214.log",
+      "bytes": 63565,
+      "sha256": "e4179592e12bbb7fd2985b092422243dee53522a8b2e7fbd4adf763398b6fb9c",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/jobs/111246643214/logs",
+      "retrievalRepresentation": "gh api --allow-escape-sequences raw body stdout; PowerShell 7.6.5 native-byte redirection; no text normalization; byte-equal to prior retrieval",
+      "actualSha256": "e4179592e12bbb7fd2985b092422243dee53522a8b2e7fbd4adf763398b6fb9c"
+    },
+    {
+      "relativePath": "github/jobs/111246643214.metadata.json",
+      "bytes": 3352,
+      "sha256": "caf0ff8b02592b1b2fa6f90c7fc18abf2690c23e02d944ee4637c2f48dc7c379",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/jobs/111246643214",
+      "retrievalRepresentation": "gh api JSON stdout, fresh native-byte redirection",
+      "actualSha256": "caf0ff8b02592b1b2fa6f90c7fc18abf2690c23e02d944ee4637c2f48dc7c379"
+    },
+    {
+      "relativePath": "github/jobs/111251296527.log",
+      "bytes": 64076,
+      "sha256": "f1751fde65df5e3b6a26178dfd2ae753066fd6bfdae96b0d08856f1449c6159c",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/jobs/111251296527/logs",
+      "retrievalRepresentation": "gh api --allow-escape-sequences raw body stdout; PowerShell 7.6.5 native-byte redirection; no text normalization; byte-equal to prior retrieval",
+      "actualSha256": "f1751fde65df5e3b6a26178dfd2ae753066fd6bfdae96b0d08856f1449c6159c"
+    },
+    {
+      "relativePath": "github/jobs/111251296527.metadata.json",
+      "bytes": 3328,
+      "sha256": "b61114f2289b244ae59896723971f7c93e0ab7a7d6ec31e48003c910dd293cf4",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/jobs/111251296527",
+      "retrievalRepresentation": "gh api JSON stdout, fresh native-byte redirection",
+      "actualSha256": "b61114f2289b244ae59896723971f7c93e0ab7a7d6ec31e48003c910dd293cf4"
+    },
+    {
+      "relativePath": "github/jobs/111321993654.log",
+      "bytes": 67953,
+      "sha256": "68a28209dddec54f56b5965264740c5a08767b160ca3249eebe377ea9582aa37",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/jobs/111321993654/logs",
+      "retrievalRepresentation": "gh api --allow-escape-sequences raw body stdout; PowerShell 7.6.5 native-byte redirection; no text normalization; byte-equal to prior retrieval",
+      "actualSha256": "68a28209dddec54f56b5965264740c5a08767b160ca3249eebe377ea9582aa37"
+    },
+    {
+      "relativePath": "github/jobs/111321993654.metadata.json",
+      "bytes": 3576,
+      "sha256": "250bdf78547611352bc68170a0cc2072edffc5080cd668270807a5e7d2246507",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/jobs/111321993654",
+      "retrievalRepresentation": "gh api JSON stdout, fresh native-byte redirection",
+      "actualSha256": "250bdf78547611352bc68170a0cc2072edffc5080cd668270807a5e7d2246507"
+    },
+    {
+      "relativePath": "github/pr-87.json",
+      "bytes": 20495,
+      "sha256": "5fbc2540ed2bdc95b8170570e34edbdcbd14e08394b1551232ab3b0a891b8529",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/pulls/87",
+      "retrievalRepresentation": "gh api JSON stdout, fresh native-byte redirection",
+      "actualSha256": "5fbc2540ed2bdc95b8170570e34edbdcbd14e08394b1551232ab3b0a891b8529"
+    },
+    {
+      "relativePath": "github/pr-89.json",
+      "bytes": 18498,
+      "sha256": "0e24da5ffacbe6fa810cf14e1c04cf46fa3a00204337c4eb671201ba5fdfc781",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/pulls/89",
+      "retrievalRepresentation": "gh api JSON stdout, fresh native-byte redirection",
+      "actualSha256": "0e24da5ffacbe6fa810cf14e1c04cf46fa3a00204337c4eb671201ba5fdfc781"
+    },
+    {
+      "relativePath": "github/runs/37138090347.json",
+      "bytes": 12586,
+      "sha256": "c8489b04f6c75b5c63e868b1ea2938c46c987ca8abf1b13c1c61b6f2a3d92884",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/runs/37138090347",
+      "retrievalRepresentation": "gh api JSON stdout, fresh native-byte redirection",
+      "actualSha256": "c8489b04f6c75b5c63e868b1ea2938c46c987ca8abf1b13c1c61b6f2a3d92884"
+    },
+    {
+      "relativePath": "github/runs/37139666885.json",
+      "bytes": 12604,
+      "sha256": "32c20d8cccc99f410923081d89d2f2b6bd4b70d9d63aa546cd7b03b89673d1be",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/runs/37139666885",
+      "retrievalRepresentation": "gh api JSON stdout, fresh native-byte redirection",
+      "actualSha256": "32c20d8cccc99f410923081d89d2f2b6bd4b70d9d63aa546cd7b03b89673d1be"
+    },
+    {
+      "relativePath": "github/runs/37163627134.json",
+      "bytes": 13176,
+      "sha256": "8fb2aec623ef6db790ad257f67507b6957c837bf16b13025bf7ceb8a6af417f6",
+      "expectedSha256": null,
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/runs/37163627134",
+      "retrievalRepresentation": "gh api JSON stdout, fresh native-byte redirection",
+      "actualSha256": "8fb2aec623ef6db790ad257f67507b6957c837bf16b13025bf7ceb8a6af417f6"
+    },
+    {
+      "relativePath": "github/selected-issue-comments.json",
+      "bytes": 116598,
+      "sha256": "a933c8f545f6cdf23953155f3b9faa6057da8439b4586acb2166a862be96f20e",
+      "expectedSha256": null,
+      "source": [
+        "https://api.github.com/repos/reitojike/think-canvas/issues/comments/5971536596",
+        "https://api.github.com/repos/reitojike/think-canvas/issues/comments/5974636978",
+        "https://api.github.com/repos/reitojike/think-canvas/issues/comments/5974679075",
+        "https://api.github.com/repos/reitojike/think-canvas/issues/comments/5974895079",
+        "https://api.github.com/repos/reitojike/think-canvas/issues/comments/5975226300",
+        "https://api.github.com/repos/reitojike/think-canvas/issues/comments/5975437356"
+      ],
+      "retrievalRepresentation": "selected fresh API comment objects, UTF-8 JSON serialization; body content not edited",
+      "actualSha256": "a933c8f545f6cdf23953155f3b9faa6057da8439b4586acb2166a862be96f20e"
+    },
+    {
+      "relativePath": "original-artifacts/37138090347-artifact-11279573054.zip",
+      "bytes": 2289584,
+      "sha256": "81a7c8191c64231d07073277ddf0cbc432ae23693f67c1cefba234eea5a6d8b0",
+      "expectedSha256": "81a7c8191c64231d07073277ddf0cbc432ae23693f67c1cefba234eea5a6d8b0",
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/artifacts/11279573054/zip",
+      "retrievalRepresentation": "existing original downloaded ZIP reused only after digest equals fresh GitHub metadata; not recompressed",
+      "actualSha256": "81a7c8191c64231d07073277ddf0cbc432ae23693f67c1cefba234eea5a6d8b0"
+    },
+    {
+      "relativePath": "original-artifacts/37139666885-artifact-11280401281.zip",
+      "bytes": 2316167,
+      "sha256": "60c6e9a25d89a80d9a4ec1c6d3b67d8b3bf3ab89a98ee6d708b1e03499cfbde8",
+      "expectedSha256": "60c6e9a25d89a80d9a4ec1c6d3b67d8b3bf3ab89a98ee6d708b1e03499cfbde8",
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/artifacts/11280401281/zip",
+      "retrievalRepresentation": "existing original downloaded ZIP reused only after digest equals fresh GitHub metadata; not recompressed",
+      "actualSha256": "60c6e9a25d89a80d9a4ec1c6d3b67d8b3bf3ab89a98ee6d708b1e03499cfbde8"
+    },
+    {
+      "relativePath": "original-artifacts/37163627134-artifact-11288119741.zip",
+      "bytes": 631050,
+      "sha256": "d2479e32b65b3f624434011a4b1730041109fe94c9fb4a1397f5bc022536f2a5",
+      "expectedSha256": "d2479e32b65b3f624434011a4b1730041109fe94c9fb4a1397f5bc022536f2a5",
+      "source": "https://api.github.com/repos/reitojike/think-canvas/actions/artifacts/11288119741/zip",
+      "retrievalRepresentation": "existing original downloaded ZIP reused only after digest equals fresh GitHub metadata; not recompressed",
+      "actualSha256": "d2479e32b65b3f624434011a4b1730041109fe94c9fb4a1397f5bc022536f2a5"
+    }
+  ],
+  "allArchivedRelativePaths": [
+    ".gitattributes",
+    "MANIFEST.json",
+    "README.md",
+    "SENSITIVE_CONTENT_CENSUS.json",
+    "SHA256SUMS.txt",
+    "VERIFY_ARCHIVE.py",
+    "diagnostic-source/commits.txt",
+    "diagnostic-source/diagnostic-base.patch",
+    "diagnostic-source/diagnostic-observation.patch",
+    "extracted-authority/diagnostic/01-edge-entered.png",
+    "extracted-authority/diagnostic/02-preview-observed.png",
+    "extracted-authority/diagnostic/03-up-immediate.png",
+    "extracted-authority/diagnostic/04-up-plus-3-frames.png",
+    "extracted-authority/diagnostic/05-save-complete.png",
+    "extracted-authority/diagnostic/TEST-pixel9Api37.xml",
+    "extracted-authority/diagnostic/edge-auto-pan-observation.jsonl",
+    "extracted-authority/diagnostic/post-gmd-census.txt",
+    "extracted-authority/diagnostic/pre-gmd-census.txt",
+    "extracted-authority/diagnostic/selector-gate.json",
+    "extracted-authority/diagnostic/target.logcat",
+    "extracted-authority/failure/TEST-pixel9Api37.xml",
+    "extracted-authority/failure/target.logcat",
+    "extracted-authority/success/TEST-pixel9Api37.xml",
+    "extracted-authority/success/target.logcat",
+    "github/artifacts/11279573054.metadata.json",
+    "github/artifacts/11280401281.metadata.json",
+    "github/artifacts/11288119741.metadata.json",
+    "github/commits/22e1f99b830d55c501e247272c75b0dc7b275d2f.json",
+    "github/commits/fa7fdc5dc2328cdf58ba1c8b29a831aa484dc076.json",
+    "github/issue-78-authority.json",
+    "github/jobs/111246643214.log",
+    "github/jobs/111246643214.metadata.json",
+    "github/jobs/111251296527.log",
+    "github/jobs/111251296527.metadata.json",
+    "github/jobs/111321993654.log",
+    "github/jobs/111321993654.metadata.json",
+    "github/pr-87.json",
+    "github/pr-89.json",
+    "github/runs/37138090347.json",
+    "github/runs/37139666885.json",
+    "github/runs/37163627134.json",
+    "github/selected-issue-comments.json",
+    "original-artifacts/37138090347-artifact-11279573054.zip",
+    "original-artifacts/37139666885-artifact-11280401281.zip",
+    "original-artifacts/37163627134-artifact-11288119741.zip"
+  ],
+  "diagnosticPngNames": [
+    "01-edge-entered.png",
+    "02-preview-observed.png",
+    "03-up-immediate.png",
+    "04-up-plus-3-frames.png",
+    "05-save-complete.png"
+  ],
+  "sourceVerification": {
+    "expectedSourceDigestsMatched": true,
+    "originalZipCount": 3,
+    "exactExtractedMemberCopies": 15,
+    "diagnosticPatchReconstructedBaseAndHeadTrees": true
+  },
+  "sensitiveContentGate": {
+    "result": "PASS",
+    "report": "SENSITIVE_CONTENT_CENSUS.json",
+    "finalPrecommitRescanRequired": true
+  },
+  "sizeGate": {
+    "ordinaryGitObjectLimitBytes": 104857600,
+    "boundedArchiveUnexpectedSizeCeilingBytes": 26214400,
+    "noGitLfs": true
+  },
+  "archiveSize": {
+    "fileCount": 45,
+    "totalBytes": 8419010,
+    "maximumIndividualFileBytes": 2316167
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "result": "PASS",
+  "scope": "archive candidates only, including all original ZIP members; not unrelated security audit",
+  "archivedFilesScanned": 42,
+  "zipMembersScanned": 367,
+  "patterns": [
+    "GitHub PAT/token",
+    "OpenAI key",
+    "Authorization/Bearer/JWT",
+    "private key PEM",
+    "password/client secret/API key/access token assignments",
+    "unmasked .env",
+    "signed ChatGPT/OpenAI URLs"
+  ],
+  "maskedOutputAllowed": true,
+  "ordinaryPublicPathsUsernamesSdkDeviceMetadataAllowed": true,
+  "findings": [],
+  "reviewedReferencePlaceholderAssignments": []
+}

@@ -1,0 +1,26 @@
+census_phase=after_gmd
+
+SDK package: platform-tools
+Pkg.Revision=37.0.1
+
+SDK package: emulator
+Pkg.Revision=37.2.12
+Pkg.Path=emulator
+Pkg.Desc=Android Emulator
+
+SDK package: platforms/android-37.0
+Pkg.Desc=Android SDK Platform 17
+Pkg.Revision=2
+AndroidVersion.ApiLevel=37.0
+AndroidVersion.ExtensionLevel=22
+AndroidVersion.IsBaseSdk=true
+
+SDK package: system-images/android-37.0/google_apis/x86_64
+Pkg.Desc=System Image x86_64 with Google APIs.
+Pkg.Revision=6
+AndroidVersion.ApiLevel=37.0
+AndroidVersion.ExtensionLevel=22
+AndroidVersion.IsBaseSdk=true
+SystemImage.Abi=x86_64
+SystemImage.TagId=google_apis,ai_glasses_compatible
+SystemImage.TagDisplay=Google APIs,AI Glasses Compatible

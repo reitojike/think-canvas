@@ -1,0 +1,10 @@
+{
+  "valid": true,
+  "identities": [
+    "com.thinkcanvas.canvas.EdgeAutoPanTest#multiSelectionTranslatesTextShapeAndFreeArrowTogether"
+  ],
+  "xml_files": [
+    "app/build/outputs/androidTest-results/managedDevice/debug/pixel9Api37/TEST-pixel9Api37.xml"
+  ],
+  "classification": "SELECTOR_GATE_PASSED"
+}

@@ -1,0 +1,403 @@
+10-03 16:55:43.476  3276  3671 I TestRunner: started: multiSelectionTranslatesTextShapeAndFreeArrowTogether(com.thinkcanvas.canvas.EdgeAutoPanTest)
+10-03 16:55:43.476   631   763 W InputChannel-JNI: Channel already disposed.
+10-03 16:55:43.484  1606  1606 I GoogleInputMethodService: GoogleInputMethodService.onFinishInput():2259 
+10-03 16:55:43.484  1606  1606 I Module  : DeviceLockedStatusModuleProvider$Module.updateDeviceLockedStatus():103 repeatCheckTimes = 0, locked = false
+10-03 16:55:43.490  1606  1606 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1446 onStartInput(EditorInfo{EditorInfo{packageName=com.google.android.apps.nexuslauncher, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=0, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+10-03 16:55:43.490  1606  1606 I AndroidIME: LatinIMEBase.updateInputViewCoverNavigation():322 Update input view padding, isNavbarOverInputWindow=true, bottom inset=126
+10-03 16:55:43.490  1606  1606 I Module  : DeviceLockedStatusModuleProvider$Module.updateDeviceLockedStatus():103 repeatCheckTimes = 1, locked = false
+10-03 16:55:43.525   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.525   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.525   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.525   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.525   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.525   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.525   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.525   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.591   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.591   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.591   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.591   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.651  1313  1313 D WorkspaceRevealAnim: onAnimationEnd: workspace alpha = 1.0
+10-03 16:55:43.656  1313  1313 D RecentsView: onTaskRemoved: 119, not handling task stack changes
+10-03 16:55:43.656  1313  1313 D RecentsView: onTaskRemoved: 119, not handling task stack changes
+10-03 16:55:43.656  1313  1313 D RecentTasksList: invalidateLoadedTasks - previous requestLoadId: -1
+10-03 16:55:43.708  3276  3671 D IdlingRegistry: Registering idling resources: [androidx.compose.ui.test.EspressoLink@d40500c]
+10-03 16:55:43.710  3276  3736 E SQLiteLog: (5) statement aborts at 2: database is locked; [PRAGMA journal_mode=TRUNCATE]
+10-03 16:55:43.710  3276  3736 W SQLiteConnection: Could not change the database journal mode of '/data/user/0/com.thinkcanvas.internal.debug/databases/thinkcanvas.db' from 'wal' to 'TRUNCATE' because the database is locked.  This usually means that there are other open connections to the database which prevents the database from enabling or disabling write-ahead logging mode.  Proceeding without changing the journal mode.
+10-03 16:55:43.730  3276  3671 W Settings: Setting always_finish_activities has moved from android.provider.Settings.System to android.provider.Settings.Global, returning read-only value.
+10-03 16:55:43.733   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.733   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.745   631   936 V GrammaticalInflectionUtils: AttributionSource: AttributionSource { uid = 10234, packageName = null, attributionTag = null, token = android.os.Binder@f2f5673, deviceId = 0, next = null } does not have READ_SYSTEM_GRAMMATICAL_GENDER permission.
+10-03 16:55:43.751  4228  4228 D VRI[InstrumentationActivityInvoker$EmptyActivity]: visibilityChanged oldVisibility=true newVisibility=false
+10-03 16:55:43.753  1052  1142 W DisconnectHandler: No disconnect change found in the transition, not handling request.
+10-03 16:55:43.827  1313  1313 D RecentsView: onTaskDisplayChanged: 121, new displayId = 0
+10-03 16:55:43.827  1313  1313 D BaseActivity: Launcher flags updated: [state_started|state_resumed|state_deferred_resumed|state_window_focused|state_user_active] -[]
+10-03 16:55:43.836   631   945 D WifiClientModeImpl[33042:wlan0]: updateLinkLayerStatsRssiSpeedFrequencyCapabilities rssi=-50 TxLinkspeed=1 freq=2437 RxLinkSpeed=2
+10-03 16:55:43.836   631   945 D WifiClientModeImpl[33042:wlan0]: reported txKbps 12000 rxKbps 30000
+10-03 16:55:43.836   631   945 D WifiDataStall: tx tput in kbps: 37000
+10-03 16:55:43.836   631   945 D WifiDataStall: rx tput in kbps: 37000
+10-03 16:55:43.836   631   945 V WifiConfigManager: Updating scan detail cache freq=2437 BSSID=02:15:b2:00:00:01 RSSI=-50 for "AndroidWifi"NONE
+10-03 16:55:43.836   631   945 D WifiThroughputPredictor:  utilization (LLS) 80 isBluetoothConnected: false final utilization: 80
+10-03 16:55:43.836   631   945 D WifiThroughputPredictor:  BW: 0 RSSI: -50 Nss: 1 Mode: 1 symDur: 4000 snrDb 30 bitPerTone: 4500 rate: 54 throughput: 37
+10-03 16:55:43.836   631   945 D WifiThroughputPredictor:  utilization (LLS) 80 isBluetoothConnected: false final utilization: 80
+10-03 16:55:43.836   631   945 D WifiThroughputPredictor:  BW: 0 RSSI: -50 Nss: 1 Mode: 1 symDur: 4000 snrDb 30 bitPerTone: 4500 rate: 54 throughput: 37
+10-03 16:55:43.836   631   945 D WifiThroughputPredictor:  utilization (LLS) 80 isBluetoothConnected: false final utilization: 80
+10-03 16:55:43.836   631   945 D WifiThroughputPredictor:  BW: 0 RSSI: -50 Nss: 1 Mode: 1 symDur: 4000 snrDb 30 bitPerTone: 4500 rate: 54 throughput: 37
+10-03 16:55:43.836   631   945 D WifiThroughputPredictor:  utilization (LLS) 80 isBluetoothConnected: false final utilization: 80
+10-03 16:55:43.836   631   945 D WifiThroughputPredictor:  BW: 0 RSSI: -50 Nss: 1 Mode: 1 symDur: 4000 snrDb 30 bitPerTone: 4500 rate: 54 throughput: 37
+10-03 16:55:43.839   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.839   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.861   631   936 I WifiService: getConnectionInfo uid=10211
+10-03 16:55:43.861   631   936 V WifiService: Clearing REDACT_FOR_LOCAL_MAC_ADDRESS for com.google.android.gms(uid=10211)
+10-03 16:55:43.861   631   936 V WifiPermissionsUtil: checkCallersLocationPermission(com.google.android.gms): ok because uid 10211 has app-op android:fine_location
+10-03 16:55:43.861   631   936 V WifiService: Clearing REDACT_FOR_ACCESS_FINE_LOCATION for com.google.android.gms(uid=10211)
+10-03 16:55:43.864   631   936 I WifiService: getWifiEnabledState uid=10201 state=3
+10-03 16:55:43.879  1313  1313 D BaseActivity: Launcher flags updated: [state_started|state_resumed|state_deferred_resumed|state_window_focused] -[state_user_active]
+10-03 16:55:43.880  1313  1313 D BaseActivity: Launcher flags updated: [state_started|state_window_focused] -[state_resumed|state_deferred_resumed]
+10-03 16:55:43.880  1313  1313 W SplitSelectStateCtor: Missing session instanceIds
+10-03 16:55:43.880  1313  1313 D StatsLog: LAUNCHER_SPLIT_SELECTION_EXIT_INTERRUPTED
+10-03 16:55:43.881   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.881   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.891   631   945 I HalDevMgr: bestIfaceCreationProposal is null, requestIface=STA, existingIface=[name=wlan0 type=STA]
+10-03 16:55:43.902   631   945 D WifiScoreCard: BSSID update SIGNAL_POLL ID: 1711774363 SSID: "AndroidWifi", BSSID: 02:15:b2:00:00:01, MAC: 02:15:b2:00:00:00, IP: /10.0.2.16, Security type: 0, Supplicant state: COMPLETED, Wi-Fi standard: legacy, RSSI: -50, Link speed: 1Mbps, Tx Link speed: 1Mbps, Max Supported Tx Link speed: 54Mbps, Calculated Tx : 0Mbps, Rx Link speed: 2Mbps, Max Supported Rx Link speed: 54Mbps, Calculated Rx : 0Mbps, Frequency: 2437MHz, Net ID: 0, Metered hint: false, score: 100, isUsable: true, CarrierMerged: false, SubscriptionId: -1, IsPrimary: 1, Trusted: true, Restricted: false, Ephemeral: false, OEM paid: false, OEM private: false, OSU AP: false, FQDN: <none>, Provider friendly name: <none>, Requesting package name: <none>"AndroidWifi"openMLO Information: , Is TID-To-Link negotiation supported by the AP: false, AP MLD Address: <none>, AP MLO Link Id: <none>, AP MLO Affiliated links: <none>, Vendor Data: <none>
+10-03 16:55:43.902   631   945 D WifiScoreCard: txRate: 1 txSpeed: 1
+10-03 16:55:43.902   631   945 D WifiScoreCard: network update SIGNAL_POLL "AndroidWifi" ID: 1264697627 RSSI -50 txSpeed -1
+10-03 16:55:43.902   631   945 D WifiClientModeImpl[33042:wlan0]:  ClientModeImpl$L2ConnectedState screen=on 1 0 "AndroidWifi" 02:15:b2:00:00:01 rssi=-50 f=2437 sc=100 link=1 tx=0.6, 0.0, 0.0 rx=0.8 bcn=0 [on:0 tx:0 rx:0 period:3102] from screen [on:0 period:45181470] score=100
+10-03 16:55:43.905  1364  2580 I NullBinder: NullBinder for android.net.action.RECOMMEND_NETWORKS triggering remote TransactionTooLargeException due to Service without Chimera impl, calling uid: 1000, calling pid: 0
+10-03 16:55:43.905  1364  2580 W libbinder.Binder: Large reply transaction of 1056768 bytes, interface descriptor , function: UNKNOWN_FUNCTION_NAME, code: 1, flags: 17
+10-03 16:55:43.906  3276  3276 D LifecycleMonitor: Lifecycle status change: com.thinkcanvas.MainActivity@d23464b in: PRE_ON_CREATE
+10-03 16:55:43.906  3276  3276 V ActivityScenario: Activity lifecycle changed event received but ignored because the reported transition was not ON_CREATE while the last known transition was PRE_ON_CREATE
+10-03 16:55:43.911  3276  3276 D LifecycleMonitor: Lifecycle status change: com.thinkcanvas.MainActivity@d23464b in: CREATED
+10-03 16:55:43.912  3276  3276 V ActivityScenario: Update currentActivityStage to CREATED, currentActivity=com.thinkcanvas.MainActivity@d23464b
+10-03 16:55:43.913  3276  3276 D LifecycleMonitor: Lifecycle status change: com.thinkcanvas.MainActivity@d23464b in: STARTED
+10-03 16:55:43.913  3276  3276 V ActivityScenario: Update currentActivityStage to STARTED, currentActivity=com.thinkcanvas.MainActivity@d23464b
+10-03 16:55:43.913   631  1027 I Surface : Creating surface for consumer unnamed-631-69 with slotExpansion=1 for 64 slots
+10-03 16:55:43.913   631  1027 I Surface : Creating surface for consumer ImageReader-864x1939f1m1-631-69 with slotExpansion=1 for 64 slots
+10-03 16:55:43.913   631  1027 W ImageReader_JNI: Unable to acquire a buffer item, very likely client tried to acquire more than maxImages buffers
+10-03 16:55:43.916  3276  3276 D AutofillManager: Fill dialog is enabled:false, hints=[]
+10-03 16:55:43.916  3276  3276 D LifecycleMonitor: Lifecycle status change: com.thinkcanvas.MainActivity@d23464b in: RESUMED
+10-03 16:55:43.916  3276  3276 V ActivityScenario: Update currentActivityStage to RESUMED, currentActivity=com.thinkcanvas.MainActivity@d23464b
+10-03 16:55:43.916  4228  4228 D WindowOnBackDispatcher: setTopOnBackInvokedCallback (unwrapped): null
+10-03 16:55:43.928   631  1027 E ConsumerBase: [ImageReader-864x1939f1m1-631-69] abandonLocked: ConsumerBase is abandoned!
+10-03 16:55:43.929  1313  1313 D RecentTasksList: invalidateLoadedTasks - previous requestLoadId: -1
+10-03 16:55:43.929  1313  1313 D RecentTasksList: invalidateLoadedTasks - previous requestLoadId: -1
+10-03 16:55:43.939   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.939   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:43.968   631  1990 W InputChannel-JNI: Channel already disposed.
+10-03 16:55:43.985   496  1330 I libbinder.BpBinder: onLastStrongRef automatically unlinking death recipients for binder (0x735003e25430) with descriptor: '(not cached)'
+10-03 16:55:44.034  4228  4228 D ViewRootImpl: Skipping stats log for color mode
+10-03 16:55:44.045  3276  3276 D WindowOnBackDispatcher: setTopOnBackInvokedCallback (unwrapped): android.app.Activity$$ExternalSyntheticLambda0@6a83d17
+10-03 16:55:44.054   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:44.054   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:44.054  1052  1165 D SplashScreenView: Build android.window.SplashScreenView{90d9dff V.E...... ......ID 0,0-0,0}
+10-03 16:55:44.054  1052  1165 D SplashScreenView: Icon: view: null drawable: null size: 0
+10-03 16:55:44.054  1052  1165 D SplashScreenView: Branding: view: android.view.View{32a27cc G.ED..... ......I. 0,0-0,0 #1020574 android:id/splashscreen_branding_view} drawable: null size w: 0 h: 0
+10-03 16:55:44.055   631  1121 W InputChannel-JNI: Channel already disposed.
+10-03 16:55:44.058  1313  1348 D PreloadThumbnailUseCase: Preloading thumbnails for task ids: [[id=120 windowingMode=1 user=0 lastActiveTime=396186] null, [id=121 windowingMode=1 user=0 lastActiveTime=397130] null]
+10-03 16:55:44.066  3276  3276 D VRI[MainActivity]: WindowInsets changed: 1080x2424 statusBars:[0,142,0,0] navigationBars:[0,0,0,63] mandatorySystemGestures:[0,174,0,84] 
+10-03 16:55:44.096  3276  3276 D WindowOnBackDispatcher: setTopOnBackInvokedCallback (unwrapped): androidx.navigationevent.OnBackInvokedInput$createOnBackAnimationCallback$1@f61ec4e
+10-03 16:55:44.107  1052  1164 I Surface : Creating surface for consumer unnamed-1052-115 with slotExpansion=1 for 64 slots
+10-03 16:55:44.108  1052  1164 I Surface : Creating surface for consumer VRI[debug]#115(BLAST Consumer)115 with slotExpansion=1 for 64 slots
+10-03 16:55:44.136   631  5247 I GFXSTREAM: [eglDisplay.cpp(297)] Opening libGLESv1_CM_emulation.so
+10-03 16:55:44.137   631  5247 I GFXSTREAM: [eglDisplay.cpp(297)] Opening libGLESv2_emulation.so
+10-03 16:55:44.138   631  5247 W libc    : Access denied finding property "vendor.mesa.virtgpu.kumquat"
+10-03 16:55:44.150  3276  3276 I Surface : Creating surface for consumer unnamed-3276-87 with slotExpansion=1 for 64 slots
+10-03 16:55:44.153  3276  3276 I Surface : Creating surface for consumer VRI[MainActivity]#87(BLAST Consumer)87 with slotExpansion=1 for 64 slots
+10-03 16:55:44.134   631   631 W GrallocUploadTh: type=1400 audit(0.0:35): avc:  denied  { read } for  name="u:object_r:vendor_default_prop:s0" dev="tmpfs" ino=408 scontext=u:r:system_server:s0 tcontext=u:object_r:vendor_default_prop:s0 tclass=file permissive=0
+10-03 16:55:44.225   631  5247 W HWUI    : Failed to initialize 101010-2 format, error = EGL_SUCCESS
+10-03 16:55:44.229   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:44.229   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:44.255   631   646 W libc    : Access denied finding property "vendor.mesa.virtgpu.kumquat"
+10-03 16:55:44.250   631   631 W binder:631_2: type=1400 audit(0.0:36): avc:  denied  { read } for  name="u:object_r:vendor_default_prop:s0" dev="tmpfs" ino=408 scontext=u:r:system_server:s0 tcontext=u:object_r:vendor_default_prop:s0 tclass=file permissive=0
+10-03 16:55:44.358  1313  1313 D RecentTasksList: invalidateLoadedTasks - previous requestLoadId: -1
+10-03 16:55:44.358  1313  1313 D BaseActivity: Launcher flags updated: [state_started] -[state_window_focused]
+10-03 16:55:44.376   631   652 I ActivityTaskManager: Displayed com.thinkcanvas.internal.debug/com.thinkcanvas.MainActivity for user 0: +625ms
+10-03 16:55:44.376   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:44.376   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:44.406  1313  1313 D RecentTasksList: invalidateLoadedTasks - previous requestLoadId: -1
+10-03 16:55:44.603   631   763 W InputChannel-JNI: Channel already disposed.
+10-03 16:55:44.627  1606  1606 I GoogleInputMethodService: GoogleInputMethodService.onFinishInput():2259 
+10-03 16:55:44.632  1606  1606 I Module  : DeviceLockedStatusModuleProvider$Module.updateDeviceLockedStatus():103 repeatCheckTimes = 0, locked = false
+10-03 16:55:44.632  1606  1606 I GoogleInputMethodService: GoogleInputMethodService.onStartInput():1446 onStartInput(EditorInfo{EditorInfo{packageName=com.thinkcanvas.internal.debug, inputType=0, inputTypeString=NULL, enableLearning=false, autoCorrection=false, autoComplete=false, imeOptions=0, privateImeOptions=null, actionName=UNSPECIFIED, actionLabel=null, initialSelStart=-1, initialSelEnd=-1, initialCapsMode=0, label=null, fieldId=0, fieldName=null, extras=null, hintText=null, hintLocales=[]}}, false)
+10-03 16:55:44.632  1606  1606 I AndroidIME: LatinIMEBase.updateInputViewCoverNavigation():322 Update input view padding, isNavbarOverInputWindow=true, bottom inset=126
+10-03 16:55:44.633  1606  1606 I Module  : DeviceLockedStatusModuleProvider$Module.updateDeviceLockedStatus():103 repeatCheckTimes = 1, locked = false
+10-03 16:55:44.676  1052  1276 D WallpaperService: onVisibilityChanged(false): com.android.systemui.wallpapers.ImageWallpaper$CanvasEngine@c5ffa63
+10-03 16:55:44.676  1313  1313 D VRI[NexusLauncherActivity]: visibilityChanged oldVisibility=true newVisibility=false
+10-03 16:55:44.692  1313  1313 D SmartspaceInteractor: notifySmartspaceEvent: SmartspaceTargetEvent{mSmartspaceTarget=null, mSmartspaceActionId='null', mEventType=7}
+10-03 16:55:44.812  1313  1313 D BaseActivity: Launcher flags updated: [] -[state_started]
+10-03 16:55:44.812  1313  1313 D BaseDepthController: setSurface:
+10-03 16:55:44.812  1313  1313 D BaseDepthController: 	mWaitingOnSurfaceValidity: false
+10-03 16:55:44.812  1313  1313 D BaseDepthController: 	mBaseSurface: null
+10-03 16:55:44.812  1313  1313 D BaseDepthController: mSurface is null and mCurrentBlur is: 0
+10-03 16:55:44.812  1313  1313 D LauncherStateManager: StateManager.goToState: fromState: Normal, toState: Normal, partial trace:
+10-03 16:55:44.812  1313  1313 D LauncherStateManager: 	at com.android.launcher3.statemanager.StateManager.moveToRestState(go/retraceme dc5b05c43537c6aa1d671c685c710819682fcc95b6af33c0ce7f88e1808452b7:26)
+10-03 16:55:44.812  1313  1313 D LauncherStateManager: 	at com.android.launcher3.statemanager.StateManager.moveToRestState(go/retraceme dc5b05c43537c6aa1d671c685c710819682fcc95b6af33c0ce7f88e1808452b7:35)
+10-03 16:55:44.812  1313  1313 D LauncherStateManager: 	at com.android.launcher3.statemanager.StatefulActivity.onStop(go/retraceme dc5b05c43537c6aa1d671c685c710819682fcc95b6af33c0ce7f88e1808452b7:31)
+10-03 16:55:44.812  1313  1313 D LauncherStateManager: StateManager.onRepeatStateSetAborted: state: Normal
+10-03 16:55:44.813  1313  1313 D KeyboardStateManager: hideKeyboard
+10-03 16:55:44.813  1313  1313 D KeyboardStateManager: isImeShown: false
+10-03 16:55:44.813  1313  1313 D StatsLog: LAUNCHER_ONSTOP
+10-03 16:55:44.816  1313  1313 D StatsLog: LAUNCHER_GOOGLE_SEARCH_RESTORE_LIST_SIZE_AFTER_ACTIVITY_RESTART
+10-03 16:55:44.816  1313  1313 D RecentsView: onTaskRemoved: 120, not handling task stack changes
+10-03 16:55:44.817  1313  1313 D RecentsView: onTaskRemoved: 120, not handling task stack changes
+10-03 16:55:44.843   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:44.843   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:44.887   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:44.887   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:44.897  1313  1313 D RecentTasksList: invalidateLoadedTasks - previous requestLoadId: -1
+10-03 16:55:44.957   631   671 I WifiService: isFeatureSupported uid=1000 returns [WIFI_FEATURE_INFRA, WIFI_FEATURE_P2P, WIFI_FEATURE_MOBILE_HOTSPOT, WIFI_FEATURE_WPA3_SAE, WIFI_FEATURE_WPA3_SUITE_B, WIFI_FEATURE_OWE, WIFI_FEATURE_DPP, WIFI_FEATURE_AP_RAND_MAC, WIFI_FEATURE_MBO, WIFI_FEATURE_FILS_SHA256, WIFI_FEATURE_FILS_SHA384, WIFI_FEATURE_SAE_PK, WIFI_FEATURE_DPP_ENROLLEE_RESPONDER, WIFI_FEATURE_PASSPOINT_TERMS_AND_CONDITIONS, WIFI_FEATURE_WFD_R2, WIFI_FEATURE_DECORATED_IDENTITY, WIFI_FEATURE_TRUST_ON_FIRST_USE, WIFI_FEATURE_SET_TLS_MINIMUM_VERSION, WIFI_FEATURE_TLS_V1_3, WIFI_FEATURE_WEP, WIFI_FEATURE_WPA_PERSONAL]
+10-03 16:55:45.010   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:45.010   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:45.042   425   446 I netd    : tetherGetStats() -> {[]} <0.27ms>
+10-03 16:55:45.116  1364  5598 I NetworkScheduler.Stats: Task com.google.android.gms/com.google.android.gms.ipa.base.IpaGcmTaskService started execution. cause:9 exec_start_elapsed_seconds: 398 [CONTEXT service_id=218 ]
+10-03 16:55:45.120  1364  5639 I NetworkScheduler.Stats: Task com.google.android.gms/com.google.android.gms.ipa.base.IpaGcmTaskService finished executing. cause:9 result: 1 elapsed_millis: 20 uptime_millis: 20 exec_start_elapsed_seconds: 398 [CONTEXT service_id=218 ]
+10-03 16:55:45.239   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:45.267  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:45.324  1507  1507 D BoundBrokerSvc: onBind: Intent { act=com.google.android.gms.findmydevice.spot.sync.SelfReportingRegistrationAndOwnerKeySyncService.ACTION_TASK_READY dat=chimera-action:/... xflg=0x4 cmp=com.google.android.gms/.chimera.GmsInternalBoundBrokerService }
+10-03 16:55:45.324  1507  1507 D BoundBrokerSvc: Loading bound service for intent: Intent { act=com.google.android.gms.findmydevice.spot.sync.SelfReportingRegistrationAndOwnerKeySyncService.ACTION_TASK_READY dat=chimera-action:/... xflg=0x4 cmp=com.google.android.gms/.chimera.GmsInternalBoundBrokerService }
+10-03 16:55:45.341   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:45.350  1507  1507 D BoundBrokerSvc: onBind: Intent { act=com.google.android.gms.onboardingconsent.api.ConsentManagerApiService.START dat=chimera-action:/... xflg=0x4 cmp=com.google.android.gms/.chimera.GmsApiService }
+10-03 16:55:45.350  1507  1507 D BoundBrokerSvc: Loading bound service for intent: Intent { act=com.google.android.gms.onboardingconsent.api.ConsentManagerApiService.START dat=chimera-action:/... xflg=0x4 cmp=com.google.android.gms/.chimera.GmsApiService }
+10-03 16:55:45.353  1364  5599 I NetworkScheduler.Stats: Task com.google.android.gms/com.google.android.gms.findmydevice.spot.sync.SelfReportingRegistrationAndOwnerKeySyncService started execution. cause:5 exec_start_elapsed_seconds: 398 [CONTEXT service_id=218 ]
+10-03 16:55:45.355  1507  1564 I ConsentManagerApiServic: ConsentManagerApiService onGetService success com.google.android.gms [CONTEXT service_id=460 ]
+10-03 16:55:45.359  1364  1364 D WearableService: Creating wearable service asynchronously.
+10-03 16:55:45.360  1507  3408 I SelfRptRegSyncer: No unsupervised accounts found, so self reporting is off. [CONTEXT service_id=284 ]
+10-03 16:55:45.361  1364  2580 D WearableService: onGetService: waiting for onCreate to be completed.
+10-03 16:55:45.377  1364  5639 I NetworkScheduler.Stats: Task com.google.android.gms/com.google.android.gms.findmydevice.spot.sync.SelfReportingRegistrationAndOwnerKeySyncService finished executing. cause:5 result: 1 elapsed_millis: 73 uptime_millis: 73 exec_start_elapsed_seconds: 398 [CONTEXT service_id=218 ]
+10-03 16:55:45.380  1507  1507 D BoundBrokerSvc: onUnbind: Intent { act=com.google.android.gms.findmydevice.spot.sync.SelfReportingRegistrationAndOwnerKeySyncService.ACTION_TASK_READY dat=chimera-action:/... xflg=0x4 cmp=com.google.android.gms/.chimera.GmsInternalBoundBrokerService }
+10-03 16:55:45.382  1364  1517 I Wear_Controller: Wearable module requires a companion app to be installed.
+10-03 16:55:45.383  1364  1517 I WearableService: onCreate: Wearable Services not starting. Wear is not available on this device.
+10-03 16:55:45.383  1364  2580 W WearableService: onGetService: Wear is not available on this device.
+10-03 16:55:45.415  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:45.441   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:45.627   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:45.730   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:45.729  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:45.770  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:45.833   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:45.846  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:45.922  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:45.965   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:45.997  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:46.055  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:46.139   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:46.142  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:46.225  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:46.272   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:46.305  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:46.376   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:46.378  1364  1364 D BoundBrokerSvc: onRebind: Intent { act=com.google.android.gms.libs.gmscorelogger.service.START dat=chimera-action:/... xflg=0x4 cmp=com.google.android.gms/.chimera.PersistentDirectBootAwareApiService }
+10-03 16:55:46.402  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:46.478   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:46.480  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:46.515  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:46.584   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:46.640  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:46.692   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:46.726  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:46.810  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:46.812   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:46.884  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:46.903   631   945 D WifiClientModeImpl[33042:wlan0]: updateLinkLayerStatsRssiSpeedFrequencyCapabilities rssi=-50 TxLinkspeed=6 freq=2437 RxLinkSpeed=2
+10-03 16:55:46.904   631   945 D WifiClientModeImpl[33042:wlan0]: reported txKbps 12000 rxKbps 30000
+10-03 16:55:46.904   631   945 D WifiDataStall: tx tput in kbps: 37000
+10-03 16:55:46.904   631   945 D WifiDataStall: rx tput in kbps: 37000
+10-03 16:55:46.904   631   945 V WifiConfigManager: Updating scan detail cache freq=2437 BSSID=02:15:b2:00:00:01 RSSI=-50 for "AndroidWifi"NONE
+10-03 16:55:46.904   631   945 D WifiThroughputPredictor:  utilization (LLS) 80 isBluetoothConnected: false final utilization: 80
+10-03 16:55:46.904   631   945 D WifiThroughputPredictor:  BW: 0 RSSI: -50 Nss: 1 Mode: 1 symDur: 4000 snrDb 30 bitPerTone: 4500 rate: 54 throughput: 37
+10-03 16:55:46.904   631   945 D WifiThroughputPredictor:  utilization (LLS) 80 isBluetoothConnected: false final utilization: 80
+10-03 16:55:46.904   631   945 D WifiThroughputPredictor:  BW: 0 RSSI: -50 Nss: 1 Mode: 1 symDur: 4000 snrDb 30 bitPerTone: 4500 rate: 54 throughput: 37
+10-03 16:55:46.904   631   945 D WifiThroughputPredictor:  utilization (LLS) 80 isBluetoothConnected: false final utilization: 80
+10-03 16:55:46.904   631   945 D WifiThroughputPredictor:  BW: 0 RSSI: -50 Nss: 1 Mode: 1 symDur: 4000 snrDb 30 bitPerTone: 4500 rate: 54 throughput: 37
+10-03 16:55:46.904   631   945 D WifiThroughputPredictor:  utilization (LLS) 80 isBluetoothConnected: false final utilization: 80
+10-03 16:55:46.904   631   945 D WifiThroughputPredictor:  BW: 0 RSSI: -50 Nss: 1 Mode: 1 symDur: 4000 snrDb 30 bitPerTone: 4500 rate: 54 throughput: 37
+10-03 16:55:46.910   631  1989 I WifiService: getWifiEnabledState uid=10201 state=3
+10-03 16:55:46.910   631  1989 I WifiService: getConnectionInfo uid=10211
+10-03 16:55:46.910   631  1989 V WifiService: Clearing REDACT_FOR_LOCAL_MAC_ADDRESS for com.google.android.gms(uid=10211)
+10-03 16:55:46.910   631  1989 V WifiPermissionsUtil: checkCallersLocationPermission(com.google.android.gms): ok because uid 10211 has app-op android:fine_location
+10-03 16:55:46.910   631  1989 V WifiService: Clearing REDACT_FOR_ACCESS_FINE_LOCATION for com.google.android.gms(uid=10211)
+10-03 16:55:46.911  1364  2691 I NullBinder: NullBinder for android.net.action.RECOMMEND_NETWORKS triggering remote TransactionTooLargeException due to Service without Chimera impl, calling uid: 1000, calling pid: 0
+10-03 16:55:46.911  1364  2691 W libbinder.Binder: Large reply transaction of 1056768 bytes, interface descriptor , function: UNKNOWN_FUNCTION_NAME, code: 1, flags: 17
+10-03 16:55:46.914   631   945 I HalDevMgr: bestIfaceCreationProposal is null, requestIface=STA, existingIface=[name=wlan0 type=STA]
+10-03 16:55:46.915   631   945 D WifiScoreCard: BSSID update SIGNAL_POLL ID: 1711774363 SSID: "AndroidWifi", BSSID: 02:15:b2:00:00:01, MAC: 02:15:b2:00:00:00, IP: /10.0.2.16, Security type: 0, Supplicant state: COMPLETED, Wi-Fi standard: legacy, RSSI: -50, Link speed: 6Mbps, Tx Link speed: 6Mbps, Max Supported Tx Link speed: 54Mbps, Calculated Tx : 0Mbps, Rx Link speed: 2Mbps, Max Supported Rx Link speed: 54Mbps, Calculated Rx : 0Mbps, Frequency: 2437MHz, Net ID: 0, Metered hint: false, score: 100, isUsable: true, CarrierMerged: false, SubscriptionId: -1, IsPrimary: 1, Trusted: true, Restricted: false, Ephemeral: false, OEM paid: false, OEM private: false, OSU AP: false, FQDN: <none>, Provider friendly name: <none>, Requesting package name: <none>"AndroidWifi"openMLO Information: , Is TID-To-Link negotiation supported by the AP: false, AP MLD Address: <none>, AP MLO Link Id: <none>, AP MLO Affiliated links: <none>, Vendor Data: <none>
+10-03 16:55:46.915   631   945 D WifiScoreCard: txRate: 2 txSpeed: 6
+10-03 16:55:46.915   631   945 D WifiScoreCard: network update SIGNAL_POLL "AndroidWifi" ID: 1264697627 RSSI -50 txSpeed -1
+10-03 16:55:46.915   631   945 D WifiClientModeImpl[33042:wlan0]:  ClientModeImpl$L2ConnectedState screen=on 1 0 "AndroidWifi" 02:15:b2:00:00:01 rssi=-50 f=2437 sc=100 link=6 tx=1.2, 0.0, 0.0 rx=1.7 bcn=0 [on:0 tx:0 rx:0 period:3013] from screen [on:0 period:45184483] score=100
+10-03 16:55:46.916   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:46.955  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:47.026   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.034  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:47.123  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:47.149   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.179  3276  3296 I .internal.debug: Method exceeds compiler instruction limit: 32580 in void com.thinkcanvas.canvas.CanvasScreenKt.CanvasScreen(com.thinkcanvas.canvas.BoardState, java.lang.String, com.thinkcanvas.canvas.TextEditorSession, kotlinx.coroutines.flow.StateFlow, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, com.thinkcanvas.canvas.EdgeAutoPanProfile, androidx.compose.runtime.Composer, int, int)
+10-03 16:55:47.259   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.359   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.411   631   936 V GrammaticalInflectionUtils: AttributionSource: AttributionSource { uid = 10235, packageName = null, attributionTag = null, token = android.os.Binder@f2f5673, deviceId = 0, next = null } does not have READ_SYSTEM_GRAMMATICAL_GENDER permission.
+10-03 16:55:47.412  1313  1313 D RecentsView: onTaskDisplayChanged: 122, new displayId = 0
+10-03 16:55:47.414   496   521 I libbinder.BpBinder: onLastStrongRef automatically unlinking death recipients for binder (0x735003e25430) with descriptor: '(not cached)'
+10-03 16:55:47.415  1052  1165 D SplashScreenView: Build android.window.SplashScreenView{1ef13d7 V.E...... ......ID 0,0-0,0}
+10-03 16:55:47.415  1052  1165 D SplashScreenView: Icon: view: null drawable: null size: 0
+10-03 16:55:47.415  1052  1165 D SplashScreenView: Branding: view: android.view.View{a2124c4 G.ED..... ......I. 0,0-0,0 #1020574 android:id/splashscreen_branding_view} drawable: null size w: 0 h: 0
+10-03 16:55:47.417  1052  1142 W DisconnectHandler: No disconnect change found in the transition, not handling request.
+10-03 16:55:47.417  1313  1313 D RecentTasksList: invalidateLoadedTasks - previous requestLoadId: -1
+10-03 16:55:47.418  1313  1313 D RecentTasksList: invalidateLoadedTasks - previous requestLoadId: -1
+10-03 16:55:47.420   631  1990 W InputChannel-JNI: Channel already disposed.
+10-03 16:55:47.420  3276  3276 D LifecycleMonitor: Lifecycle status change: com.thinkcanvas.MainActivity@d23464b in: PAUSED
+10-03 16:55:47.420  3276  3276 V ActivityScenario: Update currentActivityStage to PAUSED, currentActivity=com.thinkcanvas.MainActivity@d23464b
+10-03 16:55:47.425  4228  4252 I GFXSTREAM: [eglDisplay.cpp(297)] Opening libGLESv1_CM_emulation.so
+10-03 16:55:47.425  4228  4252 I GFXSTREAM: [eglDisplay.cpp(297)] Opening libGLESv2_emulation.so
+10-03 16:55:47.426  4228  4252 W libc    : Access denied finding property "vendor.mesa.virtgpu.kumquat"
+10-03 16:55:47.432   425   446 I netd    : tetherGetStats() -> {[]} <0.26ms>
+10-03 16:55:47.446  4228  4252 W HWUI    : Failed to initialize 101010-2 format, error = EGL_SUCCESS
+10-03 16:55:47.451  1052  1164 I Surface : Creating surface for consumer unnamed-1052-116 with slotExpansion=1 for 64 slots
+10-03 16:55:47.452  4228  4228 D AutofillManager: Fill dialog is enabled:false, hints=[]
+10-03 16:55:47.453  1052  1164 I Surface : Creating surface for consumer VRI[test]#116(BLAST Consumer)116 with slotExpansion=1 for 64 slots
+10-03 16:55:47.479   631  1990 W InputChannel-JNI: Channel already disposed.
+10-03 16:55:47.498  4228  4228 D WindowOnBackDispatcher: setTopOnBackInvokedCallback (unwrapped): android.app.Activity$$ExternalSyntheticLambda0@ff7ab27
+10-03 16:55:47.499  4228  4228 D VRI[InstrumentationActivityInvoker$EmptyActivity]: WindowInsets changed: 1080x2424 statusBars:[0,142,0,0] navigationBars:[0,0,0,63] mandatorySystemGestures:[0,174,0,84] 
+10-03 16:55:47.503   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.522  4228  4228 I Surface : Creating surface for consumer unnamed-4228-55 with slotExpansion=1 for 64 slots
+10-03 16:55:47.525  1313  1348 D PreloadThumbnailUseCase: Preloading thumbnails for task ids: [[id=121 windowingMode=1 user=0 lastActiveTime=400651] null, [id=122 windowingMode=1 user=0 lastActiveTime=400658] null]
+10-03 16:55:47.526  4228  4228 I Surface : Creating surface for consumer VRI[InstrumentationActivityInvoker$EmptyActivity]#55(BLAST Consumer)55 with slotExpansion=1 for 64 slots
+10-03 16:55:47.527  1313  1313 D RecentTasksList: invalidateLoadedTasks - previous requestLoadId: -1
+10-03 16:55:47.527  1313  1313 D RecentTasksList: invalidateLoadedTasks - previous requestLoadId: -1
+10-03 16:55:47.542   471   475 I RanchuHwc: logCompositionFallbackIfChanged: layer 477 CompositionType fallback from 3 to 1
+10-03 16:55:47.543   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.543   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.543   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.543   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.543   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.615   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.615   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.615   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.615   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.615   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.615   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.617  1052  1142 W DisconnectHandler: No disconnect change found in the transition, not handling request.
+10-03 16:55:47.621  1313  1322 W System  : A resource failed to call release. 
+10-03 16:55:47.621  1313  1322 W System  : A resource failed to call release. 
+10-03 16:55:47.621  1313  1322 W System  : A resource failed to call release. 
+10-03 16:55:47.622   631   652 I ActivityTaskManager: Displayed com.thinkcanvas.internal.debug.test/androidx.test.core.app.InstrumentationActivityInvoker$EmptyActivity for user 0: +203ms
+10-03 16:55:47.630   496   589 I libbinder.BpBinder: onLastStrongRef automatically unlinking death recipients for binder (0x735003e2aad0) with descriptor: '(not cached)'
+10-03 16:55:47.633  1313  1313 D ViewRootImpl: Skipping stats log for color mode
+10-03 16:55:47.633  1313  1313 D BaseActivity: Launcher flags updated: [state_started] +[state_started]
+10-03 16:55:47.634  1313  1313 D BaseActivity: Launcher flags updated: [state_started|state_resumed|state_user_active] +[state_resumed|state_user_active]
+10-03 16:55:47.634  1313  1313 D BaseActivity: Launcher flags updated: [state_started|state_resumed|state_user_active] +[]
+10-03 16:55:47.635  1313  1313 D RecentTasksList: invalidateLoadedTasks - previous requestLoadId: -1
+10-03 16:55:47.635  1313  1313 D BaseActivity: Launcher flags updated: [state_started|state_resumed|state_deferred_resumed|state_user_active] +[state_deferred_resumed]
+10-03 16:55:47.635  1313  1313 D StatsLog: LAUNCHER_ONRESUME
+10-03 16:55:47.636  1313  1350 D QuickstepModelDelegate: notifyAppTargetEvent action=1 launchLocation=workspace/0/[-1,-1]/[1,1]
+10-03 16:55:47.638  1759  2146 I AiAiEcho: Predicting[0]:  [CONTEXT sampling_count=5 ]
+10-03 16:55:47.638  1759  2146 I AiAiEcho: EchoTargets: 
+10-03 16:55:47.638  1759  2146 I AiAiEcho: Filtered by AiAi flag check: 
+10-03 16:55:47.638  1759  2146 I AiAiEcho: [CONTEXT ratelimit_period="10 SECONDS" ]
+10-03 16:55:47.639  1759  2146 I AiAiEcho: #remoteViewsTwiddler: feature disabled.
+10-03 16:55:47.639  1759  2146 I AiAiEcho: #postPredictionTargets: Sending updates to UISurface home with targets# 0 (types=[])
+10-03 16:55:47.647   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.647   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.647   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.647   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.647   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.647   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.647   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.674  1313  1313 D SmartspaceInteractor: notifySmartspaceEvent: SmartspaceTargetEvent{mSmartspaceTarget=null, mSmartspaceActionId='null', mEventType=6}
+10-03 16:55:47.675  1313  1313 I Surface : Creating surface for consumer unnamed-1313-212 with slotExpansion=1 for 64 slots
+10-03 16:55:47.675  1313  1313 I Surface : Creating surface for consumer VRI[NexusLauncherActivity]#64(BLAST Consumer)64 with slotExpansion=1 for 64 slots
+10-03 16:55:47.680  1313  1313 D BaseDepthController: setSurface:
+10-03 16:55:47.680  1313  1313 D BaseDepthController: 	mWaitingOnSurfaceValidity: false
+10-03 16:55:47.680  1313  1313 D BaseDepthController: 	mBaseSurface: Surface(name=VRI-com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity#2718)/@0xe81400f
+10-03 16:55:47.681   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.681   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.681   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.681   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.681   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.681   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.681   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.685  1313  1313 V BaseDepthController: Applying blur: 0 to Surface(name=VRI-com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity#2718)/@0xe81400f applyImmediately: false
+10-03 16:55:47.685  1313  1313 D BaseDepthController: shouldBlurWorkspace: false targetState: Normal currentStableState: Normal mCurrentBlur: 0 mLauncher.getDepthBlurTargets(): [com.android.launcher3.Workspace{84eee26 V.ED..... .......D 0,0-1080,2424 #7f0a0486 app:id/workspace}, com.android.launcher3.Hotseat{f4c5bb9 V.ED..... .......D 0,1929-1080,2424 #7f0a01f6 app:id/hotseat}]
+10-03 16:55:47.700   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.700   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.700   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.700   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.700   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.700   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.700   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.703  1052  1276 D WallpaperService: onVisibilityChanged(true): com.android.systemui.wallpapers.ImageWallpaper$CanvasEngine@c5ffa63
+10-03 16:55:47.726  1313  1313 D ShortcutAndWidgetContainer: appWidgetScale - [x,y]: [1.0,1.0]
+10-03 16:55:47.726  1313  1313 D NavigableAppWidgetHostView: updateScale - [fitScale,bounceScale]: [1.0,1.0]
+10-03 16:55:47.727  1313  1313 D SsBaseTemplateCard: Passed-in item info is null
+10-03 16:55:47.727  1313  1313 D SsBaseTemplateCard: Passed-in item info is null
+10-03 16:55:47.727  1313  1313 D SsBaseTemplateCard: Passed-in item info is null
+10-03 16:55:47.727  1313  1313 D SsBaseTemplateCard: Passed-in item info is null
+10-03 16:55:47.727  1313  1313 I SsBaseTemplateCard: Secondary card pane is null
+10-03 16:55:47.755   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.755   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.755   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.755   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.755   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.755   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.755   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.793   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.793   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.793   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.793   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.793   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.793   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.793   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.850   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.850   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.862   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.862   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:47.973  3276  3276 D VRI[MainActivity]: visibilityChanged oldVisibility=true newVisibility=false
+10-03 16:55:47.974  3276  3276 D WindowOnBackDispatcher: setTopOnBackInvokedCallback (unwrapped): android.app.Activity$$ExternalSyntheticLambda0@6a83d17
+10-03 16:55:47.978  1313  1313 D RecentTasksList: invalidateLoadedTasks - previous requestLoadId: -1
+10-03 16:55:47.978  1313  1348 D PreloadThumbnailUseCase: Preloading thumbnails for task ids: [[id=121 windowingMode=1 user=0 lastActiveTime=400651] null, [id=122 windowingMode=1 user=0 lastActiveTime=400851] null]
+10-03 16:55:48.005  3276  3276 D LifecycleMonitor: Lifecycle status change: com.thinkcanvas.MainActivity@d23464b in: STOPPED
+10-03 16:55:48.006  3276  3276 V ActivityScenario: Update currentActivityStage to STOPPED, currentActivity=com.thinkcanvas.MainActivity@d23464b
+10-03 16:55:48.019  3276  3276 D WindowOnBackDispatcher: setTopOnBackInvokedCallback (unwrapped): null
+10-03 16:55:48.020  3276  3276 D LifecycleMonitor: Lifecycle status change: com.thinkcanvas.MainActivity@d23464b in: DESTROYED
+10-03 16:55:48.020  3276  3276 V ActivityScenario: Update currentActivityStage to DESTROYED, currentActivity=null
+10-03 16:55:48.042  1313  1313 D LauncherStateManager: StateManager.cancelAnimation: animation ongoing: false, partial trace:
+10-03 16:55:48.042  1313  1313 D LauncherStateManager: 	at com.android.launcher3.statemanager.StateManager.setCurrentAnimation(go/retraceme dc5b05c43537c6aa1d671c685c710819682fcc95b6af33c0ce7f88e1808452b7:59)
+10-03 16:55:48.042  1313  1313 D LauncherStateManager: 	at com.android.launcher3.QuickstepTransitionManager.createWallpaperOpenAnimations(go/retraceme dc5b05c43537c6aa1d671c685c710819682fcc95b6af33c0ce7f88e1808452b7:712)
+10-03 16:55:48.042  1313  1313 D LauncherStateManager: 	at com.android.launcher3.QuickstepTransitionManager$WallpaperOpenLauncherAnimationRunner.onAnimationStart(go/retraceme dc5b05c43537c6aa1d671c685c710819682fcc95b6af33c0ce7f88e1808452b7:135)
+10-03 16:55:48.043  1313  1313 D LauncherStateManager: StateManager.createAtomicAnimation: fromState: Normal, toState: Normal, partial trace:
+10-03 16:55:48.043  1313  1313 D LauncherStateManager: 	at com.android.quickstep.util.WorkspaceRevealAnim.prepareToAnimate(go/retraceme dc5b05c43537c6aa1d671c685c710819682fcc95b6af33c0ce7f88e1808452b7:19)
+10-03 16:55:48.043  1313  1313 D LauncherStateManager: 	at com.android.quickstep.util.WorkspaceRevealAnim.<init>(go/retraceme dc5b05c43537c6aa1d671c685c710819682fcc95b6af33c0ce7f88e1808452b7:10)
+10-03 16:55:48.043  1313  1313 D LauncherStateManager: 	at com.android.launcher3.QuickstepTransitionManager.createWallpaperOpenAnimations(go/retraceme dc5b05c43537c6aa1d671c685c710819682fcc95b6af33c0ce7f88e1808452b7:753)
+10-03 16:55:48.043  1313  1313 D AllAppsTransitionController: shouldProtectHeader: false skipScrim: true state: Normal stateManager.getState(): Normal
+10-03 16:55:48.043  1313  1313 D KeyboardInsetsHandler: removePendingImeController: pendingImeController=null
+10-03 16:55:48.044  1313  1313 D b/311077782: LauncherAnimationRunner.setAnimation
+10-03 16:55:48.085  1212  1416 D SatelliteController: isInCarrierRoamingNbIotNtn: satellite is disabled
+10-03 16:55:48.085  1212  1416 D SatelliteController: getCarrierRoamingNtnConnectType: Checking connect type from PLMN config for subId: 1
+10-03 16:55:48.085  1212  1416 D TelephonyConfigUpdateInstallReceiver: getConfigParser: domain=satellite
+10-03 16:55:48.085  1212  1416 V SatelliteController: satelliteConfigParser is not ready
+10-03 16:55:48.085  1212  1416 D SatelliteController: isSatelliteAttachSupportedViaConfigupdater: return null (satelliteConfig is null)
+10-03 16:55:48.085  1212  1416 D SatelliteController: getSatellitePerPlmnConfiguration: invalid subId or not supported via carrier.
+10-03 16:55:48.085  1212  1416 D SatelliteController: getCarrierRoamingNtnConnectType: config: null
+10-03 16:55:48.085  1212  1416 D TelephonyConfigUpdateInstallReceiver: getConfigParser: domain=satellite
+10-03 16:55:48.085  1212  1416 V SatelliteController: satelliteConfigParser is not ready
+10-03 16:55:48.085  1212  1416 D SatelliteController: getCarrierRoamingNtnConnectTypeViaConfigUpdater: return null (satelliteConfig is null)
+10-03 16:55:48.085  1212  1416 D SatelliteController: getCarrierRoamingNtnConnectType: Falling back to global carrier config connect type: 0
+10-03 16:55:48.086  1212  1416 D TelephonyConfigUpdateInstallReceiver: getConfigParser: domain=satellite
+10-03 16:55:48.086  1212  1416 V SatelliteController: satelliteConfigParser is not ready
+10-03 16:55:48.086  1212  1416 D SatelliteController: isSatelliteAttachSupportedViaConfigupdater: return null (satelliteConfig is null)
+10-03 16:55:48.086  1212  1416 D SatelliteController: getCarrierRoamingNtnConnectType: Checking connect type from PLMN config for subId: 1
+10-03 16:55:48.087  1212  1416 D TelephonyConfigUpdateInstallReceiver: getConfigParser: domain=satellite
+10-03 16:55:48.087  1212  1416 V SatelliteController: satelliteConfigParser is not ready
+10-03 16:55:48.087  1212  1416 D SatelliteController: isSatelliteAttachSupportedViaConfigupdater: return null (satelliteConfig is null)
+10-03 16:55:48.087  1212  1416 D SatelliteController: getSatellitePerPlmnConfiguration: invalid subId or not supported via carrier.
+10-03 16:55:48.087  1212  1416 D SatelliteController: getCarrierRoamingNtnConnectType: config: null
+10-03 16:55:48.087  1212  1416 D TelephonyConfigUpdateInstallReceiver: getConfigParser: domain=satellite
+10-03 16:55:48.087  1212  1416 V SatelliteController: satelliteConfigParser is not ready
+10-03 16:55:48.087  1212  1416 D SatelliteController: getCarrierRoamingNtnConnectTypeViaConfigUpdater: return null (satelliteConfig is null)
+10-03 16:55:48.087  1212  1416 D SatelliteController: getCarrierRoamingNtnConnectType: Falling back to global carrier config connect type: 0
+10-03 16:55:48.087  1212  1416 D TelephonyConfigUpdateInstallReceiver: getConfigParser: domain=satellite
+10-03 16:55:48.087  1212  1416 V SatelliteController: satelliteConfigParser is not ready
+10-03 16:55:48.087  1212  1416 D SatelliteController: isSatelliteAttachSupportedViaConfigupdater: return null (satelliteConfig is null)
+10-03 16:55:48.088  3276  3276 D ViewRootImpl: Skipping stats log for color mode
+10-03 16:55:48.109  1313  1320 I s.nexuslauncher: NativeAlloc concurrent mark compact GC freed 672KB AllocSpace bytes, 0(0B) LOS objects, 49% free, 5970KB/11MB, paused 120us,585us total 101.768ms
+10-03 16:55:48.132  3276  3671 D IdlingRegistry: Unregistering idling resources: [androidx.compose.ui.test.EspressoLink@d40500c]
+10-03 16:55:48.139   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:48.139   496   528 W skia    : AGTM parsing failed flags.readFromStream(s) at 159
+10-03 16:55:48.147  3276  3671 I TestRunner: finished: multiSelectionTranslatesTextShapeAndFreeArrowTogether(com.thinkcanvas.canvas.EdgeAutoPanTest)

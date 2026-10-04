@@ -1,0 +1,203 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="128" failures="1" errors="0" skipped="0" time="0.000" timestamp="2026-10-03T17:30:29" hostname="localhost">
+  <testsuite name="com.thinkcanvas.board.BoardImageDeliveryTest" tests="10" failures="0" errors="0" skipped="0" time="7.126" timestamp="2026-10-03T17:30:29" hostname="localhost">
+    <properties>
+      <property name="device" value="_app_pixel9Api37DebugAndroidTest" />
+    </properties>
+    <testcase name="renderedPngMatchesPreviewAndCanBeCopiedWithoutChangingBoard" classname="com.thinkcanvas.board.BoardImageDeliveryTest" time="0.239" />
+    <testcase name="markerStaysBehindShapesAndPenInExport" classname="com.thinkcanvas.board.BoardImageDeliveryTest" time="0.071" />
+    <testcase name="attachedAndFreeArrowEndpointsArePresentInRenderedBitmap" classname="com.thinkcanvas.board.BoardImageDeliveryTest" time="5.968" />
+    <testcase name="mediaStoreSaveCanBeReadAndCleanedUp" classname="com.thinkcanvas.board.BoardImageDeliveryTest" time="0.210" />
+    <testcase name="exportUsesDeviceTextMetricsForPlanAndBitmap" classname="com.thinkcanvas.board.BoardImageDeliveryTest" time="0.129" />
+    <testcase name="regionLabelMasksArrowAndOutlineInExport" classname="com.thinkcanvas.board.BoardImageDeliveryTest" time="0.010" />
+    <testcase name="allElementKindsArePresentInSharedBitmap" classname="com.thinkcanvas.board.BoardImageDeliveryTest" time="0.051" />
+    <testcase name="selectedTextArrowUsesThePlanGeometryForDrawing" classname="com.thinkcanvas.board.BoardImageDeliveryTest" time="0.402" />
+    <testcase name="detailedRegionAndArrowStylingRemainsInExport" classname="com.thinkcanvas.board.BoardImageDeliveryTest" time="0.009" />
+    <testcase name="longRegionNameRemainsVisibleBeyondNarrowRegion" classname="com.thinkcanvas.board.BoardImageDeliveryTest" time="0.037" />
+  </testsuite>
+  <testsuite name="com.thinkcanvas.board.BoardListScreenTest" tests="32" failures="0" errors="0" skipped="0" time="216.098" timestamp="2026-10-03T17:30:29" hostname="localhost">
+    <properties>
+      <property name="device" value="_app_pixel9Api37DebugAndroidTest" />
+    </properties>
+    <testcase name="completedOpenWaitsForStartedSurvivingActivityBeforeConsume" classname="com.thinkcanvas.board.BoardListScreenTest" time="12.583" />
+    <testcase name="newTextImmediateSaveClosesOnceAndPersistsOneElementAfterRepeatedDone" classname="com.thinkcanvas.board.BoardListScreenTest" time="8.435" />
+    <testcase name="existingTextImmediateSaveClosesEditor" classname="com.thinkcanvas.board.BoardListScreenTest" time="15.683" />
+    <testcase name="renameAndDuplicateKeepIndependentContent" classname="com.thinkcanvas.board.BoardListScreenTest" time="15.324" />
+    <testcase name="failedActionExplicitCloseRestoresListBeforeAcknowledgement" classname="com.thinkcanvas.board.BoardListScreenTest" time="9.081" />
+    <testcase name="createCompletesOnceAfterActivityRecreation" classname="com.thinkcanvas.board.BoardListScreenTest" time="5.759" />
+    <testcase name="listPageSurvivesActivityRecreation" classname="com.thinkcanvas.board.BoardListScreenTest" time="6.185" />
+    <testcase name="listShareOffersPreviewAndCopyWithoutChangingSavedContent" classname="com.thinkcanvas.board.BoardListScreenTest" time="15.232" />
+    <testcase name="guideAppearsOnlyOnInitialEmptyBoardAndCanBeReplayed" classname="com.thinkcanvas.board.BoardListScreenTest" time="9.567" />
+    <testcase name="actionFailureIsShownAfterActivityRecreation" classname="com.thinkcanvas.board.BoardListScreenTest" time="4.419" />
+    <testcase name="failedDraftSaveKeepsContinuationUntilRetrySucceeds" classname="com.thinkcanvas.board.BoardListScreenTest" time="6.584" />
+    <testcase name="systemBackReturnsFromBoardToList" classname="com.thinkcanvas.board.BoardListScreenTest" time="3.961" />
+    <testcase name="boardUndoHistorySurvivesReopenAndActivityRecreation" classname="com.thinkcanvas.board.BoardListScreenTest" time="5.284" />
+    <testcase name="twentyCardsCanScrollAndOpenFirstAndLast" classname="com.thinkcanvas.board.BoardListScreenTest" time="5.277" />
+    <testcase name="guideCtaCanBeScrolledToAndActivatedAtLargeFontInCompactHeight" classname="com.thinkcanvas.board.BoardListScreenTest" time="7.290" />
+    <testcase name="deletionRequiresConfirmationAndKeepsOtherBoard" classname="com.thinkcanvas.board.BoardListScreenTest" time="5.729" />
+    <testcase name="failedActionRecoveryReadFailureKeepsFailureRetryable" classname="com.thinkcanvas.board.BoardListScreenTest" time="5.434" />
+    <testcase name="failedActionSystemBackRecoversListAndAllowsAnotherAction" classname="com.thinkcanvas.board.BoardListScreenTest" time="4.577" />
+    <testcase name="selectedTextOpensOnlyItsOwnImagePreview" classname="com.thinkcanvas.board.BoardListScreenTest" time="5.712" />
+    <testcase name="listShareLoadingRejectsOpenCreateMutationAndSecondShare" classname="com.thinkcanvas.board.BoardListScreenTest" time="5.779" />
+    <testcase name="pendingBoardSaveSurvivesRecreationAndBlocksLeaving" classname="com.thinkcanvas.board.BoardListScreenTest" time="3.747" />
+    <testcase name="regionNameEditBlocksSystemBackAndBoardListNavigation" classname="com.thinkcanvas.board.BoardListScreenTest" time="4.972" />
+    <testcase name="failedSaveAndRetryRemainObservableAcrossRecreation" classname="com.thinkcanvas.board.BoardListScreenTest" time="3.496" />
+    <testcase name="duplicateReloadsExactlyOneCopyAfterActivityRecreation" classname="com.thinkcanvas.board.BoardListScreenTest" time="4.327" />
+    <testcase name="openingBoardCompletesAfterActivityRecreationWithoutStartingTwice" classname="com.thinkcanvas.board.BoardListScreenTest" time="4.126" />
+    <testcase name="failureOutsideDismissalAndRecreationKeepFailureUntilRecovery" classname="com.thinkcanvas.board.BoardListScreenTest" time="5.999" />
+    <testcase name="renameReloadsTheListAfterActivityRecreation" classname="com.thinkcanvas.board.BoardListScreenTest" time="5.562" />
+    <testcase name="deleteDoesNotRestoreTheDeletedBoardAfterActivityRecreation" classname="com.thinkcanvas.board.BoardListScreenTest" time="5.005" />
+    <testcase name="runningCreateRemainsTheOnlyAllowedListActionAfterRecreation" classname="com.thinkcanvas.board.BoardListScreenTest" time="3.871" />
+    <testcase name="lastOpenedBoardReturnsAfterActivityRestart" classname="com.thinkcanvas.board.BoardListScreenTest" time="6.703" />
+    <testcase name="emptyBoardShowsExactlyOneCanonicalAccessibleHint" classname="com.thinkcanvas.board.BoardListScreenTest" time="3.892" />
+    <testcase name="systemBackDoesNotLeaveAnUncommittedDraft" classname="com.thinkcanvas.board.BoardListScreenTest" time="6.503" />
+  </testsuite>
+  <testsuite name="com.thinkcanvas.board.BoardThumbnailTest" tests="10" failures="0" errors="0" skipped="0" time="0.268" timestamp="2026-10-03T17:30:29" hostname="localhost">
+    <properties>
+      <property name="device" value="_app_pixel9Api37DebugAndroidTest" />
+    </properties>
+    <testcase name="thumbnailVisibilityUsesItsActualFitScaleForBorderlineInk" classname="com.thinkcanvas.board.BoardThumbnailTest" time="0.205" />
+    <testcase name="inkOnlyBoardHasVisiblePreview" classname="com.thinkcanvas.board.BoardThumbnailTest" time="0.000" />
+    <testcase name="arrowOnlyBoardHasVisiblePreview" classname="com.thinkcanvas.board.BoardThumbnailTest" time="0.000" />
+    <testcase name="regionLabelFitEnvelopeDoesNotChangeShapeOrArrowAttachmentGeometry" classname="com.thinkcanvas.board.BoardThumbnailTest" time="0.000" />
+    <testcase name="titleNearFittedEdgeIsNotClippedAtScaleBelowHalf" classname="com.thinkcanvas.board.BoardThumbnailTest" time="0.011" />
+    <testcase name="lowScaleRegionLabelFitsInsideLeftAndRightBitmapEdges" classname="com.thinkcanvas.board.BoardThumbnailTest" time="0.052" />
+    <testcase name="fixedScreenThumbnailGeometryPreservesDpAcrossDensity" classname="com.thinkcanvas.board.BoardThumbnailTest" time="0.000" />
+    <testcase name="fittedTitleGeometryMatchesItsFixedPixelExtent" classname="com.thinkcanvas.board.BoardThumbnailTest" time="0.000" />
+    <testcase name="multipleRegionLabelsContributeToFitBounds" classname="com.thinkcanvas.board.BoardThumbnailTest" time="0.000" />
+    <testcase name="titleAttachedArrowUsesTheCorrectedTitleBounds" classname="com.thinkcanvas.board.BoardThumbnailTest" time="0.000" />
+  </testsuite>
+  <testsuite name="com.thinkcanvas.canvas.ConditionalChromeLifecycleTest" tests="2" failures="0" errors="0" skipped="0" time="10.285" timestamp="2026-10-03T17:30:29" hostname="localhost">
+    <properties>
+      <property name="device" value="_app_pixel9Api37DebugAndroidTest" />
+    </properties>
+    <testcase name="collapsedAndExpandedToolFormerCentersAdmitPersistedInkAndAllowReentry" classname="com.thinkcanvas.canvas.ConditionalChromeLifecycleTest" time="6.411" />
+    <testcase name="regionNameTransitionRemovesFormerSelectionSharePointUntilReselected" classname="com.thinkcanvas.canvas.ConditionalChromeLifecycleTest" time="3.874" />
+  </testsuite>
+  <testsuite name="com.thinkcanvas.canvas.EdgeAutoPanTest" tests="18" failures="1" errors="0" skipped="0" time="210.306" timestamp="2026-10-03T17:30:29" hostname="localhost">
+    <properties>
+      <property name="device" value="_app_pixel9Api37DebugAndroidTest" />
+    </properties>
+    <testcase name="editorAndDiscardDialogDoNotAdmitTheMoveTicker" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="5.004" />
+    <testcase name="stationaryPointerPreservesOffsetStopsInCenterAndCommitsOnce" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="6.631" />
+    <testcase name="stylusTakeoverCancelsMoveAndCommitsOnlyTheStroke" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="3.285" />
+    <testcase name="panToolsAndGapDoNotStartTheMoveTicker" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="33.497" />
+    <testcase name="regionMoveKeepsInitialNestedContentsInkAndAttachedArrowRules" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="5.562" />
+    <testcase name="boundedProfilesCarryBeyondViewportAndStopBeforeDrop" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="56.192" />
+    <testcase name="saveBlockCancelsMoveAndRejectsOldUpEvenBeforeRecomposition" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="6.750" />
+    <testcase name="accessibilityMoveRetainsItsOneStepAndDoesNotStartTheTicker" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="2.924" />
+    <testcase name="multiSelectionTranslatesTextShapeAndFreeArrowTogether" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="4.340">
+      <failure>java.lang.AssertionError: expected:&lt;1465.4&gt; but was:&lt;1017.4&gt;
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:577)
+	at org.junit.Assert.assertEquals(Assert.java:701)
+	at com.thinkcanvas.canvas.EdgeAutoPanTest.multiSelectionTranslatesTextShapeAndFreeArrowTogether$lambda$0(EdgeAutoPanTest.kt:507)
+	at com.thinkcanvas.canvas.EdgeAutoPanTest$$ExternalSyntheticLambda24.invoke(D8$$SyntheticClass:0)
+	at com.thinkcanvas.canvas.EdgeAutoPanTest.withBoard(EdgeAutoPanTest.kt:324)
+	at com.thinkcanvas.canvas.EdgeAutoPanTest.withBoard$default(EdgeAutoPanTest.kt:288)
+	at com.thinkcanvas.canvas.EdgeAutoPanTest.multiSelectionTranslatesTextShapeAndFreeArrowTogether(EdgeAutoPanTest.kt:475)
+</failure>
+    </testcase>
+    <testcase name="backRejectsQueuedFrameAndSameTurnStaleMoveAndUp" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="3.468" />
+    <testcase name="nativeCancelDiscardsPreviewWithoutSavingOrHistory" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="6.728" />
+    <testcase name="tapAndSlopJitterDoNotStartAutoPan" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="7.753" />
+    <testcase name="secondFingerCancelsMoveAndHandsOffToPinchWithoutSaving" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="3.926" />
+    <testcase name="boundedProfilesKeepMultiSelectionTogetherOnDrop" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="13.120" />
+    <testcase name="longPressMoveAdmitsTextShapeAndInkOnlyAfterSlop" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="14.683" />
+    <testcase name="pinchLimitsKeepTheMoveAnchorAndReleasePositionConsistent" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="13.437" />
+    <testcase name="stopAndRecreationDoNotRestoreTheMoveOrTicker" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="9.617" />
+    <testcase name="resizeAndArrowHandlesDoNotStartTheMoveTicker" classname="com.thinkcanvas.canvas.EdgeAutoPanTest" time="13.389" />
+  </testsuite>
+  <testsuite name="com.thinkcanvas.canvas.InkGestureTest" tests="1" failures="0" errors="0" skipped="0" time="10.319" timestamp="2026-10-03T17:30:29" hostname="localhost">
+    <properties>
+      <property name="device" value="_app_pixel9Api37DebugAndroidTest" />
+    </properties>
+    <testcase name="secondFingerCancelsWetInkAndSingleFingerStillDraws" classname="com.thinkcanvas.canvas.InkGestureTest" time="10.319" />
+  </testsuite>
+  <testsuite name="com.thinkcanvas.canvas.LongPressGestureTest" tests="4" failures="0" errors="0" skipped="0" time="20.023" timestamp="2026-10-03T17:30:29" hostname="localhost">
+    <properties>
+      <property name="device" value="_app_pixel9Api37DebugAndroidTest" />
+    </properties>
+    <testcase name="blankLongPressDragInsertsGapAsOneUndoableOperation" classname="com.thinkcanvas.canvas.LongPressGestureTest" time="5.173" />
+    <testcase name="blankLongPressReleaseDoesNothing" classname="com.thinkcanvas.canvas.LongPressGestureTest" time="5.609" />
+    <testcase name="elementLongPressDragMovesAndUndoRedoApply" classname="com.thinkcanvas.canvas.LongPressGestureTest" time="5.333" />
+    <testcase name="elementLongPressReleaseOpensMenuAndDeleteIsReachable" classname="com.thinkcanvas.canvas.LongPressGestureTest" time="3.908" />
+  </testsuite>
+  <testsuite name="com.thinkcanvas.canvas.NeutralInteractionTest" tests="23" failures="0" errors="0" skipped="0" time="137.716" timestamp="2026-10-03T17:30:29" hostname="localhost">
+    <properties>
+      <property name="device" value="_app_pixel9Api37DebugAndroidTest" />
+    </properties>
+    <testcase name="penAndMarkerKeepArmedAcrossConsecutiveStrokes" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="6.130" />
+    <testcase name="backBeforeSelectionPreviewRejectsOldTapMoveAndResize" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="5.415" />
+    <testcase name="failedSaveBackDoesNotCloseOrAutomaticallyRetry" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="5.157" />
+    <testcase name="armedSpatialToolAndInkToolSurviveActivityRecreation" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="5.925" />
+    <testcase name="backDuringOutsideDownKeepsChangedDraftInConfirmationWithoutCommitting" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="5.345" />
+    <testcase name="newRegionNameDiscardLeavesCreatedRegionPersisted" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="6.712" />
+    <testcase name="backDuringSpatialPreviewCancelsLaterUpAndAllowsNextBlankTap" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="4.350" />
+    <testcase name="changedRegionNameContinuesAndBackDiscardsOnlyName" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="8.834" />
+    <testcase name="existingTextKindAndColorChangesDiscardWithoutChangingElementOrHistory" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="5.770" />
+    <testcase name="textAndDiscardConfirmationSurviveActivityRecreation" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="8.199" />
+    <testcase name="existingDraftRevertedToOriginalClosesWithoutConfirmation" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="4.588" />
+    <testcase name="blankNewAndUnchangedExistingEditorsCloseWithoutSavingOrNavigating" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="4.666" />
+    <testcase name="staleDiscardConfirmationCannotCancelReplacementSession" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="7.082" />
+    <testcase name="systemBackWhileImeVisibleOnlyHidesKeyboardAndRetainsDraft" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="4.640" />
+    <testcase name="fourSpatialToolsAndLassoRemainOneShotAfterAccessibleCompletion" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="6.538" />
+    <testcase name="backDuringWetInkPreviewCancelsGestureAndLaterUpCannotCommit" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="3.204" />
+    <testcase name="changedNewTextContinueDialogBackAndOutsideKeepDraft" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="10.287" />
+    <testcase name="contextMenuSearchAndSelectionEachConsumeOneBack" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="5.004" />
+    <testcase name="backBeforeCanvasTapClosesMenuSearchAndExpandedToolsWithoutForwarding" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="7.341" />
+    <testcase name="runningSaveAndPendingAcknowledgementRejectBackWithoutRetryOrNavigation" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="5.497" />
+    <testcase name="expandedToolsAndArmedInkExitInSeparateBackStages" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="4.098" />
+    <testcase name="changedNewWhitespaceRequiresConfirmationAndDiscardDoesNotCreateHistory" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="5.626" />
+    <testcase name="regionNameSessionSurvivesRecreationWithoutAutoCommit" classname="com.thinkcanvas.canvas.NeutralInteractionTest" time="7.308" />
+  </testsuite>
+  <testsuite name="com.thinkcanvas.canvas.SemanticNavigationTest" tests="5" failures="0" errors="0" skipped="0" time="22.527" timestamp="2026-10-03T17:30:29" hostname="localhost">
+    <properties>
+      <property name="device" value="_app_pixel9Api37DebugAndroidTest" />
+    </properties>
+    <testcase name="zoomCycleAndSearchControlsAreAccessibleWithoutSaving" classname="com.thinkcanvas.canvas.SemanticNavigationTest" time="4.268" />
+    <testcase name="openingFitViewportSettlesAfterSemanticTierChanges" classname="com.thinkcanvas.canvas.SemanticNavigationTest" time="3.811" />
+    <testcase name="farRegionFitsAndSearchFindsSavedText" classname="com.thinkcanvas.canvas.SemanticNavigationTest" time="8.629" />
+    <testcase name="openingFitIncludesHiddenBodiesAlongsideShapes" classname="com.thinkcanvas.canvas.SemanticNavigationTest" time="2.370" />
+    <testcase name="openingFitKeepsFarBodyOnlyExtentAfterBodyBecomesHidden" classname="com.thinkcanvas.canvas.SemanticNavigationTest" time="3.449" />
+  </testsuite>
+  <testsuite name="com.thinkcanvas.canvas.TextEditorDismissalTest" tests="21" failures="0" errors="0" skipped="0" time="148.217" timestamp="2026-10-03T17:30:29" hostname="localhost">
+    <properties>
+      <property name="device" value="_app_pixel9Api37DebugAndroidTest" />
+    </properties>
+    <testcase name="outsideTwoFingerGestureKeepsDraft" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="4.333" />
+    <testcase name="existingEditOutsideTapCommitsContentKindColorAndPreservesIdentityPosition" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="8.025" />
+    <testcase name="existingDraftSurvivesRecreationThenOutsideCommits" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="10.092" />
+    <testcase name="whitespaceOutsideUsesExistingDoneValidationForNewAndExistingDrafts" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="11.072" />
+    <testcase name="splitOutsideTouchExceptionCancelsAndNextGestureSucceeds" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="5.933" />
+    <testcase name="existingEditExplicitDoneMatchesOutsideCompletion" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="8.078" />
+    <testcase name="outsideTapDiscardsLatestEmptyInputBetweenDownAndUp" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="4.962" />
+    <testcase name="outsideDragLongPressAndCancellationKeepDraft" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="5.342" />
+    <testcase name="newDraftSurvivesRecreationStopResumeAndImeBackWithoutSave" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="10.287" />
+    <testcase name="runningSaveOutsideTapAndRecreationKeepOneRequestUntilSuccess" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="5.209" />
+    <testcase name="existingElementTapOnlyFinalizesAndFormerChromeIsNotBlocked" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="7.354" />
+    <testcase name="emptyDraftOutsideTapClosesWithoutCreatingAndNextTapStartsDraft" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="4.926" />
+    <testcase name="insideFieldToolbarAndDoneKeepTheirActions" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="5.848" />
+    <testcase name="failedSaveOutsideTapAndRecreationKeepRetryWithoutDuplicateElement" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="6.041" />
+    <testcase name="explicitCancelDiscardsNewAndExistingEditsWithoutSaving" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="6.853" />
+    <testcase name="existingEditorEntryHandlesUnselectedSelectedDoneAndOutsideReentry" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="8.720" />
+    <testcase name="nonEmptyDraftOutsideCommitsOnceWithWorldPositionKindColorAndReopen" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="10.210" />
+    <testcase name="outsideTapCommitsLatestInputWhenEmptyDraftChangesBetweenDownAndUp" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="6.831" />
+    <testcase name="existingDraftSurvivesRecreationThenCanCancelWithoutSave" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="5.614" />
+    <testcase name="emptyExistingOutsideUsesExistingDoneValidationWithoutDeletingElement" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="8.241" />
+    <testcase name="nearbyOutsideTapIsConsumedBeforeBlankDoubleTapZoom" classname="com.thinkcanvas.canvas.TextEditorDismissalTest" time="4.246" />
+  </testsuite>
+  <testsuite name="com.thinkcanvas.data.BoardPersistenceTest" tests="1" failures="0" errors="0" skipped="0" time="0.705" timestamp="2026-10-03T17:30:29" hostname="localhost">
+    <properties>
+      <property name="device" value="_app_pixel9Api37DebugAndroidTest" />
+    </properties>
+    <testcase name="boardsRemainSeparateAcrossReopenDeleteAndLateSave" classname="com.thinkcanvas.data.BoardPersistenceTest" time="0.705" />
+  </testsuite>
+  <testsuite name="com.thinkcanvas.data.InkPersistenceTest" tests="1" failures="0" errors="0" skipped="0" time="0.481" timestamp="2026-10-03T17:30:29" hostname="localhost">
+    <properties>
+      <property name="device" value="_app_pixel9Api37DebugAndroidTest" />
+    </properties>
+    <testcase name="inkInputEncodingSurvivesDatabaseReopenAtThreeViewports" classname="com.thinkcanvas.data.InkPersistenceTest" time="0.481" />
+  </testsuite>
+</testsuites>
