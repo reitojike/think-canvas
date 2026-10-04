@@ -60,3 +60,7 @@ T001→T002→T003/T004→US1→US2→検証・converge。US1はeditorからの�
 ## Phase 11: Issue91 readonly focus Convergence
 
 - [ ] T021 HIGH: `CanvasScreen.kt` の三ownerでfocusとIMEのadmissionを分離し、native window復帰後の現在fieldへのfocusをreadonlyでも保持する。live save/ack guardはfocus要求後のIME待機/showだけを拒否し、blockedでは即returnする。既存 `TextEditorDismissalTest.kt` のFocused=true/draft/ack/要求/Room/Undo保持条件を緩めずRunning/Failed再生成を検証し、Neutral継続/pending終了・置換と最終142件のdeliveryを収束する。Spec007 FR-004/009・SC-003、Spec006 FR-006/007、[第四bounded checkpoint](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5976130770)（contradicts）。
+
+## Phase 12: Issue91 pending入力取消 Convergence
+
+- [ ] T022 HIGH: `CanvasScreen.kt` の三入力要求を標準Jobで取消可能に登録し、既存clearEditorFocus/IME優先Back/検索closeの受理hideで同期cancelする。finallyで登録を除去し、searchのlive確認guardを追加する。`NeutralInteractionTest.kt` のnative別windowで確認受理から再composition前の非focus、確認Backから編集復帰、IME Backからwindow帰還後の非表示とdraft/Board/Room/Undo保持を検証する。Spec007 FR-003/007/009、Issue91 AC3/4/5、[第五bounded checkpoint](https://github.com/reitojike/think-canvas/pull/92#issuecomment-5976244593)（contradicts）。実装・focused成功後も、最終head全体143件とdeliveryの確定までT017/T020〜T022はpending。

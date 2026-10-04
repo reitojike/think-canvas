@@ -116,6 +116,8 @@ import com.thinkcanvas.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -192,6 +194,7 @@ fun CanvasScreen(
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val pendingInputRequests = remember { mutableSetOf<Job>() }
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
@@ -379,9 +382,14 @@ fun CanvasScreen(
         chromeBounds.any { (key, bounds) -> !key.startsWith("indicator:") && bounds.contains(point) } ||
             indicatorsAllowed() && latestIndicatorLayouts.value.any { it.touchBounds.contains(point) }
 
-    fun clearEditorFocus() {
-        focusManager.clearFocus(force = true)
+    fun hideEditorIme() {
+        pendingInputRequests.toList().forEach { it.cancel() }
         keyboard?.hide()
+    }
+
+    fun clearEditorFocus() {
+        hideEditorIme()
+        focusManager.clearFocus(force = true)
         lastBlankTap = null
     }
 
@@ -621,7 +629,7 @@ fun CanvasScreen(
     BackHandler {
         if (imeBottom > 0) {
             invalidatePointerContinuation()
-            keyboard?.hide()
+            hideEditorIme()
         } else if (!exitBlocked()) {
             val currentDraft = editorSession.draft.value
             val currentRegion = editorSession.regionNameDraft.value
@@ -847,32 +855,38 @@ fun CanvasScreen(
 
     suspend fun focusEditorInput(requester: FocusRequester, isCurrent: () -> Boolean) {
         if (!isCurrent()) return
-        snapshotFlow { windowInfo.isWindowFocused }.first { it }
-        if (!isCurrent()) return
-        requester.requestFocus()
-        // Read-only editors retain focus, but cannot create an editable input connection.
-        if (exitBlocked()) return
-        if (Build.VERSION.SDK_INT >= 30) {
-            val controller = inputView.windowInsetsController ?: return
-            suspendCancellableCoroutine<Unit> { continuation ->
-                val listener = object : WindowInsetsController.OnControllableInsetsChangedListener {
-                    override fun onControllableInsetsChanged(controller: WindowInsetsController, typeMask: Int) {
-                        if (continuation.isActive && inputView.hasWindowFocus() &&
-                            typeMask and android.view.WindowInsets.Type.ime() != 0) {
-                            // Do not mutate the platform listener list during its dispatch.
-                            inputView.post { controller.removeOnControllableInsetsChangedListener(this) }
-                            continuation.resume(Unit)
+        val requestJob = currentCoroutineContext().job
+        pendingInputRequests.add(requestJob)
+        try {
+            snapshotFlow { windowInfo.isWindowFocused }.first { it }
+            if (!isCurrent()) return
+            requester.requestFocus()
+            // Read-only editors retain focus, but cannot create an editable input connection.
+            if (exitBlocked()) return
+            if (Build.VERSION.SDK_INT >= 30) {
+                val controller = inputView.windowInsetsController ?: return
+                suspendCancellableCoroutine<Unit> { continuation ->
+                    val listener = object : WindowInsetsController.OnControllableInsetsChangedListener {
+                        override fun onControllableInsetsChanged(controller: WindowInsetsController, typeMask: Int) {
+                            if (continuation.isActive && inputView.hasWindowFocus() &&
+                                typeMask and android.view.WindowInsets.Type.ime() != 0) {
+                                // Do not mutate the platform listener list during its dispatch.
+                                inputView.post { controller.removeOnControllableInsetsChangedListener(this) }
+                                continuation.resume(Unit)
+                            }
                         }
                     }
+                    continuation.invokeOnCancellation {
+                        controller.removeOnControllableInsetsChangedListener(listener)
+                    }
+                    if (continuation.isActive) controller.addOnControllableInsetsChangedListener(listener)
                 }
-                continuation.invokeOnCancellation {
-                    controller.removeOnControllableInsetsChangedListener(listener)
-                }
-                if (continuation.isActive) controller.addOnControllableInsetsChangedListener(listener)
             }
+            withFrameNanos { }
+            if (isCurrent() && !exitBlocked() && inputView.hasWindowFocus()) keyboard?.show()
+        } finally {
+            pendingInputRequests.remove(requestJob)
         }
-        withFrameNanos { }
-        if (isCurrent() && !exitBlocked() && inputView.hasWindowFocus()) keyboard?.show()
     }
 
     val inputAllowed = currentSaveState == BoardSaveState.Idle && pendingDraftAcknowledgement == null
@@ -887,7 +901,9 @@ fun CanvasScreen(
     }
     LaunchedEffect(searchOpen, inputAllowed) {
         if (searchOpen) {
-            focusEditorInput(searchFocusRequester) { searchOpen && editorSession.draft.value == null }
+            focusEditorInput(searchFocusRequester) {
+                searchOpen && editorSession.draft.value == null && discardTarget == null
+            }
         } else chromeBounds.remove("search")
     }
     LaunchedEffect(searchOpen, searchQuery, board.elements, board.shapes) {
@@ -1787,7 +1803,7 @@ fun CanvasScreen(
                         Text("›", color = ink, fontSize = 24.sp)
                     }
                     IconButton(onClick = {
-                        searchOpen = false; searchQuery = ""; searchPosition = 0; keyboard?.hide()
+                        searchOpen = false; searchQuery = ""; searchPosition = 0; hideEditorIme()
                     }, modifier = Modifier.size(44.dp).semantics { contentDescription = "検索を閉じる" }) {
                         Text("×", color = ink, fontSize = 22.sp)
                     }
