@@ -6,6 +6,8 @@ import com.thinkcanvas.canvas.BoardSnapshot
 import com.thinkcanvas.canvas.BoardState
 import com.thinkcanvas.canvas.TextEditorSession
 import com.thinkcanvas.canvas.ViewportHistory
+import com.thinkcanvas.canvas.TextElement
+import com.thinkcanvas.data.ShareImportReceiptRow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +50,9 @@ class BoardSessionViewModel(
         var nextAttemptId = 0L
         var activeAttemptId: Long? = null
         var activeSnapshot: BoardSnapshot? = null
+        var activeOperation: Deferred<Unit>? = null
+        var activeShareId: String? = null
+        val imports = mutableMapOf<String, BoardSaveAcknowledgement>()
         val pendingAcknowledgements = linkedMapOf<Long, PendingAcknowledgement>()
     }
 
@@ -55,10 +60,12 @@ class BoardSessionViewModel(
         val acknowledgement: BoardSaveAcknowledgement,
         val completion: CompletableDeferred<Unit>,
         var targetAttemptId: Long,
+        val shareReceipt: ShareImportReceiptRow? = null,
     )
 
     private val sessions = mutableMapOf<Long, Session>()
     private var saveOperation: ((Long, BoardSnapshot) -> kotlinx.coroutines.Deferred<Unit>)? = null
+    private var shareSaveOperation: ((Long, BoardSnapshot, ShareImportReceiptRow) -> Deferred<Unit>)? = null
 
     fun stateFor(boardId: Long, initial: BoardSnapshot): BoardState =
         sessionFor(boardId, initial).board
@@ -77,11 +84,44 @@ class BoardSessionViewModel(
     }
 
     fun requestSave(boardId: Long, snapshot: BoardSnapshot): BoardSaveAcknowledgement? {
+        return enqueueSave(boardId, snapshot)
+    }
+
+    fun setShareSaveOperation(operation: (Long, BoardSnapshot, ShareImportReceiptRow) -> Deferred<Unit>) {
+        shareSaveOperation = operation
+    }
+
+    /** Re-entry by the same owner reuses the ack, including after a successful undo. */
+    fun requestShareImport(boardId: Long, initial: BoardSnapshot, receipt: ShareImportReceiptRow,
+                           element: TextElement, restoreUncertain: Boolean = false): BoardSaveAcknowledgement? {
+        require(receipt.boardId == boardId && receipt.elementId == element.id)
+        val session = sessionFor(boardId, initial)
+        session.imports[receipt.requestId]?.let { return it }
+        if (session.saveState.value != BoardSaveState.Idle) return null
+        if (session.board.elements.none { it.id == element.id })
+            session.board.apply(session.board.snapshot().copy(texts = session.board.elements + element))
+        val snapshot = session.board.snapshot()
+        if (restoreUncertain) session.saveState.value = BoardSaveState.Failed(snapshot)
+        val acknowledgement = checkNotNull(enqueueSave(boardId, snapshot, receipt))
+        session.imports[receipt.requestId] = acknowledgement
+        return acknowledgement
+    }
+
+    fun cancelShareImport(boardId: Long, requestId: String) {
+        val session = sessions[boardId] ?: return
+        if (session.activeShareId == requestId) {
+            session.activeOperation?.cancel()
+            session.inFlight?.cancel()
+        }
+    }
+
+    private fun enqueueSave(boardId: Long, snapshot: BoardSnapshot,
+                            receipt: ShareImportReceiptRow? = null): BoardSaveAcknowledgement? {
         val session = sessions[boardId] ?: return null
         val requestId = ++session.nextRequestId
         val completion = CompletableDeferred<Unit>()
         val acknowledgement = BoardSaveAcknowledgement(boardId, requestId, completion)
-        val pending = PendingAcknowledgement(acknowledgement, completion, 0L)
+        val pending = PendingAcknowledgement(acknowledgement, completion, 0L, receipt)
         session.pendingAcknowledgements[requestId] = pending
         when (session.saveState.value) {
             is BoardSaveState.Running -> {
@@ -109,7 +149,15 @@ class BoardSessionViewModel(
     }
 
     fun discard(boardId: Long) {
-        sessions.remove(boardId)?.inFlight?.cancel()
+        sessions.remove(boardId)?.let { session ->
+            if (session.activeShareId != null) session.activeOperation?.cancel()
+            session.inFlight?.cancel()
+        }
+    }
+
+    override fun onCleared() {
+        sessions.values.filter { it.activeShareId != null }.forEach { it.activeOperation?.cancel() }
+        super.onCleared()
     }
 
     private fun sessionFor(boardId: Long, initial: BoardSnapshot): Session =
@@ -133,7 +181,14 @@ class BoardSessionViewModel(
                 nextAcknowledgements.forEach { it.targetAttemptId = attemptId }
                 session.saveState.value = BoardSaveState.Running(snapshot)
                 try {
-                    operation(boardId, snapshot).await()
+                    val receipts = nextAcknowledgements.mapNotNull { it.shareReceipt }.distinct()
+                    check(receipts.size <= 1) { "Only one share import may own a save attempt" }
+                    val receipt = receipts.singleOrNull()
+                    session.activeShareId = receipt?.requestId
+                    val submitted = if (receipt == null) operation(boardId, snapshot)
+                        else checkNotNull(shareSaveOperation)(boardId, snapshot, receipt)
+                    session.activeOperation = submitted
+                    submitted.await()
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
@@ -142,12 +197,16 @@ class BoardSessionViewModel(
                         session.latestDirtySnapshot = null
                         session.activeAttemptId = null
                         session.activeSnapshot = null
+                        session.activeOperation = null
+                        session.activeShareId = null
                         session.saveState.value = BoardSaveState.Failed(retrySnapshot)
                         session.inFlight = null
                     }
                     return@launch
                 }
                 if (sessions[boardId] !== session) return@launch
+                session.activeOperation = null
+                session.activeShareId = null
                 val covered = session.pendingAcknowledgements.values
                     .filter { it.targetAttemptId <= attemptId }
                 covered.forEach { pending ->

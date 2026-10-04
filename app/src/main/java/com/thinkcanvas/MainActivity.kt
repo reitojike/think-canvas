@@ -1,6 +1,7 @@
 package com.thinkcanvas
 
 import android.graphics.Bitmap
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -41,6 +42,13 @@ import com.thinkcanvas.canvas.BoardState
 import com.thinkcanvas.canvas.CanvasScreen
 import com.thinkcanvas.data.CanvasStore
 import com.thinkcanvas.data.StoredBoard
+import com.thinkcanvas.data.BoardRow
+import com.thinkcanvas.data.ShareImportReceiptRow
+import com.thinkcanvas.canvas.WorldPoint
+import com.thinkcanvas.share.ShareImportDialog
+import com.thinkcanvas.share.ShareImportPhase
+import com.thinkcanvas.share.ShareImportViewModel
+import com.thinkcanvas.share.sharedPlainText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -62,9 +70,42 @@ private sealed interface Page {
 
 class MainActivity : ComponentActivity() {
     private var navigationTargetIsList = false
+    private lateinit var shareImports: ShareImportViewModel
+    private lateinit var activeBoardSessions: BoardSessionViewModel
+
+    @Suppress("DEPRECATION")
+    private fun incomingText(intent: Intent): String? = try {
+        sharedPlainText(intent.action, intent.type, intent.extras?.get(Intent.EXTRA_TEXT))
+    } catch (_: RuntimeException) { null }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Admission uses this delivery directly; the original task launch Intent stays unchanged.
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        if (intent.action !in setOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE)) return
+        val text = incomingText(intent)
+        val message = when {
+            text == null -> "この共有内容は取り込めません"
+            !shareImports.receive(text) -> "先の共有を完了してから、もう一度共有してください"
+            else -> "共有を受け取りました。現在の操作が終わると確認できます"
+        }
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onDestroy() {
+        if (isFinishing && ::shareImports.isInitialized && ::activeBoardSessions.isInitialized) {
+            val request = shareImports.state.request
+            if (request?.accepted == true)
+                activeBoardSessions.cancelShareImport(checkNotNull(request.destinationId), request.requestId)
+            val store = CanvasStore.get(applicationContext)
+            shareImports.finishTask { record -> store.clearShareCheckpoint(record) }
+        }
+        super.onDestroy()
+    }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean("navigationTargetIsList", navigationTargetIsList)
+        if (::shareImports.isInitialized) outState.putString("shareTaskToken", shareImports.taskToken)
         super.onSaveInstanceState(outState)
     }
 
@@ -78,7 +119,16 @@ class MainActivity : ComponentActivity() {
         )
         val store = CanvasStore.get(this)
         val boardSessions = ViewModelProvider(this)[BoardSessionViewModel::class.java]
+        activeBoardSessions = boardSessions
         boardSessions.setSaveOperation { boardId, snapshot -> store.save(boardId, snapshot) }
+        boardSessions.setShareSaveOperation { boardId, snapshot, receipt -> store.saveShare(boardId, snapshot, receipt) }
+        shareImports = ViewModelProvider(this)[ShareImportViewModel::class.java]
+        val historyLaunch = intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
+        val restoringTask = savedInstanceState != null || historyLaunch
+        val initialShareAttempt = intent.action in setOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE)
+        val initialText = if (!restoringTask) incomingText(intent) else null
+        shareImports.initialize(File(filesDir, "share-import"), restoringTask,
+            savedInstanceState?.getString("shareTaskToken"), initialText)
         val boardListActions = ViewModelProvider(this)[BoardListActionViewModel::class.java]
         val page = mutableStateOf<Page>(Page.Loading)
         val cards = mutableStateOf<List<StoredBoard>>(emptyList())
@@ -88,11 +138,20 @@ class MainActivity : ComponentActivity() {
         val startupLoadFailed = mutableStateOf(false)
         val shareDialog = mutableStateOf<ShareDialogState?>(null)
         val shareBusy = mutableStateOf(false)
+        val importBoards = mutableStateOf<List<BoardRow>>(emptyList())
+        val canvasReady = mutableStateOf(false)
+        val listReady = mutableStateOf(true)
+        val canvasOwnerId = mutableStateOf<Long?>(null)
+        var canvasNeutralGuard: (() -> Boolean)? = null
+        var listNeutralGuard: (() -> Boolean)? = null
         var shareRequestId = 0L
         val pendingDocument = File(cacheDir, "pending-board-image.png")
 
         fun notice(message: String) = Toast.makeText(this@MainActivity, message,
             Toast.LENGTH_SHORT).show()
+
+        if (!restoringTask && initialShareAttempt && initialText == null)
+            notice("この共有内容は取り込めません")
 
         val createDocument = registerForActivityResult(
             ActivityResultContracts.CreateDocument("image/png")) { uri ->
@@ -213,7 +272,8 @@ class MainActivity : ComponentActivity() {
             navigationTargetIsList = false
             page.value = Page.Board(stored.details.id, stored.details.name,
                 boardSessions.stateFor(stored.details.id, stored.snapshot))
-            guideVisible.value = store.shouldShowGuide(stored.details.id, stored.snapshot)
+            guideVisible.value = shareImports.state.request == null &&
+                store.shouldShowGuide(stored.details.id, stored.snapshot)
         }
 
         suspend fun showList() {
@@ -240,7 +300,8 @@ class MainActivity : ComponentActivity() {
         }
 
         fun admitListOperation(start: () -> Unit) {
-            if (transientPending.value || boardListActions.state.value != BoardListActionState.Idle)
+            if (shareImports.state.blocksCanvas || transientPending.value ||
+                boardListActions.state.value != BoardListActionState.Idle)
                 return
             start()
         }
@@ -298,6 +359,77 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val listActionState = boardListActions.state.value
+            val importState = shareImports.state
+            fun baseImportReady(): Boolean {
+                if (transientPending.value || guideVisible.value || errorMessage.value != null ||
+                    shareDialog.value != null || shareBusy.value ||
+                    boardListActions.state.value != BoardListActionState.Idle) return false
+                return when (val shown = page.value) {
+                    is Page.Board -> canvasOwnerId.value == shown.id && canvasNeutralGuard?.invoke() == true
+                    Page.List -> listNeutralGuard?.invoke() ?: listReady.value
+                    Page.Loading -> false
+                }
+            }
+            LaunchedEffect(shareImports.noticeMessage) {
+                shareImports.noticeMessage?.let { notice(it); shareImports.consumeNotice() }
+            }
+            LaunchedEffect(importState.phase, importState.request?.requestId,
+                importState.request?.destinationId, importState.writing, page.value,
+                canvasReady.value, canvasOwnerId.value, listReady.value, transientPending.value, guideVisible.value,
+                errorMessage.value, shareDialog.value, shareBusy.value, listActionState) {
+                val request = shareImports.state.request ?: return@LaunchedEffect
+                if (shareImports.state.writing) return@LaunchedEffect
+                try {
+                    if (shareImports.state.phase == ShareImportPhase.DEFERRED ||
+                        shareImports.state.phase == ShareImportPhase.OPENING) {
+                        val receipt = store.shareReceipt(request.requestId)
+                        if (receipt != null) {
+                            check(receipt.elementId == request.elementId)
+                            // An old preview's candidate is not the accepted destination authority.
+                            check(!request.accepted || receipt.boardId == request.destinationId)
+                            shareImports.completeFromReceipt()
+                            return@LaunchedEffect
+                        }
+                    }
+                    when (shareImports.state.phase) {
+                        ShareImportPhase.DEFERRED -> if (baseImportReady()) {
+                            importBoards.value = store.boards()
+                            val candidate = (page.value as? Page.Board)?.id ?: store.lastOpenedBoard()?.details?.id
+                            shareImports.present(candidate)
+                        }
+                        ShareImportPhase.PREVIEW, ShareImportPhase.PICKER -> {
+                            importBoards.value = store.boards()
+                            if (shareImports.state.phase == ShareImportPhase.PREVIEW &&
+                                importBoards.value.none { it.id == request.destinationId })
+                                shareImports.missingDestination()
+                        }
+                        ShareImportPhase.OPENING -> {
+                            if (page.value == Page.Loading || transientPending.value) return@LaunchedEffect
+                            val destination = request.destinationId ?: return@LaunchedEffect
+                            val shown = page.value as? Page.Board
+                            if (shown?.id != destination) {
+                                val stored = store.open(destination)
+                                if (stored == null) shareImports.missingDestination() else openBoard(stored)
+                            } else if (baseImportReady()) {
+                                val focus = boardSessions.viewportHistoryFor(shown.id, shown.state.snapshot()).focus()
+                                    ?: return@LaunchedEffect
+                                shareImports.accept(WorldPoint(focus.centerX, focus.centerY))
+                            }
+                        }
+                        ShareImportPhase.ACCEPTED -> {
+                            val shown = page.value as? Page.Board ?: return@LaunchedEffect
+                            if (shown.id != request.destinationId) return@LaunchedEffect
+                            val acknowledgement = boardSessions.requestShareImport(shown.id, shown.state.snapshot(),
+                                ShareImportReceiptRow(request.requestId, shown.id, request.elementId), request.element(),
+                                restoreUncertain = importState.restoredUncertain) ?: return@LaunchedEffect
+                            shareImports.observeSave(acknowledgement,
+                                boardSessions.saveStateFor(shown.id, shown.state.snapshot()))
+                        }
+                        else -> Unit
+                    }
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { shareImports.fail() }
+            }
             LaunchedEffect(listActionState) {
                 when (val current = listActionState) {
                     is BoardListActionState.Running -> page.value = Page.Loading
@@ -306,6 +438,9 @@ class MainActivity : ComponentActivity() {
                             lifecycle.withStateAtLeast(Lifecycle.State.STARTED) {
                                 if (boardListActions.state.value == current) {
                                     openBoard(outcome.board)
+                                    if (current.action == BoardListAction.Create &&
+                                        shareImports.state.phase == ShareImportPhase.PICKER)
+                                        shareImports.pickBoard(outcome.board.details.id)
                                     boardListActions.consume(current)
                                 }
                             }
@@ -357,6 +492,10 @@ class MainActivity : ComponentActivity() {
                         Text(stringResource(R.string.loading_board))
                     }
                     Page.List -> BoardListScreen(cards.value,
+                        externalInteractionBlocked = { shareImports.state.blocksCanvas },
+                        onImportReadiness = { ready, guard ->
+                            if (page.value == Page.List) { listReady.value = ready; listNeutralGuard = guard }
+                        },
                         onOpen = { id -> admitListOperation {
                             boardListActions.start(BoardListAction.Open(id))
                         } },
@@ -382,18 +521,27 @@ class MainActivity : ComponentActivity() {
                                 showShare(stored.details.name, stored.snapshot, shareTypography)
                             }
                         } },
-                        onHelp = { guideVisible.value = true },
+                        onHelp = { if (!shareImports.state.blocksCanvas) guideVisible.value = true },
                     )
                     is Page.Board -> key(current.id) {
                         CanvasScreen(current.state,
                             boardName = current.name.ifBlank { "無題のボード" },
                             editorSession = boardSessions.textEditorFor(current.id, current.state.snapshot()),
                             viewportHistory = boardSessions.viewportHistoryFor(current.id, current.state.snapshot()),
+                            externalInteractionBlocked = { shareImports.state.blocksCanvas },
+                            onImportReadiness = { ready, guard ->
+                                if ((page.value as? Page.Board)?.id == current.id) {
+                                    canvasOwnerId.value = current.id
+                                    canvasNeutralGuard = guard
+                                    canvasReady.value = ready
+                                }
+                            },
                             saveState = boardSessions.saveStateFor(current.id, current.state.snapshot()),
                             onRequestSave = { snapshot -> boardSessions.requestSave(current.id, snapshot) },
-                            onRetrySave = { boardSessions.retrySave(current.id) },
+                            onRetrySave = { if (!shareImports.state.blocksCanvas) boardSessions.retrySave(current.id) },
                             onOpenList = {
-                                if (boardSessions.saveStateFor(current.id, current.state.snapshot()).value ==
+                                if (!shareImports.state.blocksCanvas &&
+                                    boardSessions.saveStateFor(current.id, current.state.snapshot()).value ==
                                     BoardSaveState.Idle && !transientPending.value &&
                                     listActionState == BoardListActionState.Idle) {
                                     navigationTargetIsList = true
@@ -408,13 +556,36 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             },
-                            onShareSelection = { ids -> performTransient {
+                            onShareSelection = { ids -> if (!shareImports.state.blocksCanvas) performTransient {
                                 val stored = store.savedBoard(current.id)
                                     ?: error("ボードが見つかりません")
                                 showShare(stored.details.name, stored.snapshot, shareTypography, ids)
                             } },
                             )
                     }
+                }
+                if (!guideVisible.value && errorMessage.value == null && shareDialog.value == null) {
+                    ShareImportDialog(importState, importBoards.value,
+                    destinationName = importBoards.value.firstOrNull { it.id == importState.request?.destinationId }?.name,
+                    destinationReady = baseImportReady(),
+                    onPick = { if (shareImports.state.phase == ShareImportPhase.PICKER &&
+                        boardListActions.state.value == BoardListActionState.Idle && !transientPending.value)
+                        shareImports.pickBoard(it) },
+                    onChange = { shareImports.showPicker() },
+                    onCreate = {
+                        if (shareImports.state.phase == ShareImportPhase.PICKER && !shareImports.state.writing &&
+                            boardListActions.state.value == BoardListActionState.Idle && !transientPending.value)
+                            boardListActions.start(BoardListAction.Create)
+                    },
+                    onConfirm = { if (baseImportReady()) shareImports.confirm() },
+                    onCancel = { shareImports.cancel() },
+                    onRetry = {
+                        val request = shareImports.state.request
+                        if (shareImports.state.phase == ShareImportPhase.FAILED) {
+                            request?.destinationId?.let { boardSessions.retrySave(it) }
+                            shareImports.retryOpening()
+                        }
+                    })
                 }
                 shareDialog.value?.let { sharing ->
                     ShareSheet(sharing.title, sharing.bitmap, sharing.message, shareBusy.value,
@@ -452,9 +623,11 @@ class MainActivity : ComponentActivity() {
         if (boardListActions.state.value == BoardListActionState.Idle) {
             performTransient {
                 try {
+                    shareImports.awaitInitialized()
                     if (navigationTargetIsList) showList()
                     else {
-                        val restored = store.restore()
+                        val restored = if (shareImports.state.request != null || initialShareAttempt)
+                            store.lastOpenedBoard() else store.restore()
                         if (restored == null) showList() else openBoard(restored)
                     }
                 } catch (error: Exception) {

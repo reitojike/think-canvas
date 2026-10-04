@@ -16,6 +16,109 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BoardSessionViewModelTest {
+    @Test fun shareAddsOneUndoAndReentryAfterUndoDoesNotReplayTheRequest() {
+        val sessions = testSessions()
+        val initial = BoardSnapshot()
+        val request = com.thinkcanvas.share.ShareImportRequest(text = "shared", destinationId = 1,
+            position = com.thinkcanvas.canvas.WorldPoint(30f, -40f))
+        val receipt = com.thinkcanvas.data.ShareImportReceiptRow(request.requestId, 1, request.elementId)
+        var writes = 0
+        val durable = CompletableDeferred<Unit>()
+        sessions.setShareSaveOperation { _, snapshot, observed ->
+            writes++
+            assertEquals(receipt, observed)
+            assertEquals(listOf(request.element()), snapshot.texts)
+            durable
+        }
+        sessions.setSaveOperation { _, _ -> error("share used ordinary save") }
+        val ack = sessions.requestShareImport(1, initial, receipt, request.element())!!
+        assertSame(ack, sessions.requestShareImport(1, initial, receipt, request.element()))
+        assertEquals(1, writes)
+        assertFalse(ack.isCompleted)
+        durable.complete(Unit)
+        assertTrue(ack.isCompleted)
+        val board = sessions.stateFor(1, initial)
+        assertTrue(board.undo())
+        assertFalse(board.canUndo)
+        assertTrue(board.canRedo)
+        assertSame(ack, sessions.requestShareImport(1, initial, receipt, request.element()))
+        assertTrue(board.elements.isEmpty())
+        assertTrue(board.canRedo)
+        assertEquals(1, writes)
+    }
+
+    @Test fun uncertainRestoredImportWaitsForManualRetryWithoutAnotherUndoOrRequest() {
+        val sessions = testSessions()
+        val request = com.thinkcanvas.share.ShareImportRequest(text = "restore", destinationId = 1,
+            position = com.thinkcanvas.canvas.WorldPoint(-12f, 20f))
+        val receipt = com.thinkcanvas.data.ShareImportReceiptRow(request.requestId, 1, request.elementId)
+        val attempts = mutableListOf<BoardSnapshot>()
+        val result = CompletableDeferred<Unit>()
+        sessions.setSaveOperation { _, _ -> error("share used ordinary save") }
+        sessions.setShareSaveOperation { _, snapshot, seen ->
+            assertEquals(receipt, seen); attempts += snapshot; result
+        }
+        val ack = sessions.requestShareImport(1, BoardSnapshot(), receipt, request.element(), true)!!
+        assertTrue(attempts.isEmpty())
+        assertTrue(sessions.saveStateFor(1, BoardSnapshot()).value is BoardSaveState.Failed)
+        assertSame(ack, sessions.requestShareImport(1, BoardSnapshot(), receipt, request.element(), true))
+        sessions.retrySave(1)
+        assertEquals(1, attempts.size)
+        assertEquals(listOf(request.element()), attempts.single().texts)
+        result.complete(Unit)
+        assertTrue(ack.isCompleted)
+        val board = sessions.stateFor(1, BoardSnapshot())
+        assertTrue(board.undo())
+        assertFalse(board.canUndo)
+    }
+
+    @Test fun failedShareRetryKeepsItsFixedElementAndCompletionSignal() {
+        val sessions = testSessions()
+        val request = com.thinkcanvas.share.ShareImportRequest(text = "retry", destinationId = 1,
+            position = com.thinkcanvas.canvas.WorldPoint(8f, 9f))
+        val receipt = com.thinkcanvas.data.ShareImportReceiptRow(request.requestId, 1, request.elementId)
+        val attempts = mutableListOf<Pair<BoardSnapshot, com.thinkcanvas.data.ShareImportReceiptRow>>()
+        val first = CompletableDeferred<Unit>()
+        val second = CompletableDeferred<Unit>()
+        sessions.setSaveOperation { _, _ -> error("share used ordinary save") }
+        sessions.setShareSaveOperation { _, snapshot, seen ->
+            attempts += snapshot to seen
+            if (attempts.size == 1) first else second
+        }
+        val ack = sessions.requestShareImport(1, BoardSnapshot(), receipt, request.element())!!
+        first.completeExceptionally(IllegalStateException("synthetic failure"))
+        assertFalse(ack.isCompleted)
+        assertEquals(1, attempts.size)
+        sessions.retrySave(1)
+        assertEquals(attempts[0], attempts[1])
+        assertSame(ack, sessions.requestShareImport(1, BoardSnapshot(), receipt, request.element()))
+        second.complete(Unit)
+        assertTrue(ack.isCompleted)
+        val board = sessions.stateFor(1, BoardSnapshot())
+        assertTrue(board.undo()); assertFalse(board.canUndo)
+    }
+
+    @Test fun cancelingShareDoesNotCancelAnotherBoardsOrdinarySave() {
+        val sessions = testSessions()
+        val normal = CompletableDeferred<Unit>()
+        val shared = CompletableDeferred<Unit>()
+        sessions.setSaveOperation { _, _ -> normal }
+        sessions.setShareSaveOperation { _, _, _ -> shared }
+        sessions.stateFor(2, BoardSnapshot())
+        sessions.requestSave(2, BoardSnapshot())
+        val request = com.thinkcanvas.share.ShareImportRequest(text = "cancel", destinationId = 1,
+            position = com.thinkcanvas.canvas.WorldPoint(0f, 0f))
+        val receipt = com.thinkcanvas.data.ShareImportReceiptRow(request.requestId, 1, request.elementId)
+        sessions.requestShareImport(1, BoardSnapshot(), receipt, request.element())
+        sessions.cancelShareImport(1, "another request")
+        assertFalse(shared.isCancelled)
+        sessions.cancelShareImport(1, request.requestId)
+        assertTrue(shared.isCancelled)
+        assertFalse(normal.isCancelled)
+        normal.complete(Unit)
+        assertEquals(BoardSaveState.Idle, sessions.saveStateFor(2, BoardSnapshot()).value)
+    }
+
     @Test fun viewportSessionsAreIsolatedRetainedAndDiscardedWithoutContentChanges() {
         val sessions = BoardSessionViewModel()
         val initial = BoardSnapshot()
