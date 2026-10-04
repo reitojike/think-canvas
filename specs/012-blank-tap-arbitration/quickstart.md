@@ -157,6 +157,29 @@ main 適合後の external block stale / native shifted pair は各 fresh exact 
 lint / unit **163/0/0/0** / debug / androidTest build は成功。Room schema は最新 main との差分なし。
 新しい source census は重複なしの **191 class#method**。旧 head の161件結果とは区別する。
 
+## navigation edge の HOLD / completeness checkpoint
+
+候補 `dfc092a` の source audit で、board pill の accessibility OnClick は pointer DOWN を通らず、
+page 変更時の取消を次の dispose frame に依存することを確認した。期限直前の navigation と
+次 frame の間に旧 board の Job が確定する可能性がある。full は中断し、最終証跡に使わない。
+
+有限な失効 edge は editor の raw state、tool/ink、save/external block、STOP/dispose、Back の
+generation、board pill OnClick。前者は raw guard / synchronous cancellation、Back は
+入口で generation を変更する。board pill だけは callback で pending を直ちに取消す。
+判定: **BOUNDED_CORRECTION**。追加1 round をその1 callback と既存 board-switch testcase の
+deadline / dispose-frame 間観測に限定する。navigation / Back の priority、parent page、
+save authority、editor authority は変更しない。新たな material correction は HOLD/checkpoint。
+
+修正前の deadline / dispose-frame 回帰は fresh exact XML **1/1/0/0**。
+board OnClick の実行後、dispose frame 前に旧 board の Draft が生成された。
+callback 入口の pending 取消に補正を限定する。
+先行 invocation は中断した full が残した GMD 使用数によりテスト開始前で停止した。
+実行中の Gradle / emulator がないことを確認し、使用数の記録を退避して復旧後に上記 RED を得た。
+
+補正後の TextEditorDismissalTest class は fresh source/XML exact **28/0/0/0**。
+deadline / dispose-frame、native shifted double、confirmed single、slop 外、selection、
+editor / lifecycle / tool / save / external block の失効、成立済み #71 を確認した。
+
 ## 最終 gate
 
 final candidate 固定後に unit/lint/debug/androidTest build と full Pixel9/API37 GMD を行う。

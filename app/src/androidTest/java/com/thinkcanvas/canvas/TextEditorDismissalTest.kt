@@ -783,6 +783,10 @@ class TextEditorDismissalTest {
                 clock.autoAdvance = false
                 nativeBlankSingle(point)
                 repeat(3) { clock.advanceTimeByFrame() }
+                if (change == "board") {
+                    clock.advanceTimeBy(configuration.doubleTapTimeoutMillis - (clock.currentTime - started) - 1,
+                        ignoreFrameDuration = true)
+                }
                 scenario.onActivity {
                     assertEquals(null, editor.draft.value)
                     if (change == "save") {
@@ -791,6 +795,12 @@ class TextEditorDismissalTest {
                     } else assertTrue(checkNotNull(action).invoke())
                 }
                 assertTrue(clock.currentTime - started < configuration.doubleTapTimeoutMillis)
+                if (change == "board") {
+                    clock.advanceTimeBy(1, ignoreFrameDuration = true)
+                    scenario.onActivity {
+                        assertEquals("Navigation must invalidate before the dispose frame", null, editor.draft.value)
+                    }
+                }
                 clock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
             } finally {
                 clock.autoAdvance = autoAdvance

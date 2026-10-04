@@ -2045,6 +2045,7 @@ fun CanvasScreen(
                     .height(44.dp).background(Color.White, RoundedCornerShape(24.dp))
                     .pillBorder(24f).padding(horizontal = 14.dp)
                     .clickable(enabled = !saveBlocked() && draft == null && regionNameId == null) {
+                        cancelBlankTap()
                         onOpenList()
                     }
                     .semantics { contentDescription = "ボード一覧を開く" }
