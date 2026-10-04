@@ -4,6 +4,8 @@ import android.content.Intent
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.WindowInsets
+import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
@@ -32,6 +34,7 @@ import com.thinkcanvas.data.SpatialElementRow
 import com.thinkcanvas.data.TextElementRow
 import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Rule
@@ -66,6 +69,8 @@ class ViewportHistoryInteractionTest {
         val board get() = sessions.stateFor(1L, initial)
         val editor get() = sessions.textEditorFor(1L, initial)
         val saves = AtomicInteger()
+        var saveGate: CompletableDeferred<Unit>? = null
+        var heldDurableSave: Deferred<Unit>? = null
         val canvas get() = composeRule.onNodeWithContentDescription("キャンバス")
             .fetchSemanticsNode().boundsInWindow
         fun position(label: String) = composeRule.onAllNodesWithContentDescription(label)
@@ -77,14 +82,35 @@ class ViewportHistoryInteractionTest {
                 value.startsWith("現在の検索結果、") || value.startsWith("選択対象、") } == true }
         fun marker(prefix: String) = nodes(prefix).single()
         fun click(label: String) {
-            val candidates = if (label == "戻す" || label == "進む")
-                composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes() else nodes(label)
-            val node = candidates.first { it.config.contains(SemanticsActions.OnClick) }
-            composeRule.runOnUiThread { assertTrue(node.config[SemanticsActions.OnClick].action!!.invoke()) }
-            composeRule.waitForIdle()
-            if (label == "戻す" || label == "進む") {
-                composeRule.waitUntil(5_000) { sessions.saveStateFor(1L, initial).value == BoardSaveState.Idle }
+            val historyAction = label == "戻す" || label == "進む"
+            val gate = if (historyAction && nodes("ボード内を探す").isNotEmpty())
+                CompletableDeferred<Unit>() else null
+            saveGate = gate
+            try {
+                val candidates = if (label == "戻す" || label == "進む")
+                    composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes() else nodes(label)
+                val node = candidates.first { it.config.contains(SemanticsActions.OnClick) }
+                composeRule.runOnUiThread { assertTrue(node.config[SemanticsActions.OnClick].action!!.invoke()) }
                 composeRule.waitForIdle()
+                if (gate != null) {
+                    // Make the existing inputAllowed resume observable instead of depending on Room timing.
+                    assertTrue(sessions.saveStateFor(1L, initial).value is BoardSaveState.Running)
+                    runBlocking { checkNotNull(heldDurableSave).await() }
+                    assertEquals(board.snapshot(), saved())
+                    composeRule.runOnUiThread { gate.complete(Unit) }
+                }
+                if (historyAction) {
+                    composeRule.waitUntil(5_000) { sessions.saveStateFor(1L, initial).value == BoardSaveState.Idle }
+                    composeRule.waitForIdle()
+                }
+                if (gate != null) {
+                    waitSearchReady()
+                    hideSearchIme()
+                }
+            } finally {
+                saveGate = null
+                heldDurableSave = null
+                if (gate != null && !gate.isCompleted) gate.cancel()
             }
         }
         fun action(label: String, action: String) {
@@ -150,9 +176,43 @@ class ViewportHistoryInteractionTest {
         fun search(query: String = "Find") {
             click("ボード内を検索")
             composeRule.onNodeWithContentDescription("ボード内を探す").performTextReplacement(query)
-            closeSoftKeyboard()
-            composeRule.waitForIdle()
+            waitSearchReady()
+            hideSearchIme()
             composeRule.waitUntil(5_000) { nodes("1件目、全").isNotEmpty() }
+        }
+        fun waitSearchReady() {
+            composeRule.waitUntil(10_000) {
+                val focused = nodes("ボード内を探す").singleOrNull()?.config
+                    ?.getOrNull(SemanticsProperties.Focused) == true
+                var ready = false
+                scenario.onActivity { activity ->
+                    val root = activity.window.decorView
+                    val view = root.findFocus()
+                    val input = activity.getSystemService(InputMethodManager::class.java)
+                    val insets = root.rootWindowInsets
+                    ready = focused && root.hasWindowFocus() && view != null &&
+                        input.isActive(view) && input.isAcceptingText &&
+                        insets?.isVisible(WindowInsets.Type.ime()) == true &&
+                        insets.getInsets(WindowInsets.Type.ime()).bottom > 0
+                }
+                ready
+            }
+            composeRule.waitForIdle()
+        }
+        fun hideSearchIme() {
+            val query = nodes("ボード内を探す").single().config[SemanticsProperties.EditableText]
+            back()
+            composeRule.waitUntil(5_000) {
+                var hidden = false
+                scenario.onActivity {
+                    val insets = checkNotNull(it.window.decorView.rootWindowInsets)
+                    hidden = !insets.isVisible(WindowInsets.Type.ime()) &&
+                        insets.getInsets(WindowInsets.Type.ime()).bottom == 0
+                }
+                hidden
+            }
+            composeRule.waitForIdle()
+            assertEquals(query, nodes("ボード内を探す").single().config[SemanticsProperties.EditableText])
         }
         fun back() {
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
@@ -195,7 +255,8 @@ class ViewportHistoryInteractionTest {
             val harness = Harness(scenario, sessions, initial)
             sessions.setSaveOperation { id, snapshot ->
                 harness.saves.incrementAndGet()
-                CanvasStore.get(context).save(id, snapshot)
+                val durable = CanvasStore.get(context).save(id, snapshot)
+                harness.saveGate?.also { harness.heldDurableSave = durable } ?: durable
             }
             harness.block()
         } finally { composeRule.mainClock.autoAdvance = true; scenario.close() }

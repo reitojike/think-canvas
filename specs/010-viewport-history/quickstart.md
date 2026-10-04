@@ -1,5 +1,19 @@
 # 検証と収束
 
+## 統合headの失敗分類とnative fixture補正（2026-10-04）
+
+head `375de42a9c50955ac6c77fc5ec6ba87d3fdc4b11`のCI37187623444は基本job成功、native 153/2/0/0（missing/extra/duplicate 0）。XML SHA256 `55A49DCAF426C906F059D2F6F8C557EC85039D96B7F9839DFABA6FD0600A0132`。[有限checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5978097837)に従い、検索中の内容Undo/Redoのfixtureは実際のRoom完了をrequest-specific gateで確認し、既存inputAllowed復帰による検索IMEのnative readiness、IME Back、非表示を経てview操作する。製品のguard・保存処理は変更しない。
+
+この補正の標準focused `visibleAndOffscreenUndoRedoFocusWithoutExtraContentHistoryOrSave`はrun `20261004T082744Z-92f779439ac041608e74eab39075e18e`で1/0/0/0、owned/sourceUnchanged=true、介入0。XML SHA256 `55C7DC3F452DAE44CCC0B86CB3F357B05C6EC67FD26D89C3FAFAAEA6F8B11AA2`。T016と最終deliveryは全CI成功までpending。残るmulti-selection drag preview→commitの失敗は別の有限観測で分類し、原因未確定の旧Issue78 closureを変更しない。
+
+共有helperの検索結果位置・一entry回帰も標準focused run `20261004T083617Z-0b0c8d81459445af8ddbff30829b985a`で1/0/0/0、owned/sourceUnchanged=true、介入0、XML SHA256 `A8A525A089338EC15CA24DD4DCE6FBCAEB54F1E47C1BCE29D2EF6C63B01DD9F4`。
+
+multi-selectionは[release oracle checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5978246199)で既存Spec008 FR-004/005/006/010・SC-002/004に閉じた。通常観測は1/0/0/0だが非再現だけで解決とはしない。高速入力の制御RED（run `20261004T084403Z-ee2d81297d154f20b55c5b2faca2cae2`、1/1/0/0、XML `697549AD1747876F1E2A023B70E0975B0D6C31BBC883DE5D3DFD546F431BE21A`）は実配達MOVEが予測位置1553.5、UPが元の1077、preview1493.4→確定1017.4だった。native座標を基準とするpreview/release比較は2px内で一致し、同じ制御入力のGREEN（run `20261004T084843Z-6af2e86fee9d424da75aeeba5f522833`、1/0/0/0、XML `9EB175000B55706DE1F16AF7F85AAE922169AFB76CEE3E13D307BC5D00BC1B14`）で一回のUndo/Redo/saveまで確認した。両run owned/sourceUnchanged=true、介入0。旧CIの実配達座標はないため具体的な448px差の歴史的根因を確定したとはしない。
+
+finalのT017差分は軽いtest-only Window.Callback delegateとnative oracleだけ。開始→previewとpreview→UPの表示、layout/scale不変、全選択delta、Room/保存数/履歴一回を維持する。診断用高速timestamp/JSON/logは除去し、注入座標/時刻/経路・製品コード・CI/launcherは元のまま。更新headの基本検証、全153件CIとcanonical reviewを最終gateにする。
+
+診断除去後のlocal lint/unit/debug/androidTest buildは成功（1m5s）、単体139/0/0/0、公開境界214ファイルPASS、diff check成功。10FR/4SC/12scenario、有限設計5項目、Constitution5原則と既存17taskをread-only再照合し、追加buildable残差0。T012/T013/T016/T017の最終CI/review/deliveryは未完了を保持し、reviewer-owned UX checklistは未評価のまま。最終native source153、schema/依存/CI/launcher差分なし。以後はcommit済み候補をfreezeして両CIとcanonical/base/threadを確認する。
+
 ## PR92統合後の最終gate（2026-10-04）
 
 [PR95 / Issue93](https://github.com/reitojike/think-canvas/issues/93#issuecomment-5977070810)と[PR92 / Issue91](https://github.com/reitojike/think-canvas/issues/91#issuecomment-5977858342)はmerge済み。main `a116374b3f39fe3ad46b200a05d49296f38efd68`をPR90へ競合なく統合した。IMEのfollow-upは独立したdeliveryとして完了しており、Issue79のPO判断はIssue77のgateへ含めない。

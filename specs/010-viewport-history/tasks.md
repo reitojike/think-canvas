@@ -33,3 +33,8 @@ MVPはUS1。US2の内容操作/保存不変を確認しUS3の寿命/guardへ広�
 
 - [x] T014 HIGH: `ContentHistoryFocus.kt` と `CanvasScreen.kt` で接続先変更により候補となった未変更arrowを実際のbefore/after render geometryで絞り、色だけの変更等で変わらないarrowをfitへ含めない。`ContentHistoryFocusTest.kt` と `ViewportHistoryInteractionTest.kt` へ表示不変arrowとgeometry変化arrowの回帰を追加する。FR-006、SC-003、Edge Cases「未変更要素をfitへ入れない」（partial）。
 - [x] T015 HIGH: PR90の第三補正前family-level completeness checkpointでcamera writerを全列挙。`CanvasScreen.animateViewport` のFloat補間が最小倍率を下回る不足を既存scale clampと正常completionのexact targetで補正し、`ViewportHistoryInteractionTest` のregion fit→最小倍率back/forward往復で回帰を追加する。FR-001/003/008、SC-001/004。checkpointで同じauthority/responsibility/review/rollbackの追加一roundに限定。最終CI/reviewはT012で収束する。
+
+## Phase 5: Convergence
+
+- [ ] T016 HIGH: `ViewportHistoryInteractionTest.kt` の検索entryと検索中Undo/Redoで、native入力readinessと保存Running→Idleの再開境界を明示する。実Room保存を保持したtest用request gateでRunningを観測し、durable完了後のIME復帰→一段階IME Back→native非表示を待ってからview操作する。内容/Room/保存数/Redo/camera/一entryのassertとproduction guardを維持し、標準focusedと最終153件CIを確認する。FR-005/006/007/010、SC-002/003/004（partial）。[統合後family checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5978097837)の同PR追加一roundに限定する。
+- [ ] T017 HIGH: `EdgeAutoPanTest#multiSelectionTranslatesTextShapeAndFreeArrowTogether` の最初の高速native MOVEとreleaseの座標を軽いWindow.Callback delegateで観測し、開始→previewとpreview→実配達UPのrenderを元2pxで比較する。全選択delta・Room/save/Undo/Redo一回とlayout/scale不変を維持する。既存Spec008 FR-004/005/006/010、SC-002/004のnative oracle不足を同PRの有限test/docs差分で補正する。制御RED/GREENのtimestamp/probeをfinalから除去し、更新head全153件CIで収束する。旧Issue78の原因未確定の歴史を変更しない。
