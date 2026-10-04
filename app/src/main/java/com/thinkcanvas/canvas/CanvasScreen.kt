@@ -1937,11 +1937,11 @@ fun CanvasScreen(
                 ) {
                     IconButton(onClick = { restoreView(forward = false) }, enabled = navigation.canBack,
                         modifier = Modifier.size(48.dp).semantics {
-                            contentDescription = "視点を戻る"
+                            contentDescription = "前の視点へ戻る"
                         }) { Text("←", color = if (navigation.canBack) ink else muted, fontSize = 23.sp) }
                     IconButton(onClick = { restoreView(forward = true) }, enabled = navigation.canForward,
                         modifier = Modifier.size(48.dp).semantics {
-                            contentDescription = "視点を進む"
+                            contentDescription = "次の視点へ進む"
                         }) { Text("→", color = if (navigation.canForward) ink else muted, fontSize = 23.sp) }
                 }
             }

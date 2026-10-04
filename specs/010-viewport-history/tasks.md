@@ -20,7 +20,7 @@
 - [x] T010 [US2] `CanvasScreen.kt` と `ViewportHistoryInteractionTest.kt` にvisible不移動/offscreen focus/multi fit/消失/auto一viewentry/一save/Redo維持を統合・検証する。FR-005/006/007「視点backによって内容を再適用/再取消しない」。
 
 ## US3 P2 / Polish
-- [ ] T011 [US3] `ViewportHistoryInteractionTest.kt` の再生成/board別session/guard/stale action/hidden chrome/次gestureを実装し、既存runbookのlint/unit/build/focused GMDをsource固定で実行する。証拠は `specs/010-viewport-history/quickstart.md`。
+- [x] T011 [US3] `ViewportHistoryInteractionTest.kt` の再生成/board別session/guard/stale action/hidden chrome/次gestureを実装し、既存runbookのlint/unit/build/focused GMDをsource固定で実行する。証拠は `specs/010-viewport-history/quickstart.md`。
 - [ ] T012 convergeでspec/plan/tasksと実装を突合し残差を `tasks.md` に追記・解消する。現行完成済Spec009状態を事実ベースで同期し、公開差分確認後PRを作る。最終head両CI/canonical reviewを収束しmergeする。
 - [ ] T013 merge後に最新Issue77 ACを個別検証しproof/checkbox/close、親81の子状態を同期する。親の実機dogfoodingを子のCIから推定しない。
 
@@ -31,4 +31,4 @@ MVPはUS1。US2の内容操作/保存不変を確認しUS3の寿命/guardへ広�
 
 ## Phase 4: Convergence
 
-- [ ] T014 HIGH: `ContentHistoryFocus.kt` と `CanvasScreen.kt` で接続先変更により候補となった未変更arrowを実際のbefore/after render geometryで絞り、色だけの変更等で変わらないarrowをfitへ含めない。`ContentHistoryFocusTest.kt` と `ViewportHistoryInteractionTest.kt` へ表示不変arrowとgeometry変化arrowの回帰を追加する。FR-006、SC-003、Edge Cases「未変更要素をfitへ入れない」（partial）。
+- [x] T014 HIGH: `ContentHistoryFocus.kt` と `CanvasScreen.kt` で接続先変更により候補となった未変更arrowを実際のbefore/after render geometryで絞り、色だけの変更等で変わらないarrowをfitへ含めない。`ContentHistoryFocusTest.kt` と `ViewportHistoryInteractionTest.kt` へ表示不変arrowとgeometry変化arrowの回帰を追加する。FR-006、SC-003、Edge Cases「未変更要素をfitへ入れない」（partial）。

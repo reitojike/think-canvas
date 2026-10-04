@@ -16,7 +16,7 @@ Session所有、`viewportHistoryFor(boardId, initial)`で取得。camera State�
 ## 編集変更表示
 `affectedHistoryIds(before, after): Set<String>`で全family差分と変更接続先のarrowを求める。
 `historyDisplayBounds(ids, beforeGeometry, afterGeometry)`は存在するafter bounds、消失IDはbefore boundsを使う。
-UI要求はexpectedAfter、ID、before geometryを持ち、一致しないsnapshotで棄却、一度消費。複数対象は一回fit。
+UI要求はbefore/expectedAfter snapshotとbefore geometryを持ち、一致しないsnapshotで棄却、一度消費。複数対象は一回fit。
 接続先変更から得たarrow候補は `affectedHistoryDisplayIds` で実測before/after arrowRenderGeometryを比較する。モデル自体も表示も変わらないarrowを変更範囲から除く。要求はbefore/after snapshotを保持し、同じrepresentation条件で照合する。
 
 ## 不変条件
