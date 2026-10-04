@@ -48,3 +48,7 @@ MVPはUS1。US2の内容操作/保存不変を確認しUS3の寿命/guardへ広�
 ## Phase 7: native IME Back convergence
 
 - [ ] T021 HIGH: `ViewportHistoryInteractionTest.Harness.hideSearchIme` のIME表示確認後の直接Activity dispatcherを、既存Neutral回帰と同じplatform `GLOBAL_ACTION_BACK` に合わせる。mergedSpec007のIMEだけ閉じ入力維持、Spec010 FR-005/006/007/010の観測経路を補正し、field/query・native IME非表示・内容/Room/save/cameraのassertを維持する。[native Back checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5979053043)の追加一round。旧CIの具体的なinsets timing原因は未確定として保持し、標準focusedと更新head全154件CI/reviewで再確認する。
+
+## Phase 8: search group cycle convergence
+
+- [ ] T022 HIGH: `ViewportHistory.kt` で同一検索groupの始点復帰時にそのgroupが積んだanchorだけを除去し、近似重複で保持された既存履歴を守る。`ViewportHistoryTest.kt` にowned/unowned始点復帰、再開始、capacity、別boundaryの回帰を追加する。Spec010 FR-003/004、SC-001。[group cycle checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5979349931)の追加一round。旧実装RED→unit/basic・標準focused→更新head全154件CI/canonicalで再収束する。

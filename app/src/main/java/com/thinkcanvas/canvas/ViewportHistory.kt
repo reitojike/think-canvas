@@ -27,6 +27,8 @@ class ViewportHistory(private val capacity: Int = 80) {
     var canForward by mutableStateOf(false)
         private set
     private var lastGroup: Any? = null
+    private var groupOrigin: ViewportFocus? = null
+    private var groupOwnsOrigin = false
 
     fun resize(width: Float, height: Float, density: Float = 1f) {
         if (!width.isFinite() || width <= 0f || !height.isFinite() || height <= 0f ||
@@ -54,15 +56,32 @@ class ViewportHistory(private val capacity: Int = 80) {
     fun record(origin: ViewportFocus?, group: Any? = null): Boolean {
         val current = focus() ?: return false
         if (origin == null || !origin.valid()) return false
+        val start = groupOrigin
+        val continuesGroup = group != null && group === lastGroup && start != null
+        // Compare the whole group before suppressing its final, possibly tiny step.
+        if (continuesGroup && near(start!!, current)) {
+            // A near-duplicate origin can belong to earlier navigation, not this group.
+            if (groupOwnsOrigin) previous.removeLast()
+            clearGroup()
+            next.clear()
+            refresh()
+            return true
+        }
         if (near(origin, current)) {
-            if (group !== lastGroup) lastGroup = null
+            if (group !== lastGroup) clearGroup()
             return false
         }
-        if (group == null || group !== lastGroup || previous.isEmpty()) {
-            if (previous.lastOrNull()?.let { near(it, origin) } != true) push(previous, origin)
+        if (!continuesGroup) {
+            clearGroup()
+            val addsOrigin = previous.lastOrNull()?.let { near(it, origin) } != true
+            if (addsOrigin) push(previous, origin)
+            if (group != null) {
+                lastGroup = group
+                groupOrigin = origin
+                groupOwnsOrigin = addsOrigin
+            }
         }
         next.clear()
-        lastGroup = group
         refresh()
         return true
     }
@@ -74,9 +93,15 @@ class ViewportHistory(private val capacity: Int = 80) {
         val current = focus() ?: return null
         val target = source.removeLastOrNull() ?: return null
         push(destination, current)
-        lastGroup = null
+        clearGroup()
         refresh()
         return camera(target)
+    }
+
+    private fun clearGroup() {
+        lastGroup = null
+        groupOrigin = null
+        groupOwnsOrigin = false
     }
 
     private fun camera(focus: ViewportFocus) = Viewport(focus.scale,

@@ -1,5 +1,17 @@
 # 検証と収束
 
+## 同一検索groupの始点復帰（2026-10-04）
+
+head3d98baeのCI37195996192は両job成功、fresh154/0/0/0、missing/extra/duplicate0。artifact11300419670、digest `sha256:ae116135210fe9723e10ae1d06a711d2dd85e885d6b50486618f67abc1a6260d`、XML SHA256 `697894AE90790D93BCF27B828E88C99CD9B574FC262911DD5A71F1DC0F24CA84`。最後の依頼5979263070（11:01:13Z）後の同head canonical review5405630218（11:05:45Z）は、同一検索groupのA→B→Aで不要なanchorが残るP2を指摘した。
+
+[group cycle checkpoint](https://github.com/reitojike/think-canvas/pull/90#issuecomment-5979349931)でrecordのnear/no-op・group開始/継続/解除、stack/capacity、restore、resize/density、検索呼び出しと回帰を有限censusした。T022はgroup始点と、そのgroupがoriginを追加したかを保持し、始点近傍へ戻れば所有するanchorだけを除去する。near duplicateで残った既存履歴を消さず、capacityでevictしたentryを復活させず、別navigationを集約しない。全groupの始点復帰は最終の小さなstepの抑制より先に判定する。解除・restore・再開始でもmetadataを残さない。
+
+追加5unitの旧実装REDは13/3/0/0、XML SHA256 `2B0490F6B59BE141074C8C2196086A5ECA8F92FD08A1D067A33525C0AF579FB8`。始点へ最後1.5pxで戻る追加境界も中間補正で1/1/0/0（XML `160FD150F4B8181F9E4B835EF41372B89AD7222A813EB34338A827FBB9F214BD`）を確認してから補正した。final local lint/全単体/debug/androidTest buildは成功1m1s、単体145/0/0/0、ViewportHistory13/0/0/0（XML `6FCBE42E1B418BDD48C7D52268562F52A62F4FE014AFFB0BAE2DB0979857FDED`）、公開境界214、diff check成功。
+
+標準focused `searchCyclePanPinchAndIndicatorRestoreWithoutContentOrSave` はrun `20261004T111807Z-3b466d92545f4254aa429e5ab846f488`で1/0/0/0、XML SHA256 `4D3461554C91A1CE5C8F4A7B7C605DCFFCAA4A3FD967FA87AC48C41C93008CCF`、owned/sourceUnchanged=true、介入0。検索・cycle・indicator・pan/pinchと視点復元、内容/保存不変を維持した。
+
+10FR/4SC/12scenario、有限設計5項目、Constitution5原則と22taskを再convergeし、追加buildable残差0。変更はmodel/unit/tasks/検証記録の4fileに限定し、native154件を削除/除外しない。authority・内容保存・IME・gesture・schema・依存・CI/launcherは維持する。reviewer-owned UX checklistは未評価、T012/T013/T016～T022の最終deliveryは更新headの全CI/canonical/merge後照合までpending。#79をgateへ含めず候補commit後にsource/docsをfreezeする。
+
 ## native IME Back経路の補正（2026-10-04）
 
 head0d688b1のCI37194498596は基本job成功、native154/1/0/0、missing/extra/duplicate0。artifact11301365197、digest `sha256:429873af7f5e7fee250d995c266a6a18fe1409bcfbbecda8ebeb4f07a4fdd25e`、XML SHA256 `05982D33C6FADCD0DC0ED670D78344E8B5E141A02E73638CAF1D74CF1B6A9CA3`。新しいshrink/grow回帰を含む153件は成功したが、visibleAndOffscreenUndoRedoFocusWithoutExtraContentHistoryOrSaveの最後のRedo後に、IMEを閉じるBackで検索欄も消えた。

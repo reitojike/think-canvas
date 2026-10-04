@@ -108,6 +108,103 @@ class ViewportHistoryTest {
         assertFalse(history.canForward)
     }
 
+    @Test fun sameGroupReturnToStartRemovesOnlyOwnedAnchorAndCanRestart() {
+        val history = measuredHistory()
+        val prior = history.focus()!!
+        val start = ViewportFocus(250f, 100f, 1f)
+        move(history, start)
+        val group = Any()
+        move(history, ViewportFocus(600f, 200f, 1f), group)
+        val returned = ViewportFocus(250.5f, 100f, 1.005f)
+        move(history, returned, group)
+        assertTrue(history.canBack)
+        assertFalse(history.canForward)
+        assertFalse(history.record(history.focus(), group))
+        val end = ViewportFocus(900f, 300f, 1f)
+        move(history, end, group)
+
+        history.viewportState.value = history.back()!!
+        assertFocus(returned, history.focus()!!)
+        history.viewportState.value = history.back()!!
+        assertFocus(prior, history.focus()!!)
+        assertFalse(history.canBack)
+        history.viewportState.value = history.forward()!!
+        assertFocus(returned, history.focus()!!)
+        history.viewportState.value = history.forward()!!
+        assertFocus(end, history.focus()!!)
+        assertFalse(history.canForward)
+    }
+
+    @Test fun sameGroupRoundTripAtInitialViewLeavesNoHistory() {
+        for (nearLastStep in listOf(false, true)) {
+            val history = measuredHistory()
+            val start = history.focus()!!
+            val group = Any()
+            move(history, ViewportFocus(600f, 200f, 1f), group)
+            if (nearLastStep) {
+                move(history, ViewportFocus(start.centerX + 3f, start.centerY, start.scale), group)
+                move(history, ViewportFocus(start.centerX + 1.5f, start.centerY, start.scale), group)
+            } else {
+                move(history, start, group)
+            }
+
+            assertFalse(history.canBack)
+            assertFalse(history.canForward)
+            assertNull(history.back())
+            assertNull(history.forward())
+        }
+    }
+
+    @Test fun groupCancellationPreservesUnownedNearOlderEntry() {
+        val history = measuredHistory()
+        val prior = history.focus()!!
+        move(history, ViewportFocus(203f, 100f, 1f))
+        val origin = history.focus()!!
+        val start = ViewportFocus(201.5f, 100f, 1f)
+        history.viewportState.value = viewportFor(start, 400f, 200f)
+        assertFalse(history.record(origin))
+        val group = Any()
+        move(history, ViewportFocus(600f, 200f, 1f), group)
+        move(history, start, group)
+
+        assertTrue(history.canBack)
+        history.viewportState.value = history.back()!!
+        assertFocus(prior, history.focus()!!)
+        assertFalse(history.canBack)
+    }
+
+    @Test fun groupCancellationAtCapacityKeepsBoundAndNoPhantom() {
+        val history = measuredHistory(capacity = 1)
+        val start = ViewportFocus(250f, 100f, 1f)
+        move(history, start)
+        val group = Any()
+        move(history, ViewportFocus(600f, 200f, 1f), group)
+        move(history, start, group)
+        assertFalse(history.canBack)
+        assertNull(history.back())
+
+        move(history, ViewportFocus(900f, 300f, 1f), group)
+        history.viewportState.value = history.back()!!
+        assertFocus(start, history.focus()!!)
+        assertFalse(history.canBack)
+    }
+
+    @Test fun differentBoundaryReturnToStartKeepsSeparateNavigation() {
+        for (boundary in listOf(Any(), null)) {
+            val history = measuredHistory()
+            val start = history.focus()!!
+            val middle = ViewportFocus(600f, 200f, 1f)
+            move(history, middle, Any())
+            move(history, start, boundary)
+
+            history.viewportState.value = history.back()!!
+            assertFocus(middle, history.focus()!!)
+            history.viewportState.value = history.back()!!
+            assertFocus(start, history.focus()!!)
+            assertFalse(history.canBack)
+        }
+    }
+
     @Test fun newNavigationAfterBackDropsOnlyViewportForwardEntries() {
         val history = measuredHistory()
         val a = history.focus()!!
@@ -169,6 +266,12 @@ class ViewportHistoryTest {
         assertFalse(history.record(origin))
         assertFalse(history.canBack)
         assertFalse(history.canForward)
+    }
+
+    private fun move(history: ViewportHistory, target: ViewportFocus, group: Any? = null) {
+        val origin = history.focus()!!
+        history.viewportState.value = viewportFor(target, 400f, 200f)
+        assertTrue(history.record(origin, group))
     }
 
     private fun measuredHistory(capacity: Int = 80) = ViewportHistory(capacity).also {
