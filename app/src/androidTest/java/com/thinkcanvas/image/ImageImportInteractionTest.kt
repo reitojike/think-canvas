@@ -6,14 +6,20 @@ import android.app.Instrumentation
 import android.net.Uri
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.BoardSessionViewModel
+import com.thinkcanvas.BoardListActionViewModel
+import com.thinkcanvas.BoardListActionState
 import com.thinkcanvas.MainActivity
 import com.thinkcanvas.canvas.BoardSnapshot
 import com.thinkcanvas.canvas.WorldPoint
@@ -294,5 +300,112 @@ class ImageImportInteractionTest {
         }
         compose.waitUntil(10_000) { fresh.state.phase == ImageImportPhase.IDLE }
         assertTrue(rows().isEmpty()); assertTrue(board.canRedo)
+    }
+
+    @Test fun restoredImportWithDeletedDestinationRetiresCheckpointAndAllowsAnotherImport() = withBoard {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        runBlocking { assertTrue(store.rename(1, "画像の追加先")) }
+        lateinit var primary: ImageImportViewModel
+        lateinit var accepted: ImageImportRequest
+        scenario.onActivity { primary = ViewModelProvider(it)[ImageImportViewModel::class.java] }
+        val autoAdvance = compose.mainClock.autoAdvance
+        try {
+            // Keep Main from applying the accepted patch before losing all memory
+            // owners. The Android saved Bundle retains the trusted task token.
+            compose.mainClock.autoAdvance = false
+            scenario.onActivity {
+                assertTrue(primary.begin(ImagePickerSource.FILE, 1, WorldPoint(200f, 300f), 400f, 600f))
+            }
+            compose.waitUntil(10_000) { primary.state.phase == ImageImportPhase.PICKER }
+            scenario.onActivity {
+                val request = checkNotNull(primary.state.request)
+                assertTrue(primary.consumeLaunch(request.requestId))
+                primary.receive(request.requestId, ImagePickerSource.FILE, Uri.fromFile(source))
+            }
+            compose.waitUntil(10_000) { primary.state.phase == ImageImportPhase.ACCEPTED }
+            accepted = checkNotNull(primary.state.request)
+            assertTrue(rows().isEmpty())
+            scenario.onActivity { it.viewModelStore.clear() }
+            scenario.recreate()
+        } finally { compose.mainClock.autoAdvance = autoAdvance }
+        lateinit var restored: ImageImportViewModel
+        lateinit var freshSessions: BoardSessionViewModel
+        scenario.onActivity {
+            restored = ViewModelProvider(it)[ImageImportViewModel::class.java]
+            freshSessions = ViewModelProvider(it)[BoardSessionViewModel::class.java]
+        }
+        compose.waitUntil(10_000) { restored.state.phase == ImageImportPhase.FAILED }
+        compose.waitForIdle()
+        assertNotSame(primary, restored)
+        assertEquals(accepted, restored.state.request)
+        assertTrue(rows().isEmpty())
+        compose.onNodeWithText("閉じる").performClick()
+        compose.onNodeWithContentDescription("ボード一覧を開く").performClick()
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithContentDescription("画像の追加先、", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription("画像の追加先、", substring = true)
+            .performSemanticsAction(SemanticsActions.OnLongClick)
+        compose.onNodeWithText("削除").performClick()
+        compose.onNodeWithText("削除").performClick()
+        compose.waitUntil(10_000) { runBlocking { database.canvasDao().board(1) == null } }
+        compose.waitUntil(10_000) {
+            var idle = false
+            scenario.onActivity { idle = ViewModelProvider(it)[BoardListActionViewModel::class.java].state.value == BoardListActionState.Idle }
+            idle
+        }
+        compose.waitForIdle()
+        val assetId = checkNotNull(accepted.accepted).assetId
+        val assetFile = File(context.filesDir, "image-assets/$assetId.img")
+        assertTrue(assetFile.exists()) // The accepted checkpoint still protects it.
+        compose.onNodeWithContentDescription("新しいボード").performClick()
+        compose.waitUntil(10_000) { runBlocking { store.lastOpenedBoard()?.details?.id?.let { it != 1L } == true } }
+        val newBoardId = checkNotNull(runBlocking { store.lastOpenedBoard() }).details.id
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithContentDescription("図形ツールを開く").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription("図形ツールを開く").performClick()
+        compose.onNodeWithContentDescription("画像を追加").performClick()
+        compose.onNodeWithText("ファイルから").performClick()
+        compose.onNodeWithText("再試行").performClick()
+        compose.waitUntil(10_000) {
+            restored.state.phase == ImageImportPhase.FAILED && restored.state.request == null
+        }
+        assertFalse(assetFile.exists())
+        assertNull(runBlocking { store.prepareImageTask(accepted.taskToken) })
+        assertTrue(runBlocking { database.canvasDao().images(newBoardId) }.isEmpty())
+        assertFalse(freshSessions.stateFor(newBoardId, BoardSnapshot()).canUndo)
+        compose.onNodeWithText("閉じて選び直す").performClick()
+        compose.waitUntil(10_000) { restored.state.phase == ImageImportPhase.IDLE }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("画像を取り込めません").fetchSemanticsNodes().isEmpty() }
+
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val monitor = object : Instrumentation.ActivityMonitor() {
+            override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? =
+                if (intent.action == Intent.ACTION_OPEN_DOCUMENT)
+                    Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(Uri.fromFile(source)))
+                else null
+        }
+        instrumentation.addMonitor(monitor)
+        try {
+            // The prior image action closed its tool menu; start a new intake.
+            compose.onNodeWithContentDescription("図形ツールを開く").performClick()
+            compose.onNodeWithContentDescription("画像を追加").performClick()
+            compose.onNodeWithText("ファイルから").performClick()
+            compose.waitUntil(10_000) {
+                restored.state.phase == ImageImportPhase.IDLE &&
+                    runBlocking { database.canvasDao().images(newBoardId) }.size == 1
+            }
+            val image = runBlocking { database.canvasDao().images(newBoardId) }.single().toModel()
+            assertNotEquals(accepted.elementId, image.id)
+            assertNotEquals(assetId, image.assetId)
+            assertNull(runBlocking { database.canvasDao().shareReceipt(accepted.requestId) })
+            scenario.onActivity { restored.receive(accepted.requestId, ImagePickerSource.FILE, Uri.fromFile(source)) }
+            compose.waitForIdle()
+            assertEquals(listOf(image), runBlocking { database.canvasDao().images(newBoardId) }.map { it.toModel() })
+            compose.onNodeWithContentDescription("戻す").performClick()
+            compose.waitUntil(10_000) { runBlocking { database.canvasDao().images(newBoardId) }.isEmpty() }
+            assertFalse(freshSessions.stateFor(newBoardId, BoardSnapshot()).canUndo)
+        } finally { instrumentation.removeMonitor(monitor) }
     }
 }

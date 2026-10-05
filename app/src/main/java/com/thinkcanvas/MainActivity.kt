@@ -432,7 +432,10 @@ class MainActivity : ComponentActivity() {
                             if (shareImports.state.blocksCanvas || !baseImportReady(ignoreImage = true)) return@LaunchedEffect
                             val candidate = page.value
                             val stored = store.savedBoard(request.boardId)
-                            if (stored == null) { imageImports.fail(request.requestId); return@LaunchedEffect }
+                            if (stored == null) {
+                                imageImports.rejectUnavailableDestination(request.requestId)
+                                return@LaunchedEffect
+                            }
                             if (page.value !== candidate || !baseImportReady(ignoreImage = true) ||
                                 imageImports.state.phase != com.thinkcanvas.image.ImageImportPhase.ACCEPTED ||
                                 imageImports.state.request?.requestId != request.requestId) return@LaunchedEffect

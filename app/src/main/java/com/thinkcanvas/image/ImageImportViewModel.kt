@@ -176,13 +176,22 @@ class ImageImportViewModel : ViewModel() {
 
     suspend fun completeFromReceipt(requestId: String) { clear(requestId) }
 
-    private suspend fun clear(requestId: String?) {
+    suspend fun rejectUnavailableDestination(requestId: String) {
+        // An unapplied restored patch has no save owner to retry. Retire only the
+        // same live request; applied/uncertain saves retain their existing owner.
+        if (state.phase != ImageImportPhase.ACCEPTED || state.request?.requestId != requestId ||
+            acknowledgement != null || finishing) return
+        clear(requestId, ImageImportState(ImageImportPhase.FAILED,
+            message = "追加先のボードが削除されました。画像を選び直してください"))
+    }
+
+    private suspend fun clear(requestId: String?, cleared: ImageImportState = ImageImportState(ImageImportPhase.IDLE)) {
         if (state.request?.requestId != requestId || finishing) return
         try {
             checkNotNull(store).writeImageCheckpoint(taskToken, null)
             if (state.request?.requestId == requestId) {
                 acknowledgement = null
-                state = ImageImportState(ImageImportPhase.IDLE)
+                state = cleared
             }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { fail(requestId) }

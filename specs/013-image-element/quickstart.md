@@ -43,4 +43,7 @@
 - 移動後の明示tap選択、resize、通常dragのpanを補正後にfocused検証。run `20261005T041046Z-41aaf02f08524ba182fb78de10e053d6` は対象1件成功。
 - 説明の取消、IME hide-only Back、変更済み破棄確認、確認中の古い入力/完了/取消拒否、最新Draft確定、空欄、Undo、再生成をfocused検証。run `20261005T041507Z-6a2cfe7b8cd047899c9817f0a8b39356` は対象1件成功。
 - 以上のGMD結果はいずれもowned XMLのfreshness/対象一致と実行前後のsource不変を確認した。PNGの細分/空IDAT/末尾padding、破損拒否、未確定空白tapと画像editorの競合は全件run内で成功。
-- 現行PR headのrequired CIではPixel 9 / API37の全227件を改めて照合する。CI・canonical review・base・thread・mergeの最終証跡はPR/Issueへ記録する。代表実機は未確認で、T033とIssue80/81の該当条件を未完了に保つ。
+- PR #100の初回候補`aff9389`はrequired CI run `37263313944`で両job成功。Pixel 9 / API37のXMLは全227件がsource censusと一致し、failure/error/skip/欠落/extra/重複0だった。canonical reviewで追加先削除後の復元要求が終了できない指摘を受け、次項の補正へ進んだ。この旧headの証跡を補正後の最終gateには流用しない。
+- T040のfamily checkpointはVM・Mainの再試行/削除・Store checkpoint/GC・BoardSession discard・nativeに限定した。未適用でackのないlive要求だけを終了し、消失した追加先を知らせて選び直せる状態へ戻す。適用済み/不確かな保存は既存ownerを維持する。
+- 補正後のfocused GMD run `20261005T051331Z-12a59c9493574a22862ba167d01da0ee` は対象1件成功、owned fresh XMLとsource不変を確認。trusted Android Bundleを残して全ViewModel ownerを失わせ、実Mainで復元→追加先の確認付き削除→再試行→checkpoint終了/素材回収→別boardの新しいfile取り込み→古いresult拒否→一Undoを検証した。
+- 補正後のsource censusは228件。最終候補でrequired CIとcanonical reviewを改めて確認し、base・thread・mergeと合わせてPR/Issueへ記録する。代表実機は未確認で、T033とIssue80/81の該当条件を未完了に保つ。

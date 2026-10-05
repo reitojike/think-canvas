@@ -81,3 +81,7 @@ read-only保存/描画調査は異なるsurfaceなので下位モデルで並列
 
 - [x] T038 `app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.kt` の説明editor callbackで最新Draftを確定対象にし、破棄確認中の古い入力/完了/取消を拒否する。`app/src/androidTest/java/com/thinkcanvas/image/ImageCanvasInteractionTest.kt` で同sessionの古い完了による説明巻戻しと確認の迂回を検証する。FR-016、US4/AC3、planのlive guardを補う。（partial）
 - [x] T039 `app/src/androidTest/java/com/thinkcanvas/image/ImageCanvasInteractionTest.kt` のnative resizeを、既存一般規則に従って長押し移動後の明示tap選択から開始する。選択しない移動とselected handleの前提を区別する。US2/AC1、T022の意味上検証を補う。（partial）
+
+## Phase 10: Convergence
+
+- [x] T040 `app/src/main/java/com/thinkcanvas/image/ImageImportViewModel.kt` と `app/src/main/java/com/thinkcanvas/MainActivity.kt` で未適用のaccepted要求の追加先が消失した場合にcheckpointを終了し、選び直せる失敗状態へ戻す。`app/src/androidTest/java/com/thinkcanvas/image/ImageImportInteractionTest.kt` でfresh owner復元後の追加先削除・再試行・素材回収・新しい取り込みを実Main/Roomで検証する。FR-003/010/019、US1/AC5と追加先削除のEdge Caseを補う。（partial、HIGH）
