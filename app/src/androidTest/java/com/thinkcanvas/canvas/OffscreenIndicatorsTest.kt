@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.WindowInsets
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
@@ -153,6 +154,30 @@ class OffscreenIndicatorsTest {
             composeRule.waitForIdle()
         }
         fun nextPanAt(point: Offset) {
+            val navigation = sessions.viewportHistoryFor(1L, initial)
+            var previousBounds: Rect? = null
+            var previousFocus: ViewportFocus? = null
+            var previousPosition: Offset? = null
+            var stable = 0
+            composeRule.waitUntil(5_000) {
+                var imeHidden = false
+                scenario.onActivity {
+                    val insets = checkNotNull(it.window.decorView.rootWindowInsets)
+                    imeHidden = !insets.isVisible(WindowInsets.Type.ime()) &&
+                        insets.getInsets(WindowInsets.Type.ime()).bottom == 0
+                }
+                val bounds = canvas
+                val focus = navigation.focus()
+                val referencePosition = position(reference.text)
+                stable = if (imeHidden && !bounds.isEmpty && focus != null && bounds == previousBounds &&
+                    focus == previousFocus && referencePosition == previousPosition) stable + 1 else 0
+                previousBounds = bounds
+                previousFocus = focus
+                previousPosition = referencePosition
+                stable >= 2
+            }
+            composeRule.waitForIdle()
+            assertTrue("The old indicator point must remain inside the current canvas", canvas.contains(point))
             val before = position(reference.text)
             pan(Offset(90f, 25f), point)
             val after = position(reference.text)

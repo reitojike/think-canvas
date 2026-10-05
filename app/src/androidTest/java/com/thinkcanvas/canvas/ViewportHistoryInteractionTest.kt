@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.geometry.Offset
@@ -128,7 +129,7 @@ class ViewportHistoryInteractionTest {
             assertFalse(board.canUndo)
             assertFalse(board.canRedo)
         }
-        fun event(action: Int, points: List<Offset>, downTime: Long) {
+        fun event(action: Int, points: List<Offset>, downTime: Long): Long {
             val origin = IntArray(2)
             scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
             val properties = Array(points.size) { index -> MotionEvent.PointerProperties().apply {
@@ -137,10 +138,12 @@ class ViewportHistoryInteractionTest {
             val coordinates = Array(points.size) { index -> MotionEvent.PointerCoords().apply {
                 x = points[index].x + origin[0]; y = points[index].y + origin[1]; pressure = 1f; size = 1f
             } }
-            val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, points.size,
+            val eventTime = SystemClock.uptimeMillis()
+            val event = MotionEvent.obtain(downTime, eventTime, action, points.size,
                 properties, coordinates, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
             try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
             finally { event.recycle() }
+            return eventTime
         }
         fun pan(delta: Offset, start: Offset = Offset(canvas.left + canvas.width * .2f,
                                                        canvas.top + canvas.height * .72f)) {
@@ -220,7 +223,30 @@ class ViewportHistoryInteractionTest {
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             composeRule.waitForIdle()
         }
-        fun nextPanAt(point: Offset) {
+        fun nextPanAt() {
+            var previousBounds: Rect? = null
+            var previousFocus: ViewportFocus? = null
+            var previousPosition: Offset? = null
+            var stable = 0
+            composeRule.waitUntil(5_000) {
+                var imeHidden = false
+                scenario.onActivity {
+                    val insets = checkNotNull(it.window.decorView.rootWindowInsets)
+                    imeHidden = !insets.isVisible(WindowInsets.Type.ime()) &&
+                        insets.getInsets(WindowInsets.Type.ime()).bottom == 0
+                }
+                val bounds = canvas
+                val focus = navigation.focus()
+                val referencePosition = position(reference.text)
+                stable = if (imeHidden && !bounds.isEmpty && focus != null && bounds == previousBounds &&
+                    focus == previousFocus && referencePosition == previousPosition) stable + 1 else 0
+                previousBounds = bounds
+                previousFocus = focus
+                previousPosition = referencePosition
+                stable >= 2
+            }
+            composeRule.waitForIdle()
+            val point = Offset(canvas.left + canvas.width * .2f, canvas.top + canvas.height * .72f)
             val before = position(reference.text)
             pan(Offset(90f, 25f), point)
             val after = position(reference.text)
@@ -309,13 +335,24 @@ class ViewportHistoryInteractionTest {
         withBoard {
             val start = navigation.focus()
             val point = Offset(canvas.left + canvas.width * .18f, canvas.top + canvas.height * .6f)
-            repeat(2) {
-                val time = SystemClock.uptimeMillis()
-                event(MotionEvent.ACTION_DOWN, listOf(point), time)
-                event(MotionEvent.ACTION_UP, listOf(point), time)
-            }
+            val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+                .fetchSemanticsNode().layoutInfo.viewConfiguration
+            val shifted = point + Offset(8f, 0f)
+            assertTrue((shifted - point).getDistance() <
+                ViewConfiguration.get(instrumentation.targetContext).scaledDoubleTapSlop)
+            val firstDown = SystemClock.uptimeMillis()
+            event(MotionEvent.ACTION_DOWN, listOf(point), firstDown)
+            val firstUp = event(MotionEvent.ACTION_UP, listOf(point), firstDown)
+            Thread.sleep(configuration.doubleTapMinTimeMillis)
+            val secondDown = SystemClock.uptimeMillis()
+            val secondEvent = event(MotionEvent.ACTION_DOWN, listOf(shifted), secondDown)
+            assertTrue("Native pair must satisfy the platform double-tap interval",
+                secondEvent - firstUp in configuration.doubleTapMinTimeMillis..configuration.doubleTapTimeoutMillis)
+            event(MotionEvent.ACTION_UP, listOf(shifted), secondDown)
             composeRule.waitForIdle()
+            composeRule.waitUntil(5_000) { navigation.canBack }
             assertNotEquals(start, navigation.focus())
+            assertNull(editor.draft.value)
             click("前の視点へ戻る")
             sameFocus(start, navigation.focus())
             assertFalse(navigation.canBack)
@@ -450,7 +487,7 @@ class ViewportHistoryInteractionTest {
         sameFocus(camera, navigation.focus())
         assertTrue(nodes("前の視点へ戻る").isEmpty())
         back()
-        nextPanAt(Offset(canvas.left + canvas.width * .2f, canvas.top + canvas.height * .72f))
+        nextPanAt()
         unchanged()
     }
     @Test fun everyFamilyDeletionAndMultipleUndoTargetsUseOneDisplayNavigation() {
