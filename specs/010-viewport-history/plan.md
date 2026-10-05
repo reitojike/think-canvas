@@ -56,3 +56,11 @@ app/src/androidTest/java/com/thinkcanvas/canvas/
 - native IME/insets、canvas測定、world focus/pan、固定要素位置を同時期に観測する。empty cancel、Done、Back/確認、既存編集、反復5回と内容/Room/Undo/historyを照合する。実機再確認はCIから推定しない。
 
 Constitution I〜V: Issue #104のworld focus復帰と既存Spec006/007/010をauthorityとする。既存Compose入力・insetsを維持し、表示欄の一時位置と保存配置を分離する。依存/Room/schema/CI/launcherを変更しない。旧UX checklistはreviewer-ownedのまま、今回の限定修正継続は利用者承認済み。
+
+### Issue #106: native dispatch境界の補正
+
+PR105のfull CIで確認dialog復帰後のIME readinessが失敗した。mainにも同signatureがあるが、具体的なCI hide/show因果は未確定。observational focusedでCompose frame後のshow時にnative `active=true / accepting=false`を観測したため、frameだけをnative input準備の境界とは扱わない。
+
+既存window ownership → focus → IME control → Compose frameの後に、native `View.post`によるdispatchの完了を待つ。Androidの[window focus後にpostする標準手順](https://developer.android.com/develop/ui/views/touch-and-input/keyboard-input/visibility?hl=ja)に従い、最後にcurrent requestとnative window ownershipを再判定してから一度showする。取消時はposted callbackを除去する。#91の未完了request寿命、accepted IME Backの取消、session交代、read-only/save block、完了したrequestの再表示禁止を維持する。native polling、retry-show、timeout延長、独自input connection ownershipは導入しない。
+
+責務は既存CanvasScreenのinput request内に閉じる。診断用interceptor/logを除去したfocusedと全native suite、final head CI/canonicalを検証する。利用者からMERGE_READYまでの継続と条件達成後のmergeが許可された。

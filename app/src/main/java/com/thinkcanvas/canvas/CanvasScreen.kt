@@ -1129,7 +1129,18 @@ fun CanvasScreen(
                         }
                     }
                 },
-                awaitFrame = { withFrameNanos { } },
+                awaitFrame = {
+                    withFrameNanos { }
+                    // A Compose frame can precede the native window/input dispatch.
+                    // Hand off to the View queue before the final ownership check and show.
+                    suspendCancellableCoroutine<Unit> { continuation ->
+                        val dispatch = Runnable {
+                            if (continuation.isActive) continuation.resume(Unit)
+                        }
+                        continuation.invokeOnCancellation { inputView.removeCallbacks(dispatch) }
+                        inputView.post(dispatch)
+                    }
+                },
                 hasWindowFocus = { inputView.hasWindowFocus() },
             )
             if (ready) keyboard?.show()

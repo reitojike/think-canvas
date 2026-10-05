@@ -2,6 +2,18 @@
 
 ## Issue #104: IME camera checkpoint（2026-10-05）
 
+### PR105 native input復帰の収束（2026-10-06）
+
+head `8eb295a7dfe68b880b39549fc6ec2d27665bfae0` の[CI 37329233446](https://github.com/reitojike/think-canvas/actions/runs/37329233446)は基本job成功、fresh native **231/2/0/0**。sourceと全test名が一致し、欠落/余剰/重複0。XML SHA256 `879762549274274941484985772BF2FB08E4C92FA07C50CCEC867E7A959D62AE`。既存pending-input確認dialog Backと新規5-cycle Cancel確認ContinueがIME readiness timeoutした。具体的なCIのhide/show因果は未確定として保持する。mainにもregion-name Continueの同signatureがあり、[Issue106](https://github.com/reitojike/think-canvas/issues/106)にfinite lifecycle checkpointを記録した。
+
+観測用source固定run `20261005T153821Z-715175295dd54313bd9e712fd604b207`（新規Cancel）と `20261005T154351Z-9d9450d5316149759707196316c8533a`（既存pending-input）は各1/0/0/0。前者のshow時にnative `active=true / accepting=false`を観測し、Compose frameがnative input準備と同一境界でないことを確認した。後者はnative connection作成/交代後のshowを観測して成功。どちらもownership/sourceUnchanged=true、介入0。この非再現をCI failureの解決証拠とはしない。
+
+window ownership / IME control / frameの待機を維持し、最後のownership/current-request判定の前にnative View dispatchへhandoffするT028を補正対象とした。取消時はcallback除去、一度のshow、完了後のrequestは再表示しない。probe/log/interceptorを除去した標準focused run `20261005T154855Z-8ba3589da784475aa0bbd821d99b039e` は **1/0/0/0**、XML SHA256 `56BFBA255498D37CEE684F438D0BF13F9D31C4723010259D8D41C9D71C2A563C`、ownership/sourceUnchanged=true、介入0。確認Continueと全5-cycle、native IME hidden、元のworld focus/固定位置、保存/履歴不変を確認した。timeout/許容差/fixture assertionは変更しない。
+
+更新headの全native/CI/canonicalが最終gate。利用者からMERGE_READYまでの継続と条件達成後のmergeが許可された。最終head以降のdelivery証跡はPR105と最新Issue ACに記録する。
+
+T028補正後のlocal lint・全単体 **189/0/0/0**・debug/androidTest buildは1m56sで成功。公開境界273候補、diff check、Room schema変更なし。read-only convergeは10FR/4SC/12既存scenario、元の有限設計とcamera表示/native dispatch判断、Constitution5原則、29tasksの現在の実装を照合し、追加buildable残差0。tasks.mdは照合前後byte-identical（SHA256 `83396286D7F7A20BD1B96D986907AFF66FA34E0653DDDE56303B9FA39C23BBDD`）、空phaseなし。T026/T029は候補freeze時点のdelivery未完了markerを保持する。extension hooks設定なし、reviewer-owned checklistの状態は変更しない。
+
 旧main製品コードに新しいnative回帰を追加した標準focused run `20261005T142604Z-58104dcb5d4c41158caebced3c7ea532` はfresh XML **1/1/0/0**。sourceUnchanged/ownershipPassed=true、介入0。XML SHA256 `DC85D01B4E9E7523BB2631900876334A7FB58289CDCFA5F4077621BA5408EAFB`。最初のempty cancel後にcamera不変assertが失敗した。alpha.10物理端末の直接再現と区別する。
 
 | 観測 | canvas size | native IME bottom | world center | scale | pan | 固定要素screen位置 |
@@ -14,7 +26,7 @@ root height2400、system bottom63、window focus成立は3点で同じ。canvas 
 
 新回帰は5-cycle cancel/IME優先Back/確認継続→破棄、5-cycle Doneと既存編集/Room/world配置/Undo/Redo、Activity再生成とnative Dialog window focus往復を扱う。入力はtestのsession stateで開始してblank-tap arbitrationから分離し、実Activityのfield・input connection・native IME・通常終了操作を使う。各観測はnative insets、canvas、focus/panとdrawing一致が連続して安定した状態で比較する。任意の待機delayや許容差拡大は加えない。
 
-実機未接続。alpha.10の実機再現/非再現とrepresentative real-deviceでの修正版確認はT027に残し、CI成功から推定しない。PRのdebug APKは別applicationIdのため、継続利用版を上書きしない。
+初回checkpoint時は実機未接続だった。その後、ユーザーの通常端末Pixel 9a / Android 17 / Google IMEで修正版の確認を完了し、問題なしの報告をPR105/Issue104へ記録した。alpha.10の症状はIssueのユーザー観測として保持し、定量native再現やCI結果と区別する。PRのdebug APKは別applicationIdのため、継続利用版を上書きしない。
 
 補正後local lint・全単体189/0/0/0・debug/androidTest buildは2m27sで成功。公開境界273候補、diff check、Room schema変更なしを確認した。最初の補正後focused run `20261005T143703Z-c95c28d896964ea385a0b69e5682d68f` はcamera復帰を確認したが、確認Continue後のnative readinessがtimeoutした。具体的な原因は未確定のままとする。
 
