@@ -50,6 +50,7 @@ import com.thinkcanvas.share.ShareImportPhase
 import com.thinkcanvas.share.ShareImportViewModel
 import com.thinkcanvas.share.sharedPlainText
 import com.thinkcanvas.share.loadSharePreviewIfReady
+import com.thinkcanvas.share.loadShareBoardsIfCurrent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -410,10 +411,16 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         ShareImportPhase.PREVIEW, ShareImportPhase.PICKER -> {
-                            importBoards.value = store.boards()
-                            if (shareImports.state.phase == ShareImportPhase.PREVIEW &&
-                                importBoards.value.none { it.id == request.destinationId })
-                                shareImports.missingDestination()
+                            val lookupState = shareImports.state
+                            loadShareBoardsIfCurrent(
+                                isCurrent = { shareImports.state === lookupState },
+                                loadBoards = { store.boards() },
+                            ) { boards ->
+                                importBoards.value = boards
+                                if (lookupState.phase == ShareImportPhase.PREVIEW &&
+                                    boards.none { it.id == lookupState.request?.destinationId })
+                                    shareImports.missingDestination()
+                            }
                         }
                         ShareImportPhase.OPENING -> {
                             if (page.value == Page.Loading || transientPending.value) return@LaunchedEffect
