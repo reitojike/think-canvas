@@ -1,5 +1,47 @@
 # 検証と収束
 
+## Issue #104: IME camera checkpoint（2026-10-05）
+
+### PR105 native input復帰の収束（2026-10-06）
+
+head `8eb295a7dfe68b880b39549fc6ec2d27665bfae0` の[CI 37329233446](https://github.com/reitojike/think-canvas/actions/runs/37329233446)は基本job成功、fresh native **231/2/0/0**。sourceと全test名が一致し、欠落/余剰/重複0。XML SHA256 `879762549274274941484985772BF2FB08E4C92FA07C50CCEC867E7A959D62AE`。既存pending-input確認dialog Backと新規5-cycle Cancel確認ContinueがIME readiness timeoutした。具体的なCIのhide/show因果は未確定として保持する。mainにもregion-name Continueの同signatureがあり、[Issue106](https://github.com/reitojike/think-canvas/issues/106)にfinite lifecycle checkpointを記録した。
+
+観測用source固定run `20261005T153821Z-715175295dd54313bd9e712fd604b207`（新規Cancel）と `20261005T154351Z-9d9450d5316149759707196316c8533a`（既存pending-input）は各1/0/0/0。前者のshow時にnative `active=true / accepting=false`を観測し、Compose frameがnative input準備と同一境界でないことを確認した。後者はnative connection作成/交代後のshowを観測して成功。どちらもownership/sourceUnchanged=true、介入0。この非再現をCI failureの解決証拠とはしない。
+
+window ownership / IME control / frameの待機を維持し、最後のownership/current-request判定の前にnative View dispatchへhandoffするT028を補正対象とした。取消時はcallback除去、一度のshow、完了後のrequestは再表示しない。probe/log/interceptorを除去した標準focused run `20261005T154855Z-8ba3589da784475aa0bbd821d99b039e` は **1/0/0/0**、XML SHA256 `56BFBA255498D37CEE684F438D0BF13F9D31C4723010259D8D41C9D71C2A563C`、ownership/sourceUnchanged=true、介入0。確認Continueと全5-cycle、native IME hidden、元のworld focus/固定位置、保存/履歴不変を確認した。timeout/許容差/fixture assertionは変更しない。
+
+更新headの全native/CI/canonicalが最終gate。利用者からMERGE_READYまでの継続と条件達成後のmergeが許可された。最終head以降のdelivery証跡はPR105と最新Issue ACに記録する。
+
+T028補正後のlocal lint・全単体 **189/0/0/0**・debug/androidTest buildは1m56sで成功。公開境界273候補、diff check、Room schema変更なし。read-only convergeは10FR/4SC/12既存scenario、元の有限設計とcamera表示/native dispatch判断、Constitution5原則、29tasksの現在の実装を照合し、追加buildable残差0。tasks.mdは照合前後byte-identical（SHA256 `83396286D7F7A20BD1B96D986907AFF66FA34E0653DDDE56303B9FA39C23BBDD`）、空phaseなし。T026/T029は候補freeze時点のdelivery未完了markerを保持する。extension hooks設定なし、reviewer-owned checklistの状態は変更しない。
+
+旧main製品コードに新しいnative回帰を追加した標準focused run `20261005T142604Z-58104dcb5d4c41158caebced3c7ea532` はfresh XML **1/1/0/0**。sourceUnchanged/ownershipPassed=true、介入0。XML SHA256 `DC85D01B4E9E7523BB2631900876334A7FB58289CDCFA5F4077621BA5408EAFB`。最初のempty cancel後にcamera不変assertが失敗した。alpha.10物理端末の直接再現と区別する。
+
+| 観測 | canvas size | native IME bottom | world center | scale | pan | 固定要素screen位置 |
+| --- | --- | --- | --- | --- | --- | --- |
+| entry前 | 1080×2201 | 0 | (995,1530) | 0.9 | (-355.5,-276.5) | (815,1480) |
+| IME表示 | 1080×1381 | 883 | (1082.5,2056.2224) | 0.9 | (-434.25,-1160.1001) | (736,596) |
+| cancel / IME hidden後 | 1080×2201 | 0 | (1082.5,2056.2224) | 0.9 | (-434.25,-750.1001) | (736,1006) |
+
+root height2400、system bottom63、window focus成立は3点で同じ。canvas sizeは復元したが、world focusと固定要素位置が戻らず、上方向474px・左方向79pxのずれが残った。sizeの対称性と別camera writerをnative結果で区別できた。
+
+新回帰は5-cycle cancel/IME優先Back/確認継続→破棄、5-cycle Doneと既存編集/Room/world配置/Undo/Redo、Activity再生成とnative Dialog window focus往復を扱う。入力はtestのsession stateで開始してblank-tap arbitrationから分離し、実Activityのfield・input connection・native IME・通常終了操作を使う。各観測はnative insets、canvas、focus/panとdrawing一致が連続して安定した状態で比較する。任意の待機delayや許容差拡大は加えない。
+
+初回checkpoint時は実機未接続だった。その後、ユーザーの通常端末Pixel 9a / Android 17 / Google IMEで修正版の確認を完了し、問題なしの報告をPR105/Issue104へ記録した。alpha.10の症状はIssueのユーザー観測として保持し、定量native再現やCI結果と区別する。PRのdebug APKは別applicationIdのため、継続利用版を上書きしない。
+
+補正後local lint・全単体189/0/0/0・debug/androidTest buildは2m27sで成功。公開境界273候補、diff check、Room schema変更なしを確認した。最初の補正後focused run `20261005T143703Z-c95c28d896964ea385a0b69e5682d68f` はcamera復帰を確認したが、確認Continue後のnative readinessがtimeoutした。具体的な原因は未確定のままとする。
+
+確認dialogの表示/消失とCompose idleを明示し、既存readiness待機へnative診断を加えたrun `20261005T144249Z-bed0067ce31240dda006d8ca2857c3a2` は **1/0/0/0**、sourceUnchanged/ownershipPassed=true、介入0。5-cycle cancel、IME優先Back、確認Continue→破棄、field表示領域、内容/Room/save/Undo/history不変を検証した。補正後の表示中focusは(995,1530)、panは(-355.5,-686.5)、hidden後は元のpan(-355.5,-276.5)と固定要素(815,1480)へ戻った。製品の#91 ownership/復帰effect、timeout10s、camera許容差は変更していない。最終candidateのfull CI/canonicalとDone/既存編集/再生成回帰はPR上の現行head証跡で確認する。
+
+同じ製品/test bytesの追加focusedも各1/0/0/0、sourceUnchanged/ownershipPassed=true、介入0で成功した。
+
+| 回帰 | 標準launcher run | XML SHA256 |
+| --- | --- | --- |
+| 5-cycle cancel / Back確認 | `20261005T144249Z-bed0067ce31240dda006d8ca2857c3a2` | `3AD7521F78E5651A1CE5788F00608A95E8E2E178636C926807A1ECE0E1715A15` |
+| 5-cycle Done / 既存編集 / Room / world配置 / Undo-Redo | `20261005T144952Z-4abd70911bb643478e6600c50f1cad57` | `3362645537F3D11BC6E5A80DBA41FFF5A566125F90CA09CA39981C8D3598F529` |
+| Activity再生成 / native Dialog window focus往復 / IME hidden保持 | `20261005T145405Z-eb197614806f4af2838fda2a7b180dfd` | `44337C6C88221DBF8A7EA8A16E86A3D7E84441CF8638EC8E6AFC75AF9616BF31` |
+
+read-only convergeは10FR/4SC/12既存scenarioとIME回帰、設計判断、Constitution5原則、T001〜T027を有限照合した。追加buildable残差0。T026のCI/canonical deliveryとT027の物理端末確認は既存taskで追跡し、空のConvergence phaseや重複taskを追加しない。reviewer-owned checklistと#91のownershipを維持する。最終候補freeze後の証跡は[PR105](https://github.com/reitojike/think-canvas/pull/105)へ記録し、source/docsをgateの途中で更新しない。
+
 ## 同一検索groupの始点復帰（2026-10-04）
 
 head3d98baeのCI37195996192は両job成功、fresh154/0/0/0、missing/extra/duplicate0。artifact11300419670、digest `sha256:ae116135210fe9723e10ae1d06a711d2dd85e885d6b50486618f67abc1a6260d`、XML SHA256 `697894AE90790D93BCF27B828E88C99CD9B574FC262911DD5A71F1DC0F24CA84`。最後の依頼5979263070（11:01:13Z）後の同head canonical review5405630218（11:05:45Z）は、同一検索groupのA→B→Aで不要なanchorが残るP2を指摘した。

@@ -76,7 +76,7 @@
 - **FR-005**: 視点操作は内容、world配置、選択、検索query、編集Undo/Redo、保存要求を変更しない。
 - **FR-006**: 編集Undo/Redoは既存の一回の内容変更/保存単位を維持する。変更対象が画面内ならcameraを維持し、画面外/確認不能なら対象へfocusする。複数対象は変更範囲へfitし、消える対象は変更前位置を使う。
 - **FR-007**: FR-006の自動移動は視点履歴だけに1回記録する。視点backによって内容を再適用/再取消しない。
-- **FR-008**: boardのsession内で視点と履歴を保持し、Activity再生成/size-density変化では同じworld focus・倍率を復元する。process終了後のstack永続化はしない。
+- **FR-008**: boardのsession内で視点と履歴を保持し、Activity再生成/size-density変化では同じworld focus・倍率を復元する。process終了後のstack永続化はしない。IME表示・非表示とeditor entry/exitだけではworld focus・倍率を変えず、入力欄を見せる一時的な表示補助をcameraや視点履歴へ残さない。終了後は同じsizeで固定要素のscreen位置へ戻り、5回の反復でもずれを累積しない（Issue #104）。
 - **FR-009**: 視点controlは倍率付近に独立したconditional操作として提供する。履歴がない間は非表示、利用不能方向はdisabled、名称/action/semanticsは編集Undo/Redoと区別する。既存system Backを維持する。
 - **FR-010**: 保存Running/Failed/pending acknowledgement、editor/IME/modal/tool/preview中は視点controlを抑止し、live guardで同一UI turnのstale actionも拒否する。次の独立gestureやhidden hitの寿命を守る。
 

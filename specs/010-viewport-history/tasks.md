@@ -56,3 +56,15 @@ MVPはUS1。US2の内容操作/保存不変を確認しUS3の寿命/guardへ広�
 ## Delivery同期（2026-10-04）
 
 T012/T013/T016〜T022は[PR90](https://github.com/reitojike/think-canvas/pull/90)のhead 2dd8b354a3でCI154件/canonicalを収束し、merge 047b0a1、[Issue77完了proof](https://github.com/reitojike/think-canvas/issues/77#issuecomment-5979642387)でdelivery完了を確認した。次の必要な統合でcheckboxを同期するという記録に従い、本変更で反映する。過去CIの未確定原因を新しい証拠から推定し直さない。
+
+## Issue #104: IME cycleでのcamera drift
+
+- [x] T023 read-only geometry/insets/lifecycle checkpointでsize authorityと非対称camera writerを区別し、Spec010 FR-008とplanへ限定補正を記録する。既存reviewer-owned UX checklistは変更しない。利用者が限定修正継続を承認。
+- [x] T024 `ViewportHistoryInteractionTest.kt` にnative IME/size/focus/pan/固定要素の同時観測と5-cycle、empty cancel/Done/Back確認/既存編集、再生成/window focusの回帰を先に追加する。旧実装の結果と環境制限を記録する。
+- [x] T025 `CanvasScreen.kt` のIME表示補助を入力欄の一時screen配置へ限定し、camera writerを除去する。world保存座標、表示bounds、#91、history/resizeを維持し、native回帰・lint/unit/build/公開境界を検証する。
+- [ ] T026 spec/plan/tasksと差分をconvergeし、current-head full CI・canonical review・fresh base・threadsを収束する。旧candidateのnative failureを新headの成功で消さず、証跡をPR105へ記録する。
+- [x] T027 representative real-deviceでalpha.10のユーザー観測と修正版の反復5回・各終了経路・IME hidden・元の固定要素位置を確認し、Issue #104へ記録する。通常端末Pixel 9a / Android 17 / Google IMEで利用者から問題なしの報告を受領、PR105/Issue104に記録済み。alpha.10の定量native再現とは区別する。
+- [x] T028 Issue106のfinite input lifecycle checkpointに基づき、`CanvasScreen.focusEditorInput`でCompose frame後のnative `View.post` dispatch境界を待ち、取消時callback除去と最後のownership判定を維持する。標準focusedで5-cycle Cancel/Back確認を検証し、probe/interceptorを除去する。全native/current-head gateはT026で検証する。既存#91 contract、timeout、camera許容差は維持する。
+- [ ] T029 ユーザーの追加指示に従い、T026達成後にPR105をmergeする。最新Issue104/106のACをmerge済み成果物とnative/full CI/review/実機証跡で個別判定し、実際に達成した条件だけ同期する。
+
+T026/T029のfinal-head CI/canonical/merge/closure証跡は[PR105](https://github.com/reitojike/think-canvas/pull/105)と対象Issueへ記録する。候補freeze時点では未完了markerを保持し、既存delivery同期と同じく次の必要な統合でcheckboxを同期する。実機確認をCI/review成功で置き換えない。Task ContractはMERGE_READYまでの継続と条件達成後のmergeへ更新された。
