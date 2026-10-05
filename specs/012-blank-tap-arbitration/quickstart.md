@@ -220,3 +220,15 @@ PR #99はMainのPICKER/PREVIEW lookup、既存SharePreviewAdmissionの局所guar
 required CI37251559921は両job成功・fresh exact185/0/0/0。canonical reviewは最後の依頼01:49:46Zより新しい01:52:16Zの現行head指摘なし結果、最新base/behind0/MERGEABLE/未解決thread0でMERGE_READYを確認し、許可によりmain78b226dへmergeした。旧CI timeoutの正確な因果を結果だけから断定しない。
 
 main更新の有限surfaceは上記4ファイル、Canvasの既存external/save readiness、blank pending、next-pan fixture、source/XML census。競合なしで共有先lookupのauthorityを取り込み、blank arbitrationの製品処理は0e7fa10から変更しない。判定BOUNDED_CORRECTION。追加1roundはbase更新と検証証跡のみ。新候補を固定してunit166、Pixel9/API37全194件、current-head CI/canonical、最新base/未解決thread0を確認する。旧headの結果は最終gateへ流用しない。新material findingはHOLD/checkpoint。
+
+## native次panのfamily completeness checkpoint
+
+head a154185のrequired CI37253264442は両job成功・fresh source/XML exact194/0/0/0。一方local fullはfresh exact194/1/0/0・unit166/0/0/0・head/source不変で、唯一のfailureはOffscreenIndicatorsの検索close後next-pan X7px差（許容2px）。shifted native double・selection・slop外・semantic失効・ViewportHistory next-panと他193件は成功した。
+
+finite surfaceはrulerを持つViewportHistoryの1callerとOffscreenIndicatorsの3callers（search close/selection Back/recreation）、SemanticNavigation/NeutralInteraction/EdgeAutoPanの既存IME readiness、Canvas resize/IME/focus/search close/manual pan、製品差分。Offscreenだけはnative IME/inset0とbounds/viewport/参照位置の安定を観測せず次panを計測していた。failureにblank UP/pendingはなく製品Canvas処理は0e7fa10から不変。IME hide animation jankのlogだけから7px差の因果を断定しない。
+
+判定BOUNDED_CORRECTION。追加1roundをOffscreen Harness.nextPanAtのnative IME非表示/inset0・bounds/focus/参照位置の安定観測と、同じ3callersのfocused検証に限定した。元indicatorのold screen pointを再計算せず、90/25px入力、2px許容、marker消滅・旧hitからpan・content/Room/save/Undoの期待値を維持する。pan/pinch/indicator/search/animationの製品処理を変更しない。
+
+失敗した検索closeのfocusedはfresh1/0/0/0。ただし複数method指定の実行でXMLに1件しか出ていなかったため3caller成功とは扱わない。標準class指定でOffscreenIndicatorsTest全12件を実行し、3callerを含むfresh source/XML exact12/0/0/0を確認した。
+
+最終候補は再び固定headのunit166/full194とcurrent-head CI/canonical/latest base/thread0で判定する。a154185のCI成功を新headへ流用しない。新material findingは補正前にHOLD/checkpointし、blind rerunしない。
