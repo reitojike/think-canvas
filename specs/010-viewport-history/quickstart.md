@@ -20,6 +20,16 @@ root height2400、system bottom63、window focus成立は3点で同じ。canvas 
 
 確認dialogの表示/消失とCompose idleを明示し、既存readiness待機へnative診断を加えたrun `20261005T144249Z-bed0067ce31240dda006d8ca2857c3a2` は **1/0/0/0**、sourceUnchanged/ownershipPassed=true、介入0。5-cycle cancel、IME優先Back、確認Continue→破棄、field表示領域、内容/Room/save/Undo/history不変を検証した。補正後の表示中focusは(995,1530)、panは(-355.5,-686.5)、hidden後は元のpan(-355.5,-276.5)と固定要素(815,1480)へ戻った。製品の#91 ownership/復帰effect、timeout10s、camera許容差は変更していない。最終candidateのfull CI/canonicalとDone/既存編集/再生成回帰はPR上の現行head証跡で確認する。
 
+同じ製品/test bytesの追加focusedも各1/0/0/0、sourceUnchanged/ownershipPassed=true、介入0で成功した。
+
+| 回帰 | 標準launcher run | XML SHA256 |
+| --- | --- | --- |
+| 5-cycle cancel / Back確認 | `20261005T144249Z-bed0067ce31240dda006d8ca2857c3a2` | `3AD7521F78E5651A1CE5788F00608A95E8E2E178636C926807A1ECE0E1715A15` |
+| 5-cycle Done / 既存編集 / Room / world配置 / Undo-Redo | `20261005T144952Z-4abd70911bb643478e6600c50f1cad57` | `3362645537F3D11BC6E5A80DBA41FFF5A566125F90CA09CA39981C8D3598F529` |
+| Activity再生成 / native Dialog window focus往復 / IME hidden保持 | `20261005T145405Z-eb197614806f4af2838fda2a7b180dfd` | `44337C6C88221DBF8A7EA8A16E86A3D7E84441CF8638EC8E6AFC75AF9616BF31` |
+
+read-only convergeは10FR/4SC/12既存scenarioとIME回帰、設計判断、Constitution5原則、T001〜T027を有限照合した。追加buildable残差0。T026のCI/canonical deliveryとT027の物理端末確認は既存taskで追跡し、空のConvergence phaseや重複taskを追加しない。reviewer-owned checklistと#91のownershipを維持する。最終候補freeze後の証跡は[PR105](https://github.com/reitojike/think-canvas/pull/105)へ記録し、source/docsをgateの途中で更新しない。
+
 ## 同一検索groupの始点復帰（2026-10-04）
 
 head3d98baeのCI37195996192は両job成功、fresh154/0/0/0、missing/extra/duplicate0。artifact11300419670、digest `sha256:ae116135210fe9723e10ae1d06a711d2dd85e885d6b50486618f67abc1a6260d`、XML SHA256 `697894AE90790D93BCF27B828E88C99CD9B574FC262911DD5A71F1DC0F24CA84`。最後の依頼5979263070（11:01:13Z）後の同head canonical review5405630218（11:05:45Z）は、同一検索groupのA→B→Aで不要なanchorが残るP2を指摘した。
