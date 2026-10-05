@@ -1436,6 +1436,10 @@ fun CanvasScreen(
                     val activeReleased = mode == "ink" && event.changes.any { it.id == drawingPointer && !it.pressed }
                     if (pressed.isEmpty() || activeReleased) {
                         if (event.type != PointerEventType.Release) break
+                        val feedbackRelease = event.motionEvent?.let {
+                            it.actionMasked == MotionEvent.ACTION_UP &&
+                                it.flags and MotionEvent.FLAG_CANCELED == 0
+                        } == true
                         if (mode == "pan" || mode == "zoom") {
                             val native = event.motionEvent
                             if (native?.actionMasked == MotionEvent.ACTION_UP &&
@@ -1459,8 +1463,7 @@ fun CanvasScreen(
                                     InkPoint(x, y, (endTime - drawingStart).coerceAtLeast(last.elapsedMillis))
                                 val stroke = InkStroke(startedAt = drawingStart, endedAt = endTime,
                                     inputType = drawingInput, points = drawingPoints)
-                                if (board.addInkStroke(drawingKind, stroke))
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                board.addInkStroke(drawingKind, stroke)
                                 saveSnapshot()
                             }
                             "tap" -> {
@@ -1509,13 +1512,15 @@ fun CanvasScreen(
                                             selectedIds = setOf(arrow.id); selectedId = null
                                             guidance = if (arrow.from is ArrowEnd.Attached || arrow.to is ArrowEnd.Attached)
                                                 "矢印を接続しました" else "矢印を作成しました"
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         }
                                         arrow != null
                                     } else false
                                     else -> false
                                 }
-                                if (created) saveSnapshot()
+                                if (created) {
+                                    if (feedbackRelease) haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    saveSnapshot()
+                                }
                                 finishToolInteraction(clearGuidance = false)
                             }
                             "lasso" -> {
@@ -1561,7 +1566,6 @@ fun CanvasScreen(
                                             val label = board.shapes.firstOrNull { it.id == id }?.name
                                                 ?.takeIf { it.isNotBlank() } ?: "囲み"
                                             guidance = if (afterRegion == null) "${label}から出ました" else "${label}に入りました"
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         }
                                         saveSnapshot()
                                     }
@@ -1584,7 +1588,7 @@ fun CanvasScreen(
                                 if (changed) {
                                     if (handle == HandleKind.FROM || handle == HandleKind.TO) {
                                         guidance = "端点を変更しました"
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        if (feedbackRelease) haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                     }
                                     saveSnapshot()
                                 }
@@ -1663,7 +1667,6 @@ fun CanvasScreen(
                             if (activeId == null) {
                                 mode = "gap"
                                 gapPreview = startWorld to startWorld
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             } else mode = "move"
                         }
                         when (mode) {

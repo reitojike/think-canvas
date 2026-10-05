@@ -51,7 +51,7 @@
 - `CanvasScreen` の入力を `tap`、`pan`、`zoom`、`move`、`resize`、`arrow-end`、`arrow-bend`、`lasso`、`gap`、`create` の状態に分ける。down 時の判定順は [操作契約](contracts/interaction.md) に従う。子 UI が消費した event を尊重し、引き受けた操作だけを消費する。
 - 通常 drag は #2 のパンを維持する。要素長押し後の drag は移動、動かず release したらメニュー。空白長押し後の drag は余白。図形・矢印・囲み選択ツールでは一筆の drag をそれぞれの作成操作へ渡す。2 指入力や cancel 時は preview を捨てる。
 - 図形・矢印は Canvas 描画と個別の透明な semantics 対象を組み合わせる。選択枠、操作つまみ、ツール、案内、余白帯は HTML モックの色と配置を基準にする。新しい操作つまみとメニューのボタンは 48dp 以上のタッチ領域を確保する。
-- `LocalHapticFeedback` を使い、長押し成立、囲みへの移動、矢印接続、余白方向の確定を短く知らせる。振動なしでも色・枠・案内で状態が分かる。アクセシビリティ actions で選択、移動、サイズ変更、接続解除、向き反転、削除と余白挿入の代替経路を用意する。
+- `LocalHapticFeedback` の意味と頻度は [Spec 014 plan](../014-semantic-haptics/plan.md) に従う。振動なしでも色・枠・案内で状態が分かる。アクセシビリティ actions で選択、移動、サイズ変更、接続解除、向き反転、削除と余白挿入の代替経路を用意する。
 
 ## 構成
 
