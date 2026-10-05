@@ -151,6 +151,40 @@ class ImageRenderingTest {
         } finally { source.delete() }
     }
 
+    @Test fun splitIdatEmptyChunksAndTrailingPaddingPreserveImportedPixels() = withStore { context, store, _ ->
+        val source = imageFixture(context)
+        try {
+            val repackaged = ByteArrayOutputStream()
+            DataInputStream(source.inputStream()).use { input ->
+                val output = DataOutputStream(repackaged)
+                output.write(ByteArray(8).also(input::readFully))
+                fun chunk(type: ByteArray, bytes: ByteArray) {
+                    output.writeInt(bytes.size); output.write(type); output.write(bytes)
+                    output.writeInt(CRC32().apply { update(type); update(bytes) }.value.toInt())
+                }
+                while (input.available() > 0) {
+                    val length = input.readInt()
+                    val type = ByteArray(4).also(input::readFully)
+                    val bytes = ByteArray(length).also(input::readFully)
+                    input.readInt()
+                    if (type.toString(Charsets.US_ASCII) == "IDAT") {
+                        chunk(type, byteArrayOf())
+                        bytes.forEach { chunk(type, byteArrayOf(it)) }
+                        chunk(type, byteArrayOf(0, 0, 0))
+                    } else chunk(type, bytes)
+                }
+            }
+            val id = UUID.randomUUID().toString()
+            store.import(ByteArrayInputStream(repackaged.toByteArray()), id)
+            val decoded = store.decode(id, 256)
+            try {
+                assertEquals(80, decoded.width); assertEquals(40, decoded.height)
+                assertEquals(0, Color.alpha(decoded.getPixel(20, 10)))
+                assertEquals(Color.RED, decoded.getPixel(60, 30))
+            } finally { decoded.recycle() }
+        } finally { source.delete() }
+    }
+
     @Test fun highResolutionSourceIsSampledAndMissingAssetFailsTheWholeOutput() = withStore { context, store, _ ->
         val source = File(context.cacheDir, "large-${UUID.randomUUID()}.png")
         try {

@@ -73,13 +73,16 @@ internal fun verifyPngPixels(source: File, cancelled: () -> Boolean) {
                         input.readFully(compressed, 0, count)
                         crc.update(compressed, 0, count)
                         remaining -= count
-                        if (type != "IDAT") continue
-                        if (inflater.finished()) throw IOException("画像を確認できません")
+                        // PNG permits unused trailing bytes in the final IDAT. Still check CRC.
+                        if (type != "IDAT" || inflater.finished()) continue
                         inflater.setInput(compressed, 0, count)
                         while (!inflater.needsInput() && !inflater.finished()) {
                             if (cancelled()) throw CancellationException()
                             val size = inflater.inflate(output)
-                            if (size == 0 && !inflater.finished()) throw IOException("画像を確認できません")
+                            if (size == 0 && !inflater.finished()) {
+                                if (inflater.needsInput()) break
+                                throw IOException("画像を確認できません")
+                            }
                             val end = produced + size
                             if (end > expected) throw IOException("画像を確認できません")
                             passes.forEach { pass ->
@@ -94,7 +97,6 @@ internal fun verifyPngPixels(source: File, cancelled: () -> Boolean) {
                             }
                             produced = end
                         }
-                        if (inflater.finished() && inflater.remaining != 0) throw IOException("画像を確認できません")
                     }
                 }
                 if ((input.readInt().toLong() and 0xffffffffL) != crc.value)

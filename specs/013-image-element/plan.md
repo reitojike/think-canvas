@@ -78,7 +78,7 @@ process復元はreceiptを先に照合。未完了readは再選択を案内し�
 
 ### 4 decode/display/output
 
-copy済みfileをBitmapFactory bounds decodeとAndroidX ExifInterfaceで検証。1〜8の回転/反転を同じ関数で表示/出力へ適用。sample power-of-twoと最終targetサイズで一枚4MP以下、software/premultiplied透明を維持。OOM/decode failureを失敗値へ変換し内部pathをmessageへ出さない。
+copy済みfileをBitmapFactory bounds decodeとAndroidX ExifInterfaceで検証し、受理前に256pxへsampleした実decodeも行う。BitmapFactoryが不完全PNGを部分bitmapとして返す場合に備え、PNGは固定32KiB bufferでchunk CRC・zlib完了・期待scanline量・filterを検証する。Adam7とpacked bit depth、任意境界の連続IDAT、空IDAT、標準が許す末尾paddingを扱い、source大のrasterは確保しない。1〜8の回転/反転を同じ関数で表示/出力へ適用。sample power-of-twoと最終targetサイズで一枚4MP以下、software/premultiplied透明を維持。OOM/decode failureを失敗値へ変換し内部pathをmessageへ出さない。
 
 ImageResourcesはcache key(assetId,target bucket)とbitmapを最大32MiBで保持、decode一件ずつ。Compose stateはkey/revision/失敗のみでbitmapを所有しない。far最大256、mid最大1024、near表示pixelに応じ最大2048。画面外は要求しない。世界bounds・選択/接続はdecode成功やtierで変えない。missing/failedは同じboundsにplaceholderを描く。選択された画像は既存keep-visible契約を使う。
 

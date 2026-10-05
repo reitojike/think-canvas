@@ -1,7 +1,7 @@
 # ThinkCanvas
 
 ThinkCanvas は Android 向けのローカルファーストな思考キャンバスです。テキストや手書き、
-図形・囲み・矢印を自由に置き、配置に込めた意味を保ちながら考えを組み替えられます。
+図形・囲み・矢印・写真を自由に置き、配置に込めた意味を保ちながら考えを組み替えられます。
 複数のボードを管理し、検索で見返し、必要な範囲を画像として持ち出せます。
 ボードと要素は Room 3 で端末内に保存し、記録・閲覧・編集・保存はアカウントや AI、通信なしで完結します。
 
@@ -12,7 +12,7 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 現在は日常利用での検証（dogfooding）と、使い勝手の改善を進める段階です。
 [Roadmap v2 #81](https://github.com/reitojike/think-canvas/issues/81)で、mobile操作と記録の改善を追跡しています。
 
-| 実装済みの仕様 | 完了 Issue | 公開仕様 |
+| 実装済みの仕様 | 対象 Issue | 公開仕様 |
 | --- | --- | --- |
 | Spec 001: Canvas Foundation | [#2](https://github.com/reitojike/think-canvas/issues/2) | [spec](specs/001-canvas-foundation/spec.md) |
 | Spec 002: Spatial Organization | [#3](https://github.com/reitojike/think-canvas/issues/3) | [spec](specs/002-spatial-organization/spec.md) |
@@ -24,6 +24,9 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 | Spec 008: Drag Edge Auto-Pan | [#78](https://github.com/reitojike/think-canvas/issues/78) | [spec](specs/008-drag-edge-auto-pan/spec.md) |
 | Spec 009: Offscreen Direction Indicators | [#76](https://github.com/reitojike/think-canvas/issues/76) | [spec](specs/009-offscreen-direction-indicators/spec.md) |
 | Spec 010: Viewport History | [#77](https://github.com/reitojike/think-canvas/issues/77) | [spec](specs/010-viewport-history/spec.md) |
+| Spec 011: Android Share Target | [#79](https://github.com/reitojike/think-canvas/issues/79) | [spec](specs/011-share-text/spec.md) |
+| Spec 012: Blank Tap Arbitration | [#67](https://github.com/reitojike/think-canvas/issues/67) | [spec](specs/012-blank-tap-arbitration/spec.md) |
+| Spec 013: Image Element | [#80](https://github.com/reitojike/think-canvas/issues/80)（代表実機確認待ち） | [spec](specs/013-image-element/spec.md) |
 
 ## 利用できる主な機能
 
@@ -41,10 +44,12 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 - 初回の空ボードでの操作案内と、一覧の「使い方」からの再表示。
 - ボード全体または選択範囲の画像プレビュー、端末への画像保存、コピー、Android 共有メニューへの受け渡し。
 - ボードと要素のローカル専用保存。内容と位置関係を保って再起動後に復元します。
+- Android共有メニューからテキスト・URLを取り込み、追加先を確認してボードへ配置できます。
+- 写真・画像ファイルpickerから静止JPEG・PNG・WebPを追加できます。画像も選択・移動・縦横比resize・削除・Undo/Redo・囲み・矢印・複製・出力へ参加し、元ファイルに依存せず端末内に保存します。任意の代替テキストは画像メニューから編集でき、空欄は「画像」と読み上げます。検証範囲は[Spec013の検証手順](specs/013-image-element/quickstart.md)を参照してください。
 
 現在の対象外は、クラウド同期・端末間同期、リアルタイム共同編集、AI による自動整理、
-キャンバスへの画像要素の追加、手書き認識・図形の自動補正です。自動整列・グリッド吸着・
-自動分類は行いません。画像の書き出しは利用できますが、画像を要素として取り込む機能はありません。
+画像Share Target受信、動画、画像の画素編集、OCR、手書き認識・図形の自動補正です。
+自動整列・グリッド吸着・自動分類は行いません。
 
 ## APK 配布と実機確認
 

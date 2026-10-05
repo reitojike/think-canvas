@@ -22,6 +22,12 @@ base be73549はPR98まで含み、main CI37244462566成功。Spec010/011はmerge
 **Rationale**: [platform ExifInterface](https://developer.android.com/reference/android/media/ExifInterface)はAndroidX版を推奨。[公式release](https://developer.android.com/jetpack/androidx/releases/exifinterface)で最新stable1.4.2を確認。BitmapFactory＋同じorientation関数なら表示と既存software Canvas出力が一致する。
 **Alternative**: [ImageDecoder](https://developer.android.com/reference/android/graphics/ImageDecoder)のtarget/allocatorはAPI28以上。API26用に別decode/向き実装を増やすより現行baselineを一つのdecoderで扱う。外部loaderの追加は不要。
 
+## PNG受理前の検証
+
+**Decision**: PNGは実sample decodeの前に固定bufferでCRCとzlib streamの完了、scanline量/filterを確認する。全解像度rasterは確保しない。
+**Rationale**: native回帰で、壊れた圧縮payloadでもBitmapFactoryが部分bitmapを返すことを観測した。[PNG標準のIDAT](https://www.w3.org/TR/png-3/#11IDAT)に従い、任意境界の分割と空chunkを連結して扱い、zlib終了後のunused bytesはCRC検証を続けながら無視する。Adam7の空passも数えない。有効な素材の誤拒否をunit/native双方で確認する。
+**Alternative**: 全解像度decodeによる検証は100MP sourceの資源上限と両立しない。表示decoderを別実装へ置換せず、受理時だけ有限stream検証を補う。
+
 ## layer/geometry
 
 **Decision**: imageを既存marker等の下に描画。hitは既存要素優先、imageを後ろにする。bounds中心包含、四角の矢印接続、aspect resize、gap中心移動。

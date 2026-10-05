@@ -35,3 +35,12 @@
 ## delivery
 
 全FR/ACをconverge、公開境界とdiffを確認しPRへ。現行headのCI→GitHub top-level canonical review→最新base/threads0でmerge-readyを判定する。mergeはユーザー許可済み。Issue closeは最新16ACを個別に確認し実機証跡を含む達成条件だけをチェックする。
+
+## ローカル検証記録（2026-10-05）
+
+- 基本検証: `lintDebug` はerror 0、unit 189件はfailure/error/skip 0、debug APKとandroidTest APKのbuild成功。Room schema4は生成版と追跡版が一致。公開情報境界と`git diff --check`も成功。
+- 標準Windows GMD（Pixel 7 / API37）の全件run `20261005T034027Z-95c6f78fea84417c81b2bce9529968a8` はsource census227件と一致し、226成功・1失敗・error/skip 0。移動後に未選択の画像をresizeしようとしていたテストの前提を補正した。このrunは最終説明callback補正より前なので、最終候補の全件成功証跡には使わない。
+- 移動後の明示tap選択、resize、通常dragのpanを補正後にfocused検証。run `20261005T041046Z-41aaf02f08524ba182fb78de10e053d6` は対象1件成功。
+- 説明の取消、IME hide-only Back、変更済み破棄確認、確認中の古い入力/完了/取消拒否、最新Draft確定、空欄、Undo、再生成をfocused検証。run `20261005T041507Z-6a2cfe7b8cd047899c9817f0a8b39356` は対象1件成功。
+- 以上のGMD結果はいずれもowned XMLのfreshness/対象一致と実行前後のsource不変を確認した。PNGの細分/空IDAT/末尾padding、破損拒否、未確定空白tapと画像editorの競合は全件run内で成功。
+- 現行PR headのrequired CIではPixel 9 / API37の全227件を改めて照合する。CI・canonical review・base・thread・mergeの最終証跡はPR/Issueへ記録する。代表実機は未確認で、T033とIssue80/81の該当条件を未完了に保つ。

@@ -6,6 +6,7 @@ import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.InputDevice
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
@@ -136,6 +137,9 @@ class ImageCanvasInteractionTest {
         saved()
         assertNotEquals(original.x, rows().single().x)
         val moved = rows().single()
+        // Long-press moving an unselected element does not implicitly select it.
+        val movedCenter = compose.onNodeWithContentDescription("テスト画像").fetchSemanticsNode().boundsInWindow.center
+        drag(movedCenter, movedCenter, 30)
         val handle = compose.onNodeWithContentDescription("画像のサイズ変更").fetchSemanticsNode().boundsInWindow.center
         drag(handle, handle + Offset(70f, 35f), 30)
         saved()
@@ -199,8 +203,26 @@ class ImageCanvasInteractionTest {
         assertEquals(original.altText, rows().single().altText)
         assertFalse(board.canUndo)
         action("代替テキストを編集")
+        val oldInput = checkNotNull(compose.onNode(hasSetTextAction()).fetchSemanticsNode().config[SemanticsActions.SetText].action)
+        val oldDone = checkNotNull(compose.onNodeWithText("完了").fetchSemanticsNode().config[SemanticsActions.OnClick].action)
+        val oldCancel = checkNotNull(compose.onNodeWithText("キャンセル").fetchSemanticsNode().config[SemanticsActions.OnClick].action)
         compose.onNode(hasSetTextAction()).performTextReplacement("破棄する説明")
-        Espresso.onView(isRoot()).inRoot(isDialog()).perform(ViewActions.closeSoftKeyboard())
+        compose.runOnIdle {
+            val editor = sessions.textEditorFor(1, board.snapshot())
+            assertTrue(editor.imageDescriptionDraft.value!!.changed)
+            assertEquals("破棄する説明", editor.imageDescriptionDraft.value!!.text)
+        }
+        // Observe the focused dialog's IME before testing hide-only Back. An initial
+        // zero inset can precede a pending show and is not proof that hiding settled.
+        compose.waitUntil(5_000) {
+            var visible = false
+            Espresso.onView(isRoot()).inRoot(isDialog()).check { view, failure ->
+                if (failure != null) throw failure
+                visible = checkNotNull(view.rootWindowInsets).isVisible(WindowInsets.Type.ime())
+            }
+            visible
+        }
+        Espresso.onView(isRoot()).inRoot(isDialog()).perform(ViewActions.pressBack())
         compose.waitUntil(5_000) {
             var hidden = false
             Espresso.onView(isRoot()).inRoot(isDialog()).check { view, failure ->
@@ -211,8 +233,19 @@ class ImageCanvasInteractionTest {
             }
             hidden
         }
+        compose.runOnIdle {
+            assertEquals("破棄する説明", sessions.textEditorFor(1, board.snapshot()).imageDescriptionDraft.value?.text)
+        }
+        assertTrue(compose.onAllNodesWithText("編集内容を破棄しますか？").fetchSemanticsNodes().isEmpty())
         Espresso.onView(isRoot()).inRoot(isDialog()).perform(ViewActions.pressBack())
         compose.waitUntil(5_000) { compose.onAllNodesWithText("編集内容を破棄しますか？").fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle {
+            oldInput(AnnotatedString("確認中の変更")); oldDone(); oldCancel()
+            assertEquals("破棄する説明", sessions.textEditorFor(1, board.snapshot()).imageDescriptionDraft.value?.text)
+            assertEquals(original.altText, board.images.single().altText)
+            assertFalse(board.canUndo)
+        }
+        assertTrue(compose.onAllNodesWithText("編集内容を破棄しますか？").fetchSemanticsNodes().isNotEmpty())
         compose.onNodeWithText("破棄する").performClick()
         assertEquals(original.altText, rows().single().altText)
         assertFalse(board.canUndo)
@@ -225,6 +258,56 @@ class ImageCanvasInteractionTest {
         compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("画像").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("戻す").performClick(); saved()
         assertEquals(original.altText, rows().single().altText)
+        action("代替テキストを編集")
+        val earlierDone = checkNotNull(compose.onNodeWithText("完了").fetchSemanticsNode().config[SemanticsActions.OnClick].action)
+        compose.onNode(hasSetTextAction()).performTextReplacement("最新の説明")
+        compose.runOnIdle { earlierDone() }; saved()
+        assertEquals("最新の説明", rows().single().altText)
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("代替テキストを編集").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithContentDescription("戻す").performClick(); saved()
+        assertEquals(original.altText, rows().single().altText)
+    }
+
+    @Test fun pendingBlankSingleCannotStartTextAfterImageDescriptionAction() = withBoard {
+        val describe = actions().first { it.label == "代替テキストを編集" }
+        val canvas = compose.onNodeWithContentDescription("キャンバス").fetchSemanticsNode()
+        val configuration = canvas.layoutInfo.viewConfiguration
+        val location = canvas.boundsInWindow.let { Offset(it.left + it.width * .1f, it.top + it.height * .23f) }
+        val editor = sessions.textEditorFor(1, board.snapshot())
+        val before = board.snapshot()
+        val clock = compose.mainClock
+        val autoAdvance = clock.autoAdvance
+        val started = clock.currentTime
+        try {
+            clock.autoAdvance = false
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val origin = IntArray(2)
+            scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
+            val down = SystemClock.uptimeMillis()
+            for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action,
+                    location.x + origin[0], location.y + origin[1], 0)
+                event.source = InputDevice.SOURCE_TOUCHSCREEN
+                try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
+                finally { event.recycle() }
+            }
+            repeat(3) { clock.advanceTimeByFrame() }
+            clock.advanceTimeBy(configuration.doubleTapTimeoutMillis - (clock.currentTime - started) - 1,
+                ignoreFrameDuration = true)
+            scenario.onActivity {
+                assertNull(editor.draft.value)
+                assertTrue(describe.action())
+            }
+            clock.advanceTimeBy(1, ignoreFrameDuration = true)
+            scenario.onActivity { assertNull(editor.draft.value); assertNotNull(editor.imageDescriptionDraft.value) }
+            clock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+        } finally { clock.autoAdvance = autoAdvance }
+        compose.waitForIdle()
+        assertNull(editor.draft.value)
+        assertEquals(before, board.snapshot())
+        assertFalse(board.canUndo)
+        compose.onNodeWithText("キャンセル").performClick()
+        assertEquals(before, board.snapshot())
     }
 
     @Test fun staleImageActionsAreRejectedWhileDescriptionEditorOwnsTheCanvas() = withBoard {

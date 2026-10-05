@@ -469,6 +469,8 @@ fun CanvasScreen(
         pending.generation == gestureGeneration &&
         lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
         editorSession.draft.value == null && editorSession.regionNameDraft.value == pending.regionDraft &&
+        editorSession.imageDescriptionDraft.value == null && !imagePickerOpen &&
+        editorSession.pendingImageAcknowledgement.value == null &&
         editorSession.pendingDraftAcknowledgement.value == null && !saveBlocked() &&
         tool == SpatialTool.NONE && inkTool == null && discardTarget == null &&
         menuTarget == null && attachmentEditor == null && moveOwner == null &&
@@ -493,7 +495,8 @@ fun CanvasScreen(
     LaunchedEffect(board, editorSession, blankTapBoundary) {
         snapshotFlow {
             // Observe authority changes independently of the confirmation job's final check.
-            listOf(draft, regionDraft, pendingDraftAcknowledgement, currentSaveState, tool, inkTool,
+            listOf(draft, regionDraft, imageDraft, imagePickerOpen, pendingImageAcknowledgement,
+                pendingDraftAcknowledgement, currentSaveState, tool, inkTool,
                 discardTarget, menuTarget, attachmentEditor, moveOwner, gestureGeneration,
                 board.snapshot(), selectedId, selectedIds, searchOpen, latestExternalBlock.value())
         }.collect {
@@ -541,6 +544,7 @@ fun CanvasScreen(
         val image = board.images.firstOrNull { it.id == id } ?: return false
         if (saveBlocked() || draft != null || regionDraft != null || imageDraft != null ||
             attachmentEditor != null || imagePickerOpen || pendingDraftAcknowledgement != null) return false
+        cancelBlankTap()
         menuTarget = null
         imageDraft = ImageDescriptionDraft(image.id, image.altText)
         return true
@@ -1751,26 +1755,31 @@ fun CanvasScreen(
         val displayBoundaryShapes = displaySnapshot.shapes.filter { displayProjection.visible(it.id) }
         fun imageActionAllowed(id: String): Boolean = !latestExternalBlock.value() &&
             baseNavigationAllowed() && !searchOpen && !manualGestureActive && !viewportAnimating && board.images.any { it.id == id }
+        fun admitImageAction(id: String): Boolean {
+            if (!imageActionAllowed(id)) return false
+            cancelBlankTap()
+            return true
+        }
         ImageElements(displaySnapshot, viewport, displayProjection, selectedIds, canvasSize,
             imageResources, enabled = indicatorsAllowed() && !searchOpen,
-            onSelect = { id -> if (!imageActionAllowed(id)) false else {
+            onSelect = { id -> if (!admitImageAction(id)) false else {
                 selectedIds = setOf(id); selectedId = null; true
             } },
-            onAdd = { id -> if (!imageActionAllowed(id) || id in selectedIds) false else {
+            onAdd = { id -> if (!admitImageAction(id) || id in selectedIds) false else {
                 selectedIds = selectedIds + id; selectedId = null; true
             } },
-            onRemove = { id -> if (imageActionAllowed(id)) removeSelection(id) else false },
-            onMove = { id, dx, dy -> if (!imageActionAllowed(id)) false else
+            onRemove = { id -> if (admitImageAction(id)) removeSelection(id) else false },
+            onMove = { id, dx, dy -> if (!admitImageAction(id)) false else
                 board.moveSelection(if (id in selectedIds) selectedIds else setOf(id), dx, dy)
                     .also { if (it) saveSnapshot() } },
-            onResize = { id, factor -> if (!imageActionAllowed(id)) false else {
+            onResize = { id, factor -> if (!admitImageAction(id)) false else {
                 val image = board.images.first { it.id == id }
                 board.resizeImage(id, image.width * factor, image.height * factor).also { if (it) saveSnapshot() }
             } },
-            onDelete = { id -> if (!imageActionAllowed(id)) false else board.delete(setOf(id)).also {
+            onDelete = { id -> if (!admitImageAction(id)) false else board.delete(setOf(id)).also {
                 if (it) { selectedIds = emptySet(); selectedId = null; saveSnapshot() }
             } },
-            onDescribe = { id -> if (imageActionAllowed(id)) openImageDescription(id) else false })
+            onDescribe = { id -> if (admitImageAction(id)) openImageDescription(id) else false })
         InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.MARKER,
             viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
             onSelect = { id -> if (!saveBlocked()) { selectedIds = setOf(id); selectedId = null } },
@@ -2481,9 +2490,10 @@ fun CanvasScreen(
                     Text("キャンセル") } })
         }
         imageDraft?.let { editing ->
-            val sameEditor = { editorSession.imageDescriptionDraft.value?.sessionId == editing.sessionId }
-            ImageDescriptionDialog(editing, editable = !saveBlocked() && pendingImageAcknowledgement == null,
-                cancellable = !exitBlocked(), completable = !saving,
+            val sameEditor = { editorSession.imageDescriptionDraft.value?.sessionId == editing.sessionId &&
+                discardTarget == null }
+            ImageDescriptionDialog(editing, editable = !saveBlocked() && pendingImageAcknowledgement == null && discardTarget == null,
+                cancellable = !exitBlocked() && discardTarget == null, completable = !saving && discardTarget == null,
                 failed = saveFailed,
                 onChange = { if (sameEditor() && !saveBlocked() && pendingImageAcknowledgement == null)
                     imageDraft = imageDraft?.copy(text = it) },
@@ -2491,9 +2501,10 @@ fun CanvasScreen(
                     if (sameEditor() && !latestExternalBlock.value()) {
                         if (pendingImageAcknowledgement != null && saveFailed) onRetrySave()
                         else if (!saveBlocked() && pendingImageAcknowledgement == null) {
-                            val current = board.images.firstOrNull { it.id == editing.id }
-                            if (current != null && current.altText == editing.original) {
-                                if (board.describeImage(editing.id, editing.text))
+                            val currentDraft = editorSession.imageDescriptionDraft.value
+                            val current = board.images.firstOrNull { it.id == currentDraft?.id }
+                            if (currentDraft != null && current != null && current.altText == currentDraft.original) {
+                                if (board.describeImage(currentDraft.id, currentDraft.text))
                                     pendingImageAcknowledgement = onRequestSave(board.snapshot())
                                 else closeImageDescription()
                             }
@@ -2501,8 +2512,11 @@ fun CanvasScreen(
                     }
                 },
                 onCancel = { if (sameEditor() && !exitBlocked()) closeImageDescription() },
-                onDismiss = { if (sameEditor()) requestEditorExit("image:${editing.sessionId}",
-                    editing.changed, ::closeImageDescription) })
+                onDismiss = {
+                    if (sameEditor()) editorSession.imageDescriptionDraft.value?.let { current ->
+                        requestEditorExit("image:${current.sessionId}", current.changed, ::closeImageDescription)
+                    }
+                })
         }
         val currentEditorTarget = draft?.let { "text:${it.sessionId}" }
             ?: regionDraft?.let { "region:${it.sessionId}" }
