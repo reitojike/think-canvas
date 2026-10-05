@@ -85,3 +85,7 @@ read-only保存/描画調査は異なるsurfaceなので下位モデルで並列
 ## Phase 10: Convergence
 
 - [x] T040 `app/src/main/java/com/thinkcanvas/image/ImageImportViewModel.kt` と `app/src/main/java/com/thinkcanvas/MainActivity.kt` で未適用のaccepted要求の追加先が消失した場合にcheckpointを終了し、選び直せる失敗状態へ戻す。`app/src/androidTest/java/com/thinkcanvas/image/ImageImportInteractionTest.kt` でfresh owner復元後の追加先削除・再試行・素材回収・新しい取り込みを実Main/Roomで検証する。FR-003/010/019、US1/AC5と追加先削除のEdge Caseを補う。（partial、HIGH）
+
+## Phase 11: Convergence
+
+- [x] T041 `app/src/androidTest/java/com/thinkcanvas/canvas/ViewportHistoryInteractionTest.kt` のeditor終了後の次panについて、native IME表示/非表示、Draft終了、world cameraと描画座標の一致を準備条件として観測する。panの90/25pxと2px許容差、内容/保存不変を維持し、camera変化自体も照合する。FR-016/017、SC-007と既存Spec010の独立gestureを補う。（partial）

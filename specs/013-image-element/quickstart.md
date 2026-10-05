@@ -47,3 +47,7 @@
 - T040のfamily checkpointはVM・Mainの再試行/削除・Store checkpoint/GC・BoardSession discard・nativeに限定した。未適用でackのないlive要求だけを終了し、消失した追加先を知らせて選び直せる状態へ戻す。適用済み/不確かな保存は既存ownerを維持する。
 - 補正後のfocused GMD run `20261005T051331Z-12a59c9493574a22862ba167d01da0ee` は対象1件成功、owned fresh XMLとsource不変を確認。trusted Android Bundleを残して全ViewModel ownerを失わせ、実Mainで復元→追加先の確認付き削除→再試行→checkpoint終了/素材回収→別boardの新しいfile取り込み→古いresult拒否→一Undoを検証した。
 - 補正後のsource censusは228件。最終候補でrequired CIとcanonical reviewを改めて確認し、base・thread・mergeと合わせてPR/Issueへ記録する。代表実機は未確認で、T033とIssue80/81の該当条件を未完了に保つ。
+- head `f168b95` のCI `37267358066` は基本job成功、native228件中227成功・1失敗・error/skip/欠落/extra/重複0。画像関連34件は成功した。唯一の既存視点履歴回帰はeditor終了後の次panでX期待1005/実際1047となった。旧headの成功を流用せず、このheadではcanonical/mergeへ進まない。
+- 同回帰を補正前の標準focused run `20261005T054817Z-18e8d680020b4e10bfc3e04299f20083` で診断し1件成功。旧CIでの具体的なinsets/入力/frame timing原因は未確定を維持する。有限checkpointはtestのIME/座標oracle、CanvasScreenのeditor入力/size/pan、ViewportHistoryのcamera、既存native入力/GMDに限定し、authorityを変えないtest fixtureのみの`BOUNDED_CORRECTION`とした。
+- T041は実native IME表示・非表示と同Draft保持を観測してからeditorを終了し、tool stale actionをその時点のcameraへ照合する。次panの準備でworld camera投影と描画の一致を確認し、描画90/25px・2px許容差を維持したままscale不変とworld camera deltaを追加した。製品コード・schema・CI/launcher・test censusは変更しない。
+- 補強後の標準focused run `20261005T055347Z-2194ae4aab464ec381129e4a52b4a330` は1件成功、owned/sourceUnchanged true、介入0。XML SHA256 `03DEE090D4D0B7B77BAC529276049311E806C3FF466CC5A164C00069DD125580`。下位モデルの独立read-only確認でもoracleの弱体化や不成立前提はなかった。更新headで全228件のCIとcanonicalを確認する。
