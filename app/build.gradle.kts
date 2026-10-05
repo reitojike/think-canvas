@@ -41,7 +41,32 @@ android {
         }
     }
 
+    val prDebugKeystoreFile =
+        providers.environmentVariable("THINKCANVAS_PR_DEBUG_KEYSTORE_FILE").orNull
+    val prDebugStorePassword =
+        providers.environmentVariable("THINKCANVAS_PR_DEBUG_STORE_PASSWORD").orNull
+    val prDebugKeyAlias =
+        providers.environmentVariable("THINKCANVAS_PR_DEBUG_KEY_ALIAS").orNull
+    val prDebugKeyPassword =
+        providers.environmentVariable("THINKCANVAS_PR_DEBUG_KEY_PASSWORD").orNull
+    val prDebugSigningReady =
+        listOf(
+            prDebugKeystoreFile,
+            prDebugStorePassword,
+            prDebugKeyAlias,
+            prDebugKeyPassword,
+        ).all { !it.isNullOrBlank() }
+
     signingConfigs {
+        if (prDebugSigningReady) {
+            create("prDebug") {
+                storeFile = file(requireNotNull(prDebugKeystoreFile))
+                storePassword = requireNotNull(prDebugStorePassword)
+                keyAlias = requireNotNull(prDebugKeyAlias)
+                keyPassword = requireNotNull(prDebugKeyPassword)
+                storeType = "PKCS12"
+            }
+        }
         create("internal") {
             providers.environmentVariable("THINKCANVAS_INTERNAL_KEYSTORE_FILE").orNull?.let {
                 storeFile = file(it)
@@ -56,6 +81,9 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
+            if (prDebugSigningReady) {
+                signingConfig = signingConfigs.getByName("prDebug")
+            }
         }
         release {
             isMinifyEnabled = false
