@@ -6,6 +6,51 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BoardStateTest {
+    private fun image() = ImageElement(assetId = "8c0a9b01-94fd-404c-944d-62c1249b4d01",
+        x = 10f, y = 20f, width = 200f, height = 100f, intrinsicWidth = 400, intrinsicHeight = 200)
+
+    @Test fun imageDeleteRestoresAttachedArrowAndDescriptionInOneUndo() {
+        val image = image().copy(altText = "図")
+        val board = BoardState(initialImages = listOf(image))
+        val arrow = board.addArrow(ArrowEnd.Attached(image.id, 1f, .5f), ArrowEnd.Free(400f, 70f))!!
+        assertTrue(board.delete(setOf(image.id)))
+        assertTrue(board.images.isEmpty())
+        assertTrue(board.arrows.isEmpty())
+        assertTrue(image.assetId in board.retainedImageAssetIds)
+        assertTrue(board.undo())
+        assertEquals(listOf(image), board.images)
+        assertEquals(listOf(arrow), board.arrows)
+        assertTrue(board.redo())
+        assertTrue(board.images.isEmpty())
+    }
+
+    @Test fun deletedAssetBecomesUnreferencedOnlyAfterAllRetainingEditsExpire() {
+        val image = image()
+        val board = BoardState(initialImages = listOf(image))
+        board.delete(setOf(image.id))
+        repeat(79) { board.create("$it", TextKind.BODY, TextColor.INK, it.toFloat(), 0f) }
+        assertTrue(image.assetId in board.retainedImageAssetIds)
+        board.create("最後", TextKind.BODY, TextColor.INK, 0f, 0f)
+        assertFalse(image.assetId in board.retainedImageAssetIds)
+    }
+
+    @Test fun imageMoveResizeAndEmptyDescriptionCanEachBeUndone() {
+        val image = image()
+        val board = BoardState(initialImages = listOf(image))
+        assertTrue(board.moveSelection(setOf(image.id), 30f, -10f))
+        assertEquals(40f, board.images.single().x, 0f)
+        assertTrue(board.resizeImage(image.id, 300f, 150f))
+        assertTrue(board.describeImage(image.id, "図の説明"))
+        assertTrue(board.describeImage(image.id, ""))
+        assertTrue(board.undo())
+        assertEquals("図の説明", board.images.single().altText)
+        assertTrue(board.undo())
+        assertTrue(board.undo())
+        assertEquals(200f, board.images.single().width, 0f)
+        assertTrue(board.undo())
+        assertEquals(image, board.images.single())
+    }
+
     @Test
     fun createEditMoveUndoRedoKeepsExpectedStates() {
         val board = BoardState()

@@ -80,6 +80,8 @@ fun BoardSnapshot.semanticProjection(
                 apparentDp(max(bounds.right - bounds.left, bounds.bottom - bounds.top)) < 16f
             } == true) }
         .forEach { hidden += it.id }
+    images.filter { it.id !in keep && (covered(it.id) || tier == SemanticTier.FAR &&
+        apparentDp(max(it.width, it.height)) < 16f) }.forEach { hidden += it.id }
     arrows.filter { arrow ->
         if (arrow.id in keep) return@filter false
         val attachedHidden = listOf(arrow.from, arrow.to).any {

@@ -84,6 +84,7 @@ fun BoardListScreen(
     onHelp: () -> Unit,
     externalInteractionBlocked: () -> Boolean = { false },
     onImportReadiness: ((Boolean, () -> Boolean) -> Unit)? = null,
+    imageResources: com.thinkcanvas.image.ImageResources? = null,
 ) {
     var selectedId by remember { mutableStateOf<Long?>(null) }
     var renaming by remember { mutableStateOf(false) }
@@ -136,7 +137,7 @@ fun BoardListScreen(
                             }
                         }) {
                             BoardThumbnail(board.snapshot, Modifier.fillMaxWidth().height(132.dp)
-                                .border(1.dp, Color(0xFFEEECE8), RoundedCornerShape(14.dp)))
+                                .border(1.dp, Color(0xFFEEECE8), RoundedCornerShape(14.dp)), imageResources)
                             Spacer(Modifier.height(8.dp))
                             Text(name, color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis,

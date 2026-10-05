@@ -41,6 +41,7 @@ fun BoardSnapshot.boundsOf(id: String,
                            resolvedRenderedBounds: Map<String, WorldBounds> = emptyMap()): WorldBounds? =
     resolvedRenderedBounds[id]
         ?: shapes.firstOrNull { it.id == id }?.bounds()
+        ?: images.firstOrNull { it.id == id }?.bounds()
         ?: ink.firstOrNull { it.id == id }?.renderedBounds()
 
 /** Model-only operations use canonical logical geometry; rendered bounds stay display-only. */
@@ -191,7 +192,7 @@ fun BoardSnapshot.distanceToArrow(point: WorldPoint, arrow: ArrowElement, offset
 fun BoardSnapshot.lassoSelection(vertices: List<WorldPoint>,
                                  renderedBounds: Map<String, WorldBounds> = emptyMap(),
                                  arrowEndpointOffset: Float = 6f): Set<String> {
-    val selected = (texts.map { it.id } + shapes.map { it.id } + ink.map { it.id })
+    val selected = (texts.map { it.id } + shapes.map { it.id } + ink.map { it.id } + images.map { it.id })
         .filter { id -> (renderedBounds[id]?.center ?: centerOf(id))
             ?.let { pointInPolygon(it, vertices) } == true }.toMutableSet()
     arrows.forEach { arrow ->
@@ -213,6 +214,7 @@ fun BoardSnapshot.translatedSelection(ids: Set<String>, dx: Float, dy: Float): B
                 if (region.bounds().contains(it.bounds().center)) moved += it.id
             }
             ink.forEach { if (region.bounds().contains(it.bounds().center)) moved += it.id }
+            images.forEach { if (region.bounds().contains(it.bounds().center)) moved += it.id }
         }
         expanded = moved.size != previousSize
     } while (expanded)
@@ -223,6 +225,7 @@ fun BoardSnapshot.translatedSelection(ids: Set<String>, dx: Float, dy: Float): B
         arrows = arrows.map { arrow -> if (arrow.id in ids)
             arrow.copy(from = arrow.from.shift(), to = arrow.to.shift()) else arrow },
         ink = ink.map { if (it.id in moved) it.translated(dx, dy) else it },
+        images = images.map { if (it.id in moved) it.copy(x = it.x + dx, y = it.y + dy) else it },
     )
 }
 
@@ -280,5 +283,12 @@ fun BoardSnapshot.withGap(origin: WorldPoint, horizontal: Boolean, amount: Float
             if (horizontal) element.translated(delta, 0f) else element.translated(0f, delta)
         }
     }
-    return BoardSnapshot(updatedTexts, updatedShapes, arrows, updatedInk)
+    val updatedImages = images.map { image ->
+        if (!inScope(image.id)) image else {
+            val center = image.bounds().center
+            val delta = shift(if (horizontal) center.x else center.y)
+            if (horizontal) image.copy(x = image.x + delta) else image.copy(y = image.y + delta)
+        }
+    }
+    return BoardSnapshot(updatedTexts, updatedShapes, arrows, updatedInk, updatedImages)
 }

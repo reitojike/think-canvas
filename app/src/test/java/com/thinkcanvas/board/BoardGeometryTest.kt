@@ -10,6 +10,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BoardGeometryTest {
+    @Test fun imageOnlyBoardFitsItsActualBounds() {
+        val image = com.thinkcanvas.canvas.ImageElement(
+            assetId = java.util.UUID.randomUUID().toString(), x = -800f, y = 1200f,
+            width = 1600f, height = 800f, intrinsicWidth = 80, intrinsicHeight = 40)
+        val board = BoardSnapshot(images = listOf(image))
+        val bounds = checkNotNull(board.contentBounds())
+        assertEquals(-800f, bounds.left, 0f)
+        assertEquals(2000f, bounds.bottom, 0f)
+        val viewport = board.fittedViewport(1000f, 800f)
+        val (left, top) = viewport.worldToScreen(image.x, image.y)
+        val (right, bottom) = viewport.worldToScreen(image.x + image.width, image.y + image.height)
+        assertTrue(left >= 19.99f && right <= 980.01f)
+        assertTrue(top >= 89.99f && bottom <= 710.01f)
+    }
+
     @Test fun veryLargeBoardStartsAtSupportedMinimumZoom() {
         val board = BoardSnapshot(shapes = listOf(ShapeElement(kind = ShapeKind.RECTANGLE,
             x = 0f, y = 0f, width = 10_000f, height = 100f)))

@@ -7,6 +7,8 @@ import com.thinkcanvas.canvas.BoardState
 import com.thinkcanvas.canvas.TextEditorSession
 import com.thinkcanvas.canvas.ViewportHistory
 import com.thinkcanvas.canvas.TextElement
+import com.thinkcanvas.canvas.ImageElement
+import java.util.UUID
 import com.thinkcanvas.data.ShareImportReceiptRow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -40,7 +42,7 @@ class BoardSessionViewModel(
 ) : ViewModel() {
     private val saveScope = testSaveScope ?: viewModelScope
     private class Session(initial: BoardSnapshot) {
-        val board = BoardState(initial.texts, initial.shapes, initial.arrows, initial.ink)
+        val board = BoardState(initial.texts, initial.shapes, initial.arrows, initial.ink, initial.images)
         val saveState = MutableStateFlow<BoardSaveState>(BoardSaveState.Idle)
         val textEditor = TextEditorSession()
         val viewportHistory = ViewportHistory()
@@ -64,6 +66,18 @@ class BoardSessionViewModel(
     )
 
     private val sessions = mutableMapOf<Long, Session>()
+    private val imageRootOwner = UUID.randomUUID().toString()
+    private var imageRootsOperation: ((String, Set<String>) -> Unit)? = null
+
+    fun setImageRootsOperation(operation: (String, Set<String>) -> Unit) {
+        imageRootsOperation = operation
+        publishImageRoots()
+    }
+
+    private fun publishImageRoots() {
+        imageRootsOperation?.invoke(imageRootOwner,
+            sessions.values.flatMap { it.board.retainedImageAssetIds }.toSet())
+    }
     private var saveOperation: ((Long, BoardSnapshot) -> kotlinx.coroutines.Deferred<Unit>)? = null
     private var shareSaveOperation: ((Long, BoardSnapshot, ShareImportReceiptRow) -> Deferred<Unit>)? = null
 
@@ -115,9 +129,26 @@ class BoardSessionViewModel(
         }
     }
 
+    fun requestImageImport(boardId: Long, initial: BoardSnapshot, receipt: ShareImportReceiptRow,
+                           element: ImageElement, restoreUncertain: Boolean = false): BoardSaveAcknowledgement? {
+        require(receipt.boardId == boardId && receipt.elementId == element.id)
+        val session = sessionFor(boardId, initial)
+        session.imports[receipt.requestId]?.let { return it }
+        if (session.saveState.value != BoardSaveState.Idle) return null
+        val existing = session.board.images.firstOrNull { it.id == element.id }
+        if (existing != null && existing != element) return null
+        if (existing == null && !session.board.addImage(element)) return null
+        val snapshot = session.board.snapshot()
+        if (restoreUncertain) session.saveState.value = BoardSaveState.Failed(snapshot)
+        val acknowledgement = checkNotNull(enqueueSave(boardId, snapshot, receipt))
+        session.imports[receipt.requestId] = acknowledgement
+        return acknowledgement
+    }
+
     private fun enqueueSave(boardId: Long, snapshot: BoardSnapshot,
                             receipt: ShareImportReceiptRow? = null): BoardSaveAcknowledgement? {
         val session = sessions[boardId] ?: return null
+        publishImageRoots()
         val requestId = ++session.nextRequestId
         val completion = CompletableDeferred<Unit>()
         val acknowledgement = BoardSaveAcknowledgement(boardId, requestId, completion)
@@ -153,15 +184,19 @@ class BoardSessionViewModel(
             if (session.activeShareId != null) session.activeOperation?.cancel()
             session.inFlight?.cancel()
         }
+        publishImageRoots()
     }
 
     override fun onCleared() {
         sessions.values.filter { it.activeShareId != null }.forEach { it.activeOperation?.cancel() }
+        imageRootsOperation?.invoke(imageRootOwner, emptySet())
         super.onCleared()
     }
 
-    private fun sessionFor(boardId: Long, initial: BoardSnapshot): Session =
-        sessions.getOrPut(boardId) { Session(initial) }
+    private fun sessionFor(boardId: Long, initial: BoardSnapshot): Session {
+        sessions[boardId]?.let { return it }
+        return Session(initial).also { sessions[boardId] = it; publishImageRoots() }
+    }
 
     private fun startSave(
         boardId: Long,

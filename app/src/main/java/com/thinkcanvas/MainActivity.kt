@@ -73,6 +73,9 @@ class MainActivity : ComponentActivity() {
     private var navigationTargetIsList = false
     private lateinit var shareImports: ShareImportViewModel
     private lateinit var activeBoardSessions: BoardSessionViewModel
+    private lateinit var imageImports: com.thinkcanvas.image.ImageImportViewModel
+    private var photoImageRequestId: String? = null
+    private var fileImageRequestId: String? = null
 
     @Suppress("DEPRECATION")
     private fun incomingText(intent: Intent): String? = try {
@@ -100,6 +103,8 @@ class MainActivity : ComponentActivity() {
                 activeBoardSessions.cancelShareImport(checkNotNull(request.destinationId), request.requestId)
             val store = CanvasStore.get(applicationContext)
             shareImports.finishTask { record -> store.clearShareCheckpoint(record) }
+            if (::imageImports.isInitialized)
+                imageImports.finishTask(activeBoardSessions) { token -> store.clearImageCheckpoint(token) }
         }
         super.onDestroy()
     }
@@ -107,6 +112,9 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean("navigationTargetIsList", navigationTargetIsList)
         if (::shareImports.isInitialized) outState.putString("shareTaskToken", shareImports.taskToken)
+        if (::imageImports.isInitialized) outState.putString("imageTaskToken", imageImports.taskToken)
+        outState.putString("photoImageRequestId", photoImageRequestId)
+        outState.putString("fileImageRequestId", fileImageRequestId)
         super.onSaveInstanceState(outState)
     }
 
@@ -123,9 +131,15 @@ class MainActivity : ComponentActivity() {
         activeBoardSessions = boardSessions
         boardSessions.setSaveOperation { boardId, snapshot -> store.save(boardId, snapshot) }
         boardSessions.setShareSaveOperation { boardId, snapshot, receipt -> store.saveShare(boardId, snapshot, receipt) }
+        boardSessions.setImageRootsOperation(store::setSessionImageRoots)
         shareImports = ViewModelProvider(this)[ShareImportViewModel::class.java]
         val historyLaunch = intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
         val restoringTask = savedInstanceState != null || historyLaunch
+        imageImports = ViewModelProvider(this)[com.thinkcanvas.image.ImageImportViewModel::class.java]
+        imageImports.initialize(store, savedInstanceState?.getString("imageTaskToken"))
+        photoImageRequestId = savedInstanceState?.getString("photoImageRequestId")
+        fileImageRequestId = savedInstanceState?.getString("fileImageRequestId")
+        val imageResources = com.thinkcanvas.image.ImageResources.get(store)
         val initialShareAttempt = intent.action in setOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE)
         val initialText = if (!restoringTask) incomingText(intent) else null
         shareImports.initialize(File(filesDir, "share-import"), restoringTask,
@@ -183,6 +197,16 @@ class MainActivity : ComponentActivity() {
             ActivityResultContracts.StartActivityForResult()) {
             notice("共有メニューを閉じました")
         }
+        val photoPicker = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            val requestId = photoImageRequestId
+            photoImageRequestId = null
+            imageImports.receive(requestId, com.thinkcanvas.image.ImagePickerSource.PHOTO, uri)
+        }
+        val filePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            val requestId = fileImageRequestId
+            fileImageRequestId = null
+            imageImports.receive(requestId, com.thinkcanvas.image.ImagePickerSource.FILE, uri)
+        }
 
         fun dismissShare() {
             // 公開済み Bitmap は Compose の描画が参照し得るため、解放は GC に任せる。
@@ -196,11 +220,12 @@ class MainActivity : ComponentActivity() {
             shareDialog.value = ShareDialogState(request, title)
             lifecycleScope.launch {
                 try {
-                    val bitmap = withContext(Dispatchers.Default) {
+                    val plan = withContext(Dispatchers.Default) {
                         val bounds = BoardImageRenderer.renderedBounds(snapshot, typography)
-                        val plan = planShare(snapshot, selectedIds, bounds, typography)
-                        BoardImageRenderer.render(plan)
+                        planShare(snapshot, selectedIds, bounds, typography)
                     }
+                    val bitmap = store.withImageAssets(snapshot.images.filter { it.id in plan.includedIds }
+                        .map { it.assetId }.toSet()) { BoardImageRenderer.render(plan, it) }
                     if (shareDialog.value?.requestId == request)
                         shareDialog.value = ShareDialogState(request, title, bitmap)
                     // この render 結果は shareDialog に公開されていない。
@@ -274,6 +299,7 @@ class MainActivity : ComponentActivity() {
             page.value = Page.Board(stored.details.id, stored.details.name,
                 boardSessions.stateFor(stored.details.id, stored.snapshot))
             guideVisible.value = shareImports.state.request == null &&
+                imageImports.state.phase == com.thinkcanvas.image.ImageImportPhase.IDLE &&
                 store.shouldShowGuide(stored.details.id, stored.snapshot)
         }
 
@@ -301,7 +327,7 @@ class MainActivity : ComponentActivity() {
         }
 
         fun admitListOperation(start: () -> Unit) {
-            if (shareImports.state.blocksCanvas || transientPending.value ||
+            if (shareImports.state.blocksCanvas || imageImports.state.blocksCanvas || transientPending.value ||
                 boardListActions.state.value != BoardListActionState.Idle)
                 return
             start()
@@ -361,7 +387,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             val listActionState = boardListActions.state.value
             val importState = shareImports.state
-            fun baseImportReady(): Boolean {
+            val imageState = imageImports.state
+            fun baseImportReady(ignoreImage: Boolean = false): Boolean {
+                if (!ignoreImage && imageImports.state.blocksCanvas) return false
                 if (transientPending.value || guideVisible.value || errorMessage.value != null ||
                     shareDialog.value != null || shareBusy.value ||
                     boardListActions.state.value != BoardListActionState.Idle) return false
@@ -371,11 +399,62 @@ class MainActivity : ComponentActivity() {
                     Page.Loading -> false
                 }
             }
+            LaunchedEffect(imageState.phase, imageState.request?.requestId, imageState.launchNeeded,
+                page.value, canvasReady.value, canvasOwnerId.value, transientPending.value,
+                guideVisible.value, errorMessage.value, shareDialog.value, shareBusy.value, listActionState) {
+                val request = imageImports.state.request ?: return@LaunchedEffect
+                try {
+                    when (imageImports.state.phase) {
+                        com.thinkcanvas.image.ImageImportPhase.PICKER -> {
+                            if (imageImports.consumeLaunch(request.requestId)) {
+                                when (request.source) {
+                                    com.thinkcanvas.image.ImagePickerSource.PHOTO -> {
+                                        photoImageRequestId = request.requestId
+                                        photoPicker.launch(androidx.activity.result.PickVisualMediaRequest(
+                                            ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                    }
+                                    com.thinkcanvas.image.ImagePickerSource.FILE -> {
+                                        fileImageRequestId = request.requestId
+                                        filePicker.launch(arrayOf("image/jpeg", "image/png", "image/webp"))
+                                    }
+                                }
+                            }
+                        }
+                        com.thinkcanvas.image.ImageImportPhase.ACCEPTED -> {
+                            if (page.value == Page.Loading) return@LaunchedEffect
+                            val receipt = store.shareReceipt(request.requestId)
+                            if (receipt != null) {
+                                check(receipt.boardId == request.boardId && receipt.elementId == request.elementId)
+                                imageImports.completeFromReceipt(request.requestId)
+                                return@LaunchedEffect
+                            }
+                            if (shareImports.state.blocksCanvas || !baseImportReady(ignoreImage = true)) return@LaunchedEffect
+                            val candidate = page.value
+                            val stored = store.savedBoard(request.boardId)
+                            if (stored == null) { imageImports.fail(request.requestId); return@LaunchedEffect }
+                            if (page.value !== candidate || !baseImportReady(ignoreImage = true) ||
+                                imageImports.state.phase != com.thinkcanvas.image.ImageImportPhase.ACCEPTED ||
+                                imageImports.state.request?.requestId != request.requestId) return@LaunchedEffect
+                            val shown = candidate as? Page.Board
+                            if (shown?.id != request.boardId) {
+                                if (imageImports.state.manualRetry) openBoard(stored) else imageImports.fail(request.requestId)
+                                return@LaunchedEffect
+                            }
+                            val ack = boardSessions.requestImageImport(shown.id, shown.state.snapshot(),
+                                ShareImportReceiptRow(request.requestId, shown.id, request.elementId),
+                                checkNotNull(request.accepted)) ?: return@LaunchedEffect
+                            imageImports.observeSave(ack, boardSessions.saveStateFor(shown.id, shown.state.snapshot()))
+                        }
+                        else -> Unit
+                    }
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { imageImports.fail(request.requestId) }
+            }
             LaunchedEffect(shareImports.noticeMessage) {
                 shareImports.noticeMessage?.let { notice(it); shareImports.consumeNotice() }
             }
             LaunchedEffect(importState.phase, importState.request?.requestId,
-                importState.request?.destinationId, importState.writing, page.value,
+                importState.request?.destinationId, importState.writing, imageState.phase, imageState.hidden, page.value,
                 canvasReady.value, canvasOwnerId.value, listReady.value, transientPending.value, guideVisible.value,
                 errorMessage.value, shareDialog.value, shareBusy.value, listActionState) {
                 val request = shareImports.state.request ?: return@LaunchedEffect
@@ -504,7 +583,8 @@ class MainActivity : ComponentActivity() {
                         Text(stringResource(R.string.loading_board))
                     }
                     Page.List -> BoardListScreen(cards.value,
-                        externalInteractionBlocked = { shareImports.state.blocksCanvas },
+                        imageResources = imageResources,
+                        externalInteractionBlocked = { shareImports.state.blocksCanvas || imageImports.state.blocksCanvas },
                         onImportReadiness = { ready, guard ->
                             if (page.value == Page.List) { listReady.value = ready; listNeutralGuard = guard }
                         },
@@ -533,14 +613,22 @@ class MainActivity : ComponentActivity() {
                                 showShare(stored.details.name, stored.snapshot, shareTypography)
                             }
                         } },
-                        onHelp = { if (!shareImports.state.blocksCanvas) guideVisible.value = true },
+                        onHelp = { if (!shareImports.state.blocksCanvas && !imageImports.state.blocksCanvas) guideVisible.value = true },
                     )
                     is Page.Board -> key(current.id) {
                         CanvasScreen(current.state,
                             boardName = current.name.ifBlank { "無題のボード" },
                             editorSession = boardSessions.textEditorFor(current.id, current.state.snapshot()),
                             viewportHistory = boardSessions.viewportHistoryFor(current.id, current.state.snapshot()),
-                            externalInteractionBlocked = { shareImports.state.blocksCanvas },
+                            imageResources = imageResources,
+                            externalInteractionBlocked = { shareImports.state.blocksCanvas || imageImports.state.blocksCanvas ||
+                                (page.value as? Page.Board)?.id != current.id },
+                            onAddImage = { source, center, width, height ->
+                                if (imageImports.state.phase == com.thinkcanvas.image.ImageImportPhase.FAILED)
+                                    imageImports.showFailure()
+                                else if (!shareImports.state.blocksCanvas && baseImportReady())
+                                    imageImports.begin(source, current.id, center, width, height)
+                            },
                             onImportReadiness = { ready, guard ->
                                 if ((page.value as? Page.Board)?.id == current.id) {
                                     canvasOwnerId.value = current.id
@@ -552,7 +640,7 @@ class MainActivity : ComponentActivity() {
                             onRequestSave = { snapshot -> boardSessions.requestSave(current.id, snapshot) },
                             onRetrySave = { if (!shareImports.state.blocksCanvas) boardSessions.retrySave(current.id) },
                             onOpenList = {
-                                if (!shareImports.state.blocksCanvas &&
+                                if (!shareImports.state.blocksCanvas && !imageImports.state.blocksCanvas &&
                                     boardSessions.saveStateFor(current.id, current.state.snapshot()).value ==
                                     BoardSaveState.Idle && !transientPending.value &&
                                     listActionState == BoardListActionState.Idle) {
@@ -568,7 +656,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             },
-                            onShareSelection = { ids -> if (!shareImports.state.blocksCanvas) performTransient {
+                            onShareSelection = { ids -> if (!shareImports.state.blocksCanvas && !imageImports.state.blocksCanvas) performTransient {
                                 val stored = store.savedBoard(current.id)
                                     ?: error("ボードが見つかりません")
                                 showShare(stored.details.name, stored.snapshot, shareTypography, ids)
@@ -576,7 +664,19 @@ class MainActivity : ComponentActivity() {
                             )
                     }
                 }
-                if (!guideVisible.value && errorMessage.value == null && shareDialog.value == null) {
+                if (imageState.phase == com.thinkcanvas.image.ImageImportPhase.FAILED && !imageState.hidden) {
+                    AlertDialog(onDismissRequest = { imageImports.hideFailure() }, title = { Text("画像を取り込めません") },
+                        text = { Text(imageState.message) },
+                        confirmButton = { TextButton(onClick = {
+                            val shown = page.value as? Page.Board
+                            val request = imageImports.state.request
+                            val savingFailed = shown != null && shown.id == request?.boardId &&
+                                boardSessions.saveStateFor(shown.id, shown.state.snapshot()).value is BoardSaveState.Failed
+                            if (savingFailed || baseImportReady(ignoreImage = true)) imageImports.retry(boardSessions)
+                        }) { Text(if (imageState.request?.accepted == null) "閉じて選び直す" else "再試行") } },
+                        dismissButton = { TextButton(onClick = { imageImports.hideFailure() }) { Text("閉じる") } })
+                }
+                if (!guideVisible.value && errorMessage.value == null && shareDialog.value == null && !imageState.blocksCanvas) {
                     ShareImportDialog(importState, importBoards.value,
                     destinationName = importBoards.value.firstOrNull { it.id == importState.request?.destinationId }?.name,
                     destinationReady = baseImportReady(),

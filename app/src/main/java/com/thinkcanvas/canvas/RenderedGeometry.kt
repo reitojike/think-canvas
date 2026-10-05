@@ -83,6 +83,7 @@ fun BoardSnapshot.resolveRenderedGeometry(
             stored.right + radius, stored.bottom + radius)
     }
     ink.forEach { element -> bounds[element.id] = element.renderedBounds() }
+    images.forEach { bounds[it.id] = it.bounds() }
     arrows.forEach { arrow -> arrowRenderGeometry(arrow, scale, pixelsPerDp, bounds)?.let {
         bounds[arrow.id] = it.bounds
     } }

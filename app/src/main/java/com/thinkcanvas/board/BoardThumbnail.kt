@@ -4,9 +4,13 @@ import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
+import android.graphics.Bitmap
+import android.graphics.RectF
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,6 +25,9 @@ import com.thinkcanvas.canvas.ArrowRenderGeometry
 import com.thinkcanvas.canvas.arrowControl
 import com.thinkcanvas.canvas.arrowPoints
 import com.thinkcanvas.canvas.semanticProjection
+import com.thinkcanvas.canvas.bounds
+import com.thinkcanvas.image.ImageResources
+import com.thinkcanvas.image.ImageResourceKey
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.max
@@ -28,11 +35,16 @@ import kotlin.math.min
 import kotlin.math.sin
 
 @Composable
-fun BoardThumbnail(snapshot: BoardSnapshot, modifier: Modifier = Modifier) {
+fun BoardThumbnail(snapshot: BoardSnapshot, modifier: Modifier = Modifier, images: ImageResources? = null) {
     val pixelsPerDp = LocalDensity.current.density
+    val revision = images?.revision?.collectAsState()?.value ?: 0L
+    LaunchedEffect(snapshot.images, images) {
+        snapshot.images.forEach { images?.ensure(ImageResourceKey(it.assetId, 256)) }
+    }
     Canvas(modifier.background(Color(0xFFF7F6F4))) {
+        @Suppress("UNUSED_VARIABLE") val frame = revision
         drawBoardThumbnail(drawContext.canvas.nativeCanvas, snapshot, size.width, size.height,
-            pixelsPerDp)
+            pixelsPerDp) { assetId -> images?.bitmap(ImageResourceKey(assetId, 256)) }
     }
 }
 
@@ -94,6 +106,7 @@ internal fun thumbnailGeometry(snapshot: BoardSnapshot,
             stored.right + strokeRadius, stored.bottom + strokeRadius)
     }
     snapshot.ink.forEach { bounds[it.id] = it.renderedBounds() }
+    snapshot.images.forEach { bounds[it.id] = it.bounds() }
     // Body text is omitted in this representation. Keep its anchor for arrow attachment,
     // but exclude it from visible bounds and fit.
     val arrowTargets = bounds + snapshot.texts.filter { it.id !in bounds }.associate {
@@ -135,7 +148,8 @@ internal data class ThumbnailGeometry(
 
 /** 一覧の遠景表現。対象外の本文などは semanticProjection の規則に従う。 */
 internal fun drawBoardThumbnail(canvas: AndroidCanvas, snapshot: BoardSnapshot,
-                                width: Float, height: Float, pixelsPerDp: Float = 1f) {
+                                width: Float, height: Float, pixelsPerDp: Float = 1f,
+                                image: (String) -> Bitmap? = { null }) {
         canvas.drawColor(0xFFF7F6F4.toInt())
         val title = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = 0x8C23211E.toInt(); textSize = 8f * pixelsPerDp; typeface = Typeface.DEFAULT_BOLD
@@ -182,6 +196,17 @@ internal fun drawBoardThumbnail(canvas: AndroidCanvas, snapshot: BoardSnapshot,
                         canvas.drawPath(path, paint)
                     }
                 }
+            }
+        }
+        val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        snapshot.images.filter { projection.visible(it.id) }.forEach { element ->
+            val rectangle = RectF(left + element.x * scale, top + element.y * scale,
+                left + (element.x + element.width) * scale, top + (element.y + element.height) * scale)
+            val bitmap = image(element.assetId)
+            if (bitmap != null) canvas.drawBitmap(bitmap, null, rectangle, imagePaint)
+            else {
+                imagePaint.color = 0xFFE9E6E1.toInt()
+                canvas.drawRect(rectangle, imagePaint)
             }
         }
         drawInk(InkKind.MARKER)

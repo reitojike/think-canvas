@@ -169,6 +169,8 @@ fun CanvasScreen(
     viewportHistory: ViewportHistory? = null,
     externalInteractionBlocked: () -> Boolean = { false },
     onImportReadiness: ((Boolean, () -> Boolean) -> Unit)? = null,
+    onAddImage: ((com.thinkcanvas.image.ImagePickerSource, WorldPoint, Float, Float) -> Unit)? = null,
+    imageResources: com.thinkcanvas.image.ImageResources? = null,
 ) {
     val navigation = viewportHistory ?: remember(board) { ViewportHistory() }
     var viewport by navigation.viewportState
@@ -185,6 +187,9 @@ fun CanvasScreen(
     var gapPreview by remember { mutableStateOf<Pair<WorldPoint, WorldPoint>?>(null) }
     var menuTarget by remember { mutableStateOf<String?>(null) }
     var attachmentEditor by remember { mutableStateOf<Pair<String, HandleKind>?>(null) }
+    var imagePickerOpen by rememberSaveable { mutableStateOf(false) }
+    var imageDraft by editorSession.imageDescriptionDraft
+    var pendingImageAcknowledgement by editorSession.pendingImageAcknowledgement
     var regionDraft by editorSession.regionNameDraft
     val regionNameId = regionDraft?.id
     val regionName = regionDraft?.name.orEmpty()
@@ -352,7 +357,7 @@ fun CanvasScreen(
         id to WorldBounds(text.x, text.y, text.x + extent.width, text.y + extent.height)
     }.toMap()
     val renderedGeometry = remember(resolvedTextBounds, snapshot.shapes, snapshot.arrows,
-        snapshot.ink, viewport.scale, density.density) {
+        snapshot.ink, snapshot.images, viewport.scale, density.density) {
         snapshot.resolveRenderedGeometry(resolvedTextBounds, viewport.scale, density.density)
     }
     val latestRenderedGeometry = rememberUpdatedState(renderedGeometry)
@@ -377,6 +382,8 @@ fun CanvasScreen(
     fun baseNavigationAllowed(): Boolean = saveState.value == BoardSaveState.Idle &&
         editorSession.pendingDraftAcknowledgement.value == null &&
         editorSession.draft.value == null && editorSession.regionNameDraft.value == null &&
+        editorSession.imageDescriptionDraft.value == null && editorSession.pendingImageAcknowledgement.value == null &&
+        !imagePickerOpen &&
         discardTarget == null && menuTarget == null && attachmentEditor == null &&
         tool == SpatialTool.NONE && inkTool == null && !toolsExpanded && moveOwner == null && movePreview == null &&
         handlePreview == null && spatialPreview == null && lassoPoints.isEmpty() &&
@@ -394,7 +401,7 @@ fun CanvasScreen(
         }
     }
 
-    val indicatorNames = remember(snapshot.texts, snapshot.shapes, snapshot.ink, snapshot.arrows) {
+    val indicatorNames = remember(snapshot.texts, snapshot.shapes, snapshot.ink, snapshot.arrows, snapshot.images) {
         buildMap {
             snapshot.texts.forEach { put(it.id, it.text.take(32)) }
             snapshot.shapes.forEach { put(it.id, when (it.kind) {
@@ -404,6 +411,7 @@ fun CanvasScreen(
             }) }
             snapshot.ink.forEach { put(it.id, "描画") }
             snapshot.arrows.forEach { put(it.id, "矢印") }
+            snapshot.images.forEach { put(it.id, it.altText.ifBlank { "画像" }.take(32)) }
         }
     }
     fun targetName(id: String): String = indicatorNames[id].orEmpty()
@@ -470,7 +478,23 @@ fun CanvasScreen(
     }
 
     fun exitBlocked(): Boolean = saveBlocked() ||
-        editorSession.pendingDraftAcknowledgement.value != null
+        editorSession.pendingDraftAcknowledgement.value != null ||
+        editorSession.pendingImageAcknowledgement.value != null
+
+    fun closeImageDescription() {
+        clearEditorFocus()
+        imageDraft = null
+        discardTarget = null
+    }
+
+    fun openImageDescription(id: String): Boolean {
+        val image = board.images.firstOrNull { it.id == id } ?: return false
+        if (saveBlocked() || draft != null || regionDraft != null || imageDraft != null ||
+            attachmentEditor != null || imagePickerOpen || pendingDraftAcknowledgement != null) return false
+        menuTarget = null
+        imageDraft = ImageDescriptionDraft(image.id, image.altText)
+        return true
+    }
 
     fun requestEditorExit(target: String, changed: Boolean, close: () -> Unit) {
         if (exitBlocked()) return
@@ -499,6 +523,7 @@ fun CanvasScreen(
     fun moveIsLive(owner: MoveDragSession): Boolean = moveOwner === owner &&
         gestureGeneration == owner.generation && !exitBlocked() && owner.hasSameContent(board) &&
         editorSession.draft.value == null && editorSession.regionNameDraft.value == null &&
+        editorSession.imageDescriptionDraft.value == null && !imagePickerOpen &&
         discardTarget == null && attachmentEditor == null && menuTarget == null && !searchOpen
 
     fun cancelMove(owner: MoveDragSession) {
@@ -538,7 +563,7 @@ fun CanvasScreen(
 
     // Observe guards even while the pointer is in the central, non-ticking band.
     LaunchedEffect(currentSaveState, pendingDraftAcknowledgement, draft, regionDraft,
-        board.elements, board.shapes, board.arrows, board.ink, discardTarget, attachmentEditor,
+        board.elements, board.shapes, board.arrows, board.ink, board.images, imageDraft, imagePickerOpen, discardTarget, attachmentEditor,
         menuTarget, searchOpen) {
         moveOwner?.let { if (!moveIsLive(it)) cancelMove(it) }
     }
@@ -590,6 +615,15 @@ fun CanvasScreen(
             closeDraft()
             pendingNewElementId = null
             pendingDraftAcknowledgement = null
+        }
+    }
+
+    LaunchedEffect(pendingImageAcknowledgement) {
+        val acknowledgement = pendingImageAcknowledgement ?: return@LaunchedEffect
+        acknowledgement.await()
+        if (pendingImageAcknowledgement === acknowledgement) {
+            pendingImageAcknowledgement = null
+            closeImageDescription()
         }
     }
 
@@ -766,6 +800,9 @@ fun CanvasScreen(
             invalidatePointerContinuation()
             when {
                 discardTarget != null -> discardTarget = null
+                imageDraft != null -> requestEditorExit("image:${imageDraft!!.sessionId}",
+                    imageDraft!!.changed, ::closeImageDescription)
+                imagePickerOpen -> imagePickerOpen = false
                 currentDraft != null -> requestEditorExit("text:${currentDraft.sessionId}",
                     currentDraft.hasUncommittedChanges(board.elements.firstOrNull { it.id == currentDraft.id }),
                     ::closeDraft)
@@ -852,7 +889,11 @@ fun CanvasScreen(
         hitInk(point, InkKind.PEN)?.let { return null to it }
         hitTest(point)?.let { return it to null }
         hitSpatial(point)?.let { return null to it }
-        return null to hitInk(point, InkKind.MARKER)
+        hitInk(point, InkKind.MARKER)?.let { return null to it }
+        val (x, y) = latestViewport.value.screenToWorld(point.x, point.y)
+        return null to latestSnapshot.value.images.asReversed().firstOrNull {
+            latestProjection.value.visible(it.id) && it.bounds().contains(WorldPoint(x, y))
+        }?.id
     }
 
     fun endAt(point: Offset): ArrowEnd {
@@ -861,6 +902,8 @@ fun CanvasScreen(
         val target = hitTest(point)?.id ?: latestSnapshot.value.shapes.asReversed()
             .firstOrNull { latestProjection.value.visible(it.id) &&
                 (it.containsInterior(world) || it.hitStroke(world, 12f / latestViewport.value.scale)) }?.id
+            ?: latestSnapshot.value.images.asReversed().firstOrNull {
+                latestProjection.value.visible(it.id) && it.bounds().contains(world) }?.id
         val bounds = target?.let { latestSnapshot.value.boundsOf(it,
             latestRenderedGeometry.value.boundsById) }
         return if (target != null && bounds != null) ArrowEnd.Attached(
@@ -876,6 +919,8 @@ fun CanvasScreen(
             HandleKind.RESIZE -> source.copy(shapes = source.shapes.map { shape ->
                 if (shape.id == id) shape.copy(width = (x - shape.x).coerceAtLeast(40f),
                     height = (y - shape.y).coerceAtLeast(30f)) else shape
+            }, images = source.images.map { image ->
+                if (image.id == id) image.resized(x - image.x, y - image.y) else image
             })
             HandleKind.FROM, HandleKind.TO -> source.copy(arrows = source.arrows.map { arrow ->
                 if (arrow.id != id) arrow else if (kind == HandleKind.FROM)
@@ -1063,9 +1108,10 @@ fun CanvasScreen(
 
     LaunchedEffect(menuTarget) { if (menuTarget == null) chromeBounds.remove("menu") }
     LaunchedEffect(regionNameId) { if (regionNameId == null) chromeBounds.remove("regionName") }
-    LaunchedEffect(discardTarget, draft?.sessionId, regionDraft?.sessionId) {
+    LaunchedEffect(discardTarget, draft?.sessionId, regionDraft?.sessionId, imageDraft?.sessionId) {
         val currentTarget = draft?.let { "text:${it.sessionId}" }
             ?: regionDraft?.let { "region:${it.sessionId}" }
+            ?: imageDraft?.let { "image:${it.sessionId}" }
         if (discardTarget != null && discardTarget != currentTarget) discardTarget = null
     }
     LaunchedEffect(projection.hidden, menuTarget, attachmentEditor, regionNameId) {
@@ -1178,6 +1224,7 @@ fun CanvasScreen(
                 val down = awaitFirstDown(requireUnconsumed = false)
                 manualGestureActive = true
                 if (latestExternalBlock.value()) return@awaitEachGesture
+                if (imageDraft != null || imagePickerOpen) return@awaitEachGesture
                 val admittedGeneration = gestureGeneration
                 if (admittedGeneration != pointerGeneration) {
                     down.consume()
@@ -1236,6 +1283,10 @@ fun CanvasScreen(
                         val (x, y) = latestViewport.value.worldToScreen(shape.x + shape.width, shape.y + shape.height)
                         (start - Offset(x, y)).getDistance() <= radius
                     }?.let { shape -> targetId = shape.id; handle = HandleKind.RESIZE }
+                    snapshot.images.filter { it.id in latestSelectedIds.value }.firstOrNull { image ->
+                        val (x, y) = latestViewport.value.worldToScreen(image.x + image.width, image.y + image.height)
+                        (start - Offset(x, y)).getDistance() <= radius
+                    }?.let { image -> if (handle == null) { targetId = image.id; handle = HandleKind.RESIZE } }
                     snapshot.shapes.filter { it.id in latestSelectedIds.value }.firstOrNull { shape ->
                         val (x, y) = latestViewport.value.worldToScreen(shape.x + shape.width / 2f,
                             shape.y + shape.height + 14f)
@@ -1427,6 +1478,8 @@ fun CanvasScreen(
                                                 .filter { (old, new) -> old != new }.map { it.first.id } +
                                             beforeSnapshot.arrows.zip(afterSnapshot.arrows)
                                                 .filter { (old, new) -> old != new }.map { it.first.id } +
+                                            beforeSnapshot.images.zip(afterSnapshot.images)
+                                                .filter { (old, new) -> old != new }.map { it.first.id } +
                                             beforeSnapshot.ink.zip(afterSnapshot.ink)
                                                 .filter { (old, new) -> old != new }.map { it.first.id })
                                         val transition = changedIds.firstNotNullOfOrNull { id ->
@@ -1598,7 +1651,7 @@ fun CanvasScreen(
         },
     ) {
         if (board.elements.isEmpty() && board.shapes.isEmpty() && board.arrows.isEmpty() &&
-            board.ink.isEmpty() && draft == null) {
+            board.ink.isEmpty() && board.images.isEmpty() && draft == null) {
             Text(
                 stringResource(R.string.empty_hint), color = Color(0xFFB1ACA5), fontSize = 13.sp,
                 modifier = Modifier.align(Alignment.Center),
@@ -1623,7 +1676,8 @@ fun CanvasScreen(
         }
         val ghostIds = if (pendingGap == null) emptySet() else {
             (displaySnapshot.texts.filterIndexed { index, it -> it != sourceSnapshot.texts[index] }.map { it.id } +
-                displaySnapshot.shapes.filterIndexed { index, it -> it != sourceSnapshot.shapes[index] }.map { it.id }).toSet()
+                displaySnapshot.shapes.filterIndexed { index, it -> it != sourceSnapshot.shapes[index] }.map { it.id } +
+                displaySnapshot.images.filterIndexed { index, it -> it != sourceSnapshot.images[index] }.map { it.id }).toSet()
         }
         val movingIds = movingPreview?.first ?: emptySet()
         val displayTextBounds = displaySnapshot.texts.mapNotNull { text ->
@@ -1636,6 +1690,28 @@ fun CanvasScreen(
             keptIds + movingIds, density.density, titleDp, titleLineHeightWorld,
             displayGeometry.boundsById)
         val displayBoundaryShapes = displaySnapshot.shapes.filter { displayProjection.visible(it.id) }
+        fun imageActionAllowed(id: String): Boolean = !latestExternalBlock.value() &&
+            baseNavigationAllowed() && !searchOpen && !manualGestureActive && !viewportAnimating && board.images.any { it.id == id }
+        ImageElements(displaySnapshot, viewport, displayProjection, selectedIds, canvasSize,
+            imageResources, enabled = indicatorsAllowed() && !searchOpen,
+            onSelect = { id -> if (!imageActionAllowed(id)) false else {
+                selectedIds = setOf(id); selectedId = null; true
+            } },
+            onAdd = { id -> if (!imageActionAllowed(id) || id in selectedIds) false else {
+                selectedIds = selectedIds + id; selectedId = null; true
+            } },
+            onRemove = { id -> if (imageActionAllowed(id)) removeSelection(id) else false },
+            onMove = { id, dx, dy -> if (!imageActionAllowed(id)) false else
+                board.moveSelection(if (id in selectedIds) selectedIds else setOf(id), dx, dy)
+                    .also { if (it) saveSnapshot() } },
+            onResize = { id, factor -> if (!imageActionAllowed(id)) false else {
+                val image = board.images.first { it.id == id }
+                board.resizeImage(id, image.width * factor, image.height * factor).also { if (it) saveSnapshot() }
+            } },
+            onDelete = { id -> if (!imageActionAllowed(id)) false else board.delete(setOf(id)).also {
+                if (it) { selectedIds = emptySet(); selectedId = null; saveSnapshot() }
+            } },
+            onDescribe = { id -> if (imageActionAllowed(id)) openImageDescription(id) else false })
         InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.MARKER,
             viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
             onSelect = { id -> if (!saveBlocked()) { selectedIds = setOf(id); selectedId = null } },
@@ -2157,6 +2233,13 @@ fun CanvasScreen(
                             selectedIds = emptySet()
                             selectedId = null
                         }
+                    }, onImageAdd = if (onAddImage == null) null else {
+                        {
+                            if (!saveBlocked()) {
+                                finishToolInteraction()
+                                if (importReady()) imagePickerOpen = true
+                            }
+                        }
                     })
             }
 
@@ -2173,7 +2256,7 @@ fun CanvasScreen(
                 }
             }
 
-            if (selectedIds.isNotEmpty() && draft == null && regionNameId == null) {
+            if (selectedIds.isNotEmpty() && draft == null && regionNameId == null && imageDraft == null) {
                 Row(Modifier.align(Alignment.TopCenter)
                     .padding(top = if (message == null) 62.dp else 100.dp)
                     .background(Color.White, RoundedCornerShape(10.dp))
@@ -2232,6 +2315,10 @@ fun CanvasScreen(
                                 openRegionName(id, board.shapes.first { it.id == id }.name)
                                 menuTarget = null
                             }
+                        }
+                    } else if (board.images.any { it.id == id }) {
+                        TextButton(enabled = !saveBlocked(), onClick = { openImageDescription(id) }) {
+                            Text("代替テキストを編集")
                         }
                     } else if (board.elements.any { it.id == id }) {
                         EditorOption(stringResource(R.string.edit), false, false, enabled = !saveBlocked()) {
@@ -2303,8 +2390,54 @@ fun CanvasScreen(
                 EditorOption(stringResource(if (saveFailed) R.string.retry else R.string.done), false, true, enabled = !saving) { commitDraft() }
             }
         }
+        if (imagePickerOpen) {
+            fun choose(source: com.thinkcanvas.image.ImagePickerSource) {
+                if (!imagePickerOpen || saveBlocked()) return
+                imagePickerOpen = false
+                if (!importReady() || canvasSize == IntSize.Zero) return
+                val (x, y) = viewport.screenToWorld(canvasSize.width / 2f, canvasSize.height / 2f)
+                onAddImage?.invoke(source, WorldPoint(x, y), canvasSize.width / viewport.scale,
+                    canvasSize.height / viewport.scale)
+            }
+            AlertDialog(onDismissRequest = { if (!saveBlocked()) imagePickerOpen = false },
+                title = { Text("画像を追加") },
+                text = { Text("端末から画像を一枚選びます。") },
+                confirmButton = { Column {
+                    TextButton(onClick = { choose(com.thinkcanvas.image.ImagePickerSource.PHOTO) },
+                        enabled = !saveBlocked()) { Text("写真から") }
+                    TextButton(onClick = { choose(com.thinkcanvas.image.ImagePickerSource.FILE) },
+                        enabled = !saveBlocked()) { Text("ファイルから") }
+                } },
+                dismissButton = { TextButton(onClick = { if (!saveBlocked()) imagePickerOpen = false }) {
+                    Text("キャンセル") } })
+        }
+        imageDraft?.let { editing ->
+            val sameEditor = { editorSession.imageDescriptionDraft.value?.sessionId == editing.sessionId }
+            ImageDescriptionDialog(editing, editable = !saveBlocked() && pendingImageAcknowledgement == null,
+                cancellable = !exitBlocked(), completable = !saving,
+                failed = saveFailed,
+                onChange = { if (sameEditor() && !saveBlocked() && pendingImageAcknowledgement == null)
+                    imageDraft = imageDraft?.copy(text = it) },
+                onComplete = {
+                    if (sameEditor() && !latestExternalBlock.value()) {
+                        if (pendingImageAcknowledgement != null && saveFailed) onRetrySave()
+                        else if (!saveBlocked() && pendingImageAcknowledgement == null) {
+                            val current = board.images.firstOrNull { it.id == editing.id }
+                            if (current != null && current.altText == editing.original) {
+                                if (board.describeImage(editing.id, editing.text))
+                                    pendingImageAcknowledgement = onRequestSave(board.snapshot())
+                                else closeImageDescription()
+                            }
+                        }
+                    }
+                },
+                onCancel = { if (sameEditor() && !exitBlocked()) closeImageDescription() },
+                onDismiss = { if (sameEditor()) requestEditorExit("image:${editing.sessionId}",
+                    editing.changed, ::closeImageDescription) })
+        }
         val currentEditorTarget = draft?.let { "text:${it.sessionId}" }
             ?: regionDraft?.let { "region:${it.sessionId}" }
+            ?: imageDraft?.let { "image:${it.sessionId}" }
         if (discardTarget != null && discardTarget == currentEditorTarget) {
             val target = discardTarget
             AlertDialog(
@@ -2316,6 +2449,7 @@ fun CanvasScreen(
                             when (target) {
                                 editorSession.draft.value?.let { "text:${it.sessionId}" } -> cancelDraft()
                                 editorSession.regionNameDraft.value?.let { "region:${it.sessionId}" } -> closeRegionName()
+                                editorSession.imageDescriptionDraft.value?.let { "image:${it.sessionId}" } -> closeImageDescription()
                             }
                         }
                     }) { Text(stringResource(R.string.discard_edit)) }

@@ -14,12 +14,74 @@ import com.thinkcanvas.canvas.BoardSnapshot
 import com.thinkcanvas.canvas.ShapeElement
 import com.thinkcanvas.canvas.ShapeKind
 import com.thinkcanvas.canvas.TextElement
+import com.thinkcanvas.canvas.ImageElement
 import com.thinkcanvas.canvas.modelLogicalBounds
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 
 class CanvasDatabaseTest {
+    private fun image() = ImageElement(assetId = "8c0a9b01-94fd-404c-944d-62c1249b4d01",
+        x = 10f, y = -20f, width = 200f, height = 100f,
+        intrinsicWidth = 400, intrinsicHeight = 200, altText = "猫の写真")
+
+    @Test fun imageReceiptRollbackIsAtomicAndCommittedImportCannotReplayAfterUndo() { runBlocking {
+        val file = Files.createTempFile("think-canvas-image-receipt-", ".db").toFile()
+        file.delete()
+        fun open() = Room.databaseBuilder<CanvasDatabase>(file.absolutePath)
+            .setDriver(BundledSQLiteDriver()).build()
+        val image = image()
+        val row = ImageElementRow.fromModel(1, image)
+        val receipt = ShareImportReceiptRow("image-request", 1, image.id)
+        open().also { database -> database.canvasDao().putBoard(BoardRow()); database.close() }
+        val raw = BundledSQLiteDriver().open(file.absolutePath)
+        raw.execSQL("CREATE TRIGGER fail_image_receipt BEFORE INSERT ON share_import_receipts BEGIN SELECT RAISE(ABORT, 'forced'); END")
+        raw.close()
+        val failing = open()
+        assertTrue(runCatching { failing.canvasDao().replaceAllForShare(receipt, emptyList(),
+            emptyList(), emptyList(), images = listOf(row)) }.isFailure)
+        assertTrue(failing.canvasDao().images(1).isEmpty())
+        assertEquals(null, failing.canvasDao().shareReceipt(receipt.requestId))
+        failing.close()
+        val repair = BundledSQLiteDriver().open(file.absolutePath)
+        repair.execSQL("DROP TRIGGER fail_image_receipt")
+        repair.close()
+        val database = open()
+        val dao = database.canvasDao()
+        dao.replaceAllForShare(receipt, emptyList(), emptyList(), emptyList(), images = listOf(row))
+        assertEquals(image, dao.images(1).single().toModel())
+        dao.replaceAll(1, emptyList(), emptyList(), emptyList())
+        dao.replaceAllForShare(receipt, emptyList(), emptyList(), emptyList(), images = listOf(row))
+        assertTrue(dao.images(1).isEmpty())
+        assertEquals(receipt, dao.shareReceipt(receipt.requestId))
+        database.close()
+        file.delete()
+    } }
+
+    @Test fun duplicateReopenAndDeletePreserveTheOtherBoardsImmutableAssetReference() { runBlocking {
+        val file = Files.createTempFile("think-canvas-image-copy-", ".db").toFile()
+        file.delete()
+        fun open() = Room.databaseBuilder<CanvasDatabase>(file.absolutePath)
+            .setDriver(BundledSQLiteDriver()).build()
+        val image = image()
+        val source = BoardSnapshot(images = listOf(image), arrows = listOf(
+            ArrowElement(from = ArrowEnd.Attached(image.id, 1f, .5f), to = ArrowEnd.Free(300f, 30f))))
+        val first = open()
+        val original = first.canvasDao().createBoardWithSnapshot("元", source)
+        val copy = first.canvasDao().createBoardWithSnapshot("複製", source.duplicated())
+        val copied = first.canvasDao().images(copy.id).single().toModel()
+        assertNotEquals(image.id, copied.id)
+        assertEquals(image.assetId, copied.assetId)
+        assertEquals(copied.id, (first.canvasDao().arrows(copy.id).single().toModel().from as ArrowEnd.Attached).targetId)
+        assertTrue(first.canvasDao().deleteBoard(original.id))
+        first.close()
+        val reopened = open()
+        assertEquals(listOf(image.assetId), reopened.canvasDao().allImageAssetIds())
+        assertEquals(copied, reopened.canvasDao().images(copy.id).single().toModel())
+        reopened.close()
+        file.delete()
+    } }
+
     @Test fun editsAlwaysMoveTheBoardToTheTopEvenWithinOneMillisecond() { runBlocking {
         val file = Files.createTempFile("think-canvas-order-", ".db").toFile()
         file.delete()
@@ -53,7 +115,7 @@ class CanvasDatabaseTest {
 
         val database = Room.databaseBuilder<CanvasDatabase>(file.absolutePath)
             .setDriver(BundledSQLiteDriver())
-            .addMigrations(CanvasDatabase.MIGRATION_1_2, CanvasDatabase.MIGRATION_2_3)
+            .addMigrations(CanvasDatabase.MIGRATION_1_2, CanvasDatabase.MIGRATION_2_3, CanvasDatabase.MIGRATION_3_4)
             .build()
         assertEquals("既存ボード", database.canvasDao().board(1)?.name)
         assertEquals("既存の考え", database.canvasDao().elements(1).single().text)
@@ -65,7 +127,7 @@ class CanvasDatabaseTest {
     } }
 
     @Test
-    fun versionTwoMigrationPreservesBoardAndAllElementTables() { runBlocking {
+    fun versionTwoAndThreeMigrationsPreserveAllTablesAndExistingReceipt() { for (version in 2..3) runBlocking {
         val file = Files.createTempFile("think-canvas-migration-v2-", ".db").toFile()
         file.delete()
         val legacy = BundledSQLiteDriver().open(file.absolutePath)
@@ -79,12 +141,16 @@ class CanvasDatabaseTest {
         legacy.execSQL("INSERT INTO spatial_elements VALUES ('shape', 1, 'RECTANGLE', 1, 2, 30, 40, 'INK', '')")
         legacy.execSQL("INSERT INTO arrow_elements VALUES ('arrow', 1, 'text', 0.5, 0.5, NULL, NULL, NULL, NULL, NULL, 80, 90, 0)")
         legacy.execSQL("INSERT INTO ink_strokes VALUES ('ink', 1, 'ink-group', 0, 'PEN', 1, 2, 'TOUCH', X'00')")
-        legacy.execSQL("PRAGMA user_version = 2")
+        if (version == 3) {
+            legacy.execSQL("CREATE TABLE share_import_receipts (requestId TEXT NOT NULL, boardId INTEGER NOT NULL, elementId TEXT NOT NULL, PRIMARY KEY(requestId))")
+            legacy.execSQL("INSERT INTO share_import_receipts VALUES ('request', 1, 'text')")
+        }
+        legacy.execSQL("PRAGMA user_version = $version")
         legacy.close()
 
         val database = Room.databaseBuilder<CanvasDatabase>(file.absolutePath)
             .setDriver(BundledSQLiteDriver())
-            .addMigrations(CanvasDatabase.MIGRATION_1_2, CanvasDatabase.MIGRATION_2_3)
+            .addMigrations(CanvasDatabase.MIGRATION_1_2, CanvasDatabase.MIGRATION_2_3, CanvasDatabase.MIGRATION_3_4)
             .build()
         val dao = database.canvasDao()
         assertEquals("v2 board", dao.board(1)?.name)
@@ -92,7 +158,9 @@ class CanvasDatabaseTest {
         assertEquals("shape", dao.spatialElements(1).single().id)
         assertEquals("arrow", dao.arrows(1).single().id)
         assertEquals("ink", dao.inkStrokes(1).single().id)
-        assertEquals(null, dao.shareReceipt("request"))
+        assertEquals(if (version == 3) ShareImportReceiptRow("request", 1, "text") else null,
+            dao.shareReceipt("request"))
+        assertTrue(dao.images(1).isEmpty())
         database.close()
         file.delete()
     } }

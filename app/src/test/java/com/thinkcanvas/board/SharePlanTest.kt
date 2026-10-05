@@ -14,6 +14,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SharePlanTest {
+    @Test fun imageOnlyAndSelectedRegionIncludeImageBoundsAndAttachedArrow() {
+        val image = com.thinkcanvas.canvas.ImageElement(
+            assetId = "8c0a9b01-94fd-404c-944d-62c1249b4d01", x = 20f, y = 30f,
+            width = 100f, height = 50f, intrinsicWidth = 400, intrinsicHeight = 200)
+        val source = BoardSnapshot(images = listOf(image))
+        val plan = planShare(source)
+        assertEquals(setOf(image.id), plan.includedIds)
+        assertEquals(WorldBounds(20f, 30f, 120f, 80f), plan.contentBounds)
+        val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+            x = 0f, y = 0f, width = 400f, height = 300f)
+        val arrow = ArrowElement(from = ArrowEnd.Attached(image.id, 1f, .5f), to = ArrowEnd.Free(200f, 100f))
+        val grouped = source.copy(shapes = listOf(region), arrows = listOf(arrow))
+        assertEquals(setOf(region.id, image.id, arrow.id), planShare(grouped, setOf(region.id)).includedIds)
+        val resized = source.copy(images = listOf(image.resized(8192f, 4096f)))
+        assertTrue(runCatching { planShare(resized) }.isFailure)
+    }
+
     private fun measured(source: BoardSnapshot): Map<String, WorldBounds> = buildMap {
         source.texts.forEach { put(it.id, WorldBounds(it.x, it.y,
             it.x + 80f, it.y + 42f)) }

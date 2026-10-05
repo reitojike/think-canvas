@@ -23,6 +23,7 @@ class BoardState(
     initialShapes: List<ShapeElement> = emptyList(),
     initialArrows: List<ArrowElement> = emptyList(),
     initialInk: List<InkElement> = emptyList(),
+    initialImages: List<ImageElement> = emptyList(),
 ) {
     var elements by mutableStateOf(initial)
         private set
@@ -32,6 +33,8 @@ class BoardState(
         private set
     var ink by mutableStateOf(initialInk)
         private set
+    var images by mutableStateOf(initialImages)
+        private set
 
     private data class Change(val before: BoardSnapshot, val after: BoardSnapshot)
     private val undoStack = ArrayDeque<Change>()
@@ -40,7 +43,31 @@ class BoardState(
     val canUndo: Boolean get() = undoStack.isNotEmpty()
     val canRedo: Boolean get() = redoStack.isNotEmpty()
 
-    fun snapshot(): BoardSnapshot = BoardSnapshot(elements, shapes, arrows, ink)
+    fun snapshot(): BoardSnapshot = BoardSnapshot(elements, shapes, arrows, ink, images)
+
+    /** Includes both sides of every retained edit, even images currently deleted. */
+    val retainedImageAssetIds: Set<String> get() = buildSet {
+        addAll(images.map { it.assetId })
+        (undoStack.asSequence() + redoStack.asSequence()).forEach { change ->
+            addAll(change.before.images.map { it.assetId })
+            addAll(change.after.images.map { it.assetId })
+        }
+    }
+
+    fun addImage(image: ImageElement): Boolean {
+        if (image.id in (elements.map { it.id } + shapes.map { it.id } +
+                arrows.map { it.id } + ink.map { it.id } + images.map { it.id })) return false
+        return record(snapshot().copy(images = images + image))
+    }
+
+    fun resizeImage(id: String, width: Float, height: Float): Boolean {
+        val current = images.firstOrNull { it.id == id } ?: return false
+        val updated = current.resized(width, height)
+        return record(snapshot().copy(images = images.map { if (it.id == id) updated else it }))
+    }
+
+    fun describeImage(id: String, altText: String): Boolean = record(snapshot().copy(
+        images = images.map { if (it.id == id) it.copy(altText = altText) else it }))
 
     fun addInkStroke(kind: InkKind, stroke: InkStroke): Boolean {
         val (next, grouped) = ink.withStroke(kind, stroke)
@@ -91,7 +118,7 @@ class BoardState(
     }
 
     fun addArrow(from: ArrowEnd, to: ArrowEnd): ArrowElement? {
-        val ids = (elements.map { it.id } + shapes.map { it.id }).toSet()
+        val ids = (elements.map { it.id } + shapes.map { it.id } + images.map { it.id }).toSet()
         if (listOf(from, to).any { it is ArrowEnd.Attached && it.targetId !in ids }) return null
         val arrow = ArrowElement(from = from, to = to)
         record(snapshot().copy(arrows = arrows + arrow))
@@ -104,14 +131,15 @@ class BoardState(
         val snappedBend = bend?.let { if (kotlin.math.abs(it) < 8f) 0f else it }
         val updated = current.copy(from = from ?: current.from, to = to ?: current.to,
             bend = snappedBend ?: current.bend).let { if (reverse) it.reversed() else it }
-        val ids = (elements.map { it.id } + shapes.map { it.id }).toSet()
+        val ids = (elements.map { it.id } + shapes.map { it.id } + images.map { it.id }).toSet()
         if (listOf(updated.from, updated.to).any { it is ArrowEnd.Attached && it.targetId !in ids }) return false
         return record(snapshot().copy(arrows = arrows.map { if (it.id == id) updated else it }))
     }
 
     fun delete(ids: Set<String>): Boolean {
         if (ids.isEmpty()) return false
-        val removedTargets = ids.intersect((elements.map { it.id } + shapes.map { it.id }).toSet())
+        val removedTargets = ids.intersect((elements.map { it.id } + shapes.map { it.id } +
+            images.map { it.id }).toSet())
         return record(BoardSnapshot(
             texts = elements.filterNot { it.id in ids },
             shapes = shapes.filterNot { it.id in ids },
@@ -121,6 +149,7 @@ class BoardState(
                 }
             },
             ink = ink.filterNot { it.id in ids },
+            images = images.filterNot { it.id in ids },
         ))
     }
 
@@ -163,5 +192,6 @@ class BoardState(
         shapes = value.shapes
         arrows = value.arrows
         ink = value.ink
+        images = value.images
     }
 }
