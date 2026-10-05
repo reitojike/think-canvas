@@ -212,3 +212,11 @@ head0e7fa10のlocal fullはfresh source/XML exact194/1/0/0、unit163/0/0/0、hea
 判定BOUNDED_CORRECTION。追加1roundを当該fixtureのnative IME非表示/inset0と位置の安定待ち、その後の現在boundsからのpan開始点算出に限定した。90/25px入力、2px許容、stale save/editor/tool・履歴・content/saveの期待値は維持する。限定補正のfocused nativeはfresh exact1/0/0/0。製品pan/pinch/animationは変更しない。
 
 同headのrequired CIはfresh source/XML exact194/1/0/0。唯一の失敗は共有empty-createのpreview待機で、localのnext-panとは異なる。AtomicFile例外は今回のlogにない。共有picker/previewのboard lookupはsuspend後にcaptured requestとlive phaseを混在させ、picker中の古い結果が新previewのdestinationをmissing扱いする可能性がある。blank arbitrationとは別authorityのためHOLD/checkpointし、共有先lookupの独立follow-upとして扱う。再実行でgreenを選ばず、controlled raceで成立を確認してから補正する。
+
+## 共有先 lookup follow-up 完了と final-head 更新
+
+PR #99はMainのPICKER/PREVIEW lookup、既存SharePreviewAdmissionの局所guard、controlled unit、Spec011 planの4ファイルへ限定した。controlled RED3/2/0/0→GREEN3/0/0/0、native empty-create focused1/0/0/0、固定head d9ffc2aのfull Pixel9/API37 fresh source/XML exact185/0/0/0・unit164/0/0/0を確認した。local full invocationはignored SDK設定のPropertyEscape lintだけでexit1だったが、設定補正後のfresh lint成功・製品source/head不変を確認した。GMDのblind rerunは行っていない。
+
+required CI37251559921は両job成功・fresh exact185/0/0/0。canonical reviewは最後の依頼01:49:46Zより新しい01:52:16Zの現行head指摘なし結果、最新base/behind0/MERGEABLE/未解決thread0でMERGE_READYを確認し、許可によりmain78b226dへmergeした。旧CI timeoutの正確な因果を結果だけから断定しない。
+
+main更新の有限surfaceは上記4ファイル、Canvasの既存external/save readiness、blank pending、next-pan fixture、source/XML census。競合なしで共有先lookupのauthorityを取り込み、blank arbitrationの製品処理は0e7fa10から変更しない。判定BOUNDED_CORRECTION。追加1roundはbase更新と検証証跡のみ。新候補を固定してunit166、Pixel9/API37全194件、current-head CI/canonical、最新base/未解決thread0を確認する。旧headの結果は最終gateへ流用しない。新material findingはHOLD/checkpoint。
