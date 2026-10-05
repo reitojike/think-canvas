@@ -45,3 +45,14 @@ app/src/androidTest/java/com/thinkcanvas/canvas/
 
 ## Complexity Tracking
 違反なし。新永続化/履歴基盤/入力dispatcherは導入しない。
+
+## Issue #104: IME表示補助の限定補正
+
+公開main `5190c2a`のread-only checkpointで、ManifestのadjustResize、edge-to-edge、rootのsafeDrawingPadding、canvasSize、resize、editor終了、#91のfocus lifecycle、history、placement、animationを照合した。resizeは旧sizeのworld中心を新sizeへ写す。一方、入力表示補助effectはIME表示中にcameraを直接panし、hidden/draft終了時はearly returnする。この非対称なviewport writerを補正対象とする。alpha.10実機の直接再現とplatform固有原因は未確認。
+
+- IME中の入力欄だけを、測定済みcanvas内の表示範囲へ一時的に配置する。166dp幅、150dp最大高さ、54dp toolbarと倍率から表示範囲を求め、world座標・cameraへ書き戻さない。画面より大きい欄は上端/左端に置く。
+- IME hiddenでは通常のworldToScreen位置へ戻す。履歴のrestore、独自keyboard offset、固定pixel補正、復帰delay、永続状態を追加しない。
+- `ViewportHistory.resize`と#91のinput ownershipは維持する。保存と選択は元のworld座標、hit判定は既存の実表示boundsを用いる。Activity再生成・window focusは別経路として検証する。
+- native IME/insets、canvas測定、world focus/pan、固定要素位置を同時期に観測する。empty cancel、Done、Back/確認、既存編集、反復5回と内容/Room/Undo/historyを照合する。実機再確認はCIから推定しない。
+
+Constitution I〜V: Issue #104のworld focus復帰と既存Spec006/007/010をauthorityとする。既存Compose入力・insetsを維持し、表示欄の一時位置と保存配置を分離する。依存/Room/schema/CI/launcherを変更しない。旧UX checklistはreviewer-ownedのまま、今回の限定修正継続は利用者承認済み。

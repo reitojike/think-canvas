@@ -140,6 +140,9 @@ private val vermilion = Color(0xFFC54B32)
 private val muted = Color(0xFF8D8882)
 private val outline = Color(0xFFE8E6E2)
 private val toolbar = Color(0xFFF3F2EF)
+private val textEditorWidth = 166.dp
+private val textEditorMaxHeight = 150.dp
+private val editorToolbarHeight = 54.dp
 
 private class ViewportAnimationBoundary {
     var active = true
@@ -1202,17 +1205,6 @@ fun CanvasScreen(
         }
     }
 
-    LaunchedEffect(draft?.id, draft?.x, draft?.y, imeBottom, canvasSize) {
-        val current = draft ?: return@LaunchedEffect
-        if (canvasSize == IntSize.Zero || imeBottom == 0) return@LaunchedEffect
-        val (screenX, screenY) = viewport.worldToScreen(current.x, current.y)
-        val maxX = canvasSize.width - with(density) { 174.dp.toPx() }
-        val maxY = canvasSize.height - with(density) { 150.dp.toPx() }
-        val dx = (maxX - screenX).coerceAtMost(0f)
-        val dy = (maxY - screenY).coerceAtMost(0f)
-        if (dx != 0f || dy != 0f) viewport = viewport.pan(dx, dy)
-    }
-
     val pointerGeneration = gestureGeneration
     Box(
         modifier = Modifier.fillMaxSize().background(paper).safeDrawingPadding()
@@ -1998,7 +1990,17 @@ fun CanvasScreen(
             DisposableEffect(editorSession) {
                 onDispose { textEditorBounds = null; editorToolbarBounds = null }
             }
-            val (screenX, screenY) = viewport.worldToScreen(current.x, current.y)
+            val (worldScreenX, worldScreenY) = viewport.worldToScreen(current.x, current.y)
+            // IME avoidance owns only field presentation, never the world camera or draft position.
+            // safeDrawingPadding already excludes the IME; reserve the actual toolbar and scaled field.
+            val maxX = (canvasSize.width - with(density) {
+                textEditorWidth.toPx() * viewport.scale
+            }).coerceAtLeast(0f)
+            val maxY = (canvasSize.height - with(density) {
+                editorToolbarHeight.toPx() + textEditorMaxHeight.toPx() * viewport.scale
+            }).coerceAtLeast(0f)
+            val screenX = if (imeBottom > 0) worldScreenX.coerceIn(0f, maxX) else worldScreenX
+            val screenY = if (imeBottom > 0) worldScreenY.coerceIn(0f, maxY) else worldScreenY
             BasicTextField(
                 value = current.text,
                 onValueChange = { if (!latestExternalBlock.value()) draft = current.copy(text = it) },
@@ -2016,8 +2018,8 @@ fun CanvasScreen(
                         scaleY = viewport.scale
                         transformOrigin = TransformOrigin(0f, 0f)
                     }
-                    .width(166.dp)
-                    .heightIn(max = 150.dp)
+                    .width(textEditorWidth)
+                    .heightIn(max = textEditorMaxHeight)
                     .background(vermilion.copy(alpha = 0.07f), RoundedCornerShape(3.dp))
                     .drawBehind { drawLine(vermilion, Offset(0f, size.height), Offset(size.width, size.height), 1.dp.toPx()) }
                     .onGloballyPositioned { textEditorBounds = it.boundsInParent() }
@@ -2442,7 +2444,7 @@ fun CanvasScreen(
             }
         } else {
             Row(
-                modifier = Modifier.align(Alignment.BottomCenter).imePadding().fillMaxWidth().height(54.dp)
+                modifier = Modifier.align(Alignment.BottomCenter).imePadding().fillMaxWidth().height(editorToolbarHeight)
                     .onGloballyPositioned { editorToolbarBounds = it.boundsInParent() }
                     .background(toolbar)
                     .drawBehind { drawLine(outline, Offset.Zero, Offset(size.width, 0f), 1.dp.toPx()) }

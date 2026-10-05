@@ -1,5 +1,25 @@
 # 検証と収束
 
+## Issue #104: IME camera checkpoint（2026-10-05）
+
+旧main製品コードに新しいnative回帰を追加した標準focused run `20261005T142604Z-58104dcb5d4c41158caebced3c7ea532` はfresh XML **1/1/0/0**。sourceUnchanged/ownershipPassed=true、介入0。XML SHA256 `DC85D01B4E9E7523BB2631900876334A7FB58289CDCFA5F4077621BA5408EAFB`。最初のempty cancel後にcamera不変assertが失敗した。alpha.10物理端末の直接再現と区別する。
+
+| 観測 | canvas size | native IME bottom | world center | scale | pan | 固定要素screen位置 |
+| --- | --- | --- | --- | --- | --- | --- |
+| entry前 | 1080×2201 | 0 | (995,1530) | 0.9 | (-355.5,-276.5) | (815,1480) |
+| IME表示 | 1080×1381 | 883 | (1082.5,2056.2224) | 0.9 | (-434.25,-1160.1001) | (736,596) |
+| cancel / IME hidden後 | 1080×2201 | 0 | (1082.5,2056.2224) | 0.9 | (-434.25,-750.1001) | (736,1006) |
+
+root height2400、system bottom63、window focus成立は3点で同じ。canvas sizeは復元したが、world focusと固定要素位置が戻らず、上方向474px・左方向79pxのずれが残った。sizeの対称性と別camera writerをnative結果で区別できた。
+
+新回帰は5-cycle cancel/IME優先Back/確認継続→破棄、5-cycle Doneと既存編集/Room/world配置/Undo/Redo、Activity再生成とnative Dialog window focus往復を扱う。入力はtestのsession stateで開始してblank-tap arbitrationから分離し、実Activityのfield・input connection・native IME・通常終了操作を使う。各観測はnative insets、canvas、focus/panとdrawing一致が連続して安定した状態で比較する。任意の待機delayや許容差拡大は加えない。
+
+実機未接続。alpha.10の実機再現/非再現とrepresentative real-deviceでの修正版確認はT027に残し、CI成功から推定しない。PRのdebug APKは別applicationIdのため、継続利用版を上書きしない。
+
+補正後local lint・全単体189/0/0/0・debug/androidTest buildは2m27sで成功。公開境界273候補、diff check、Room schema変更なしを確認した。最初の補正後focused run `20261005T143703Z-c95c28d896964ea385a0b69e5682d68f` はcamera復帰を確認したが、確認Continue後のnative readinessがtimeoutした。具体的な原因は未確定のままとする。
+
+確認dialogの表示/消失とCompose idleを明示し、既存readiness待機へnative診断を加えたrun `20261005T144249Z-bed0067ce31240dda006d8ca2857c3a2` は **1/0/0/0**、sourceUnchanged/ownershipPassed=true、介入0。5-cycle cancel、IME優先Back、確認Continue→破棄、field表示領域、内容/Room/save/Undo/history不変を検証した。補正後の表示中focusは(995,1530)、panは(-355.5,-686.5)、hidden後は元のpan(-355.5,-276.5)と固定要素(815,1480)へ戻った。製品の#91 ownership/復帰effect、timeout10s、camera許容差は変更していない。最終candidateのfull CI/canonicalとDone/既存編集/再生成回帰はPR上の現行head証跡で確認する。
+
 ## 同一検索groupの始点復帰（2026-10-04）
 
 head3d98baeのCI37195996192は両job成功、fresh154/0/0/0、missing/extra/duplicate0。artifact11300419670、digest `sha256:ae116135210fe9723e10ae1d06a711d2dd85e885d6b50486618f67abc1a6260d`、XML SHA256 `697894AE90790D93BCF27B828E88C99CD9B574FC262911DD5A71F1DC0F24CA84`。最後の依頼5979263070（11:01:13Z）後の同head canonical review5405630218（11:05:45Z）は、同一検索groupのA→B→Aで不要なanchorが残るP2を指摘した。

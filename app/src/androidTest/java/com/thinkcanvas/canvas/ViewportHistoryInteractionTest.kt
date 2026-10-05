@@ -16,6 +16,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.ViewModelProvider
@@ -63,6 +64,10 @@ class ViewportHistoryInteractionTest {
     private val defaults get() = BoardSnapshot(texts = listOf(note, other, reference),
         shapes = listOf(rectangle), arrows = listOf(arrow), ink = listOf(stroke))
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
+
+    private data class CameraObservation(val canvas: Rect, val focus: ViewportFocus,
+        val viewport: Viewport, val marker: Offset, val imeVisible: Boolean,
+        val imeBottom: Int, val systemBottom: Int, val rootHeight: Int, val windowFocused: Boolean)
 
     private inner class Harness(val scenario: ActivityScenario<MainActivity>,
                                 val sessions: BoardSessionViewModel, val initial: BoardSnapshot) {
@@ -184,7 +189,7 @@ class ViewportHistoryInteractionTest {
         }
         fun waitSearchReady() = waitEditableImeReady("ボード内を探す")
         fun waitEditableImeReady(label: String) {
-            composeRule.waitUntil(10_000) {
+            try { composeRule.waitUntil(10_000) {
                 val focused = nodes(label).singleOrNull()?.config
                     ?.getOrNull(SemanticsProperties.Focused) == true
                 var ready = false
@@ -199,6 +204,21 @@ class ViewportHistoryInteractionTest {
                         insets.getInsets(WindowInsets.Type.ime()).bottom > 0
                 }
                 ready
+            } } catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
+                val field = nodes(label).singleOrNull()
+                var native = ""
+                scenario.onActivity {
+                    val root = it.window.decorView
+                    val view = root.findFocus()
+                    val input = it.getSystemService(InputMethodManager::class.java)
+                    val insets = root.rootWindowInsets
+                    native = "windowFocus=${root.hasWindowFocus()}, view=${view?.javaClass?.simpleName}, " +
+                        "active=${view?.let { input.isActive(it) }}, accepting=${input.isAcceptingText}, " +
+                        "imeVisible=${insets?.isVisible(WindowInsets.Type.ime())}, " +
+                        "imeBottom=${insets?.getInsets(WindowInsets.Type.ime())?.bottom}"
+                }
+                throw AssertionError("Editable readiness: field=${field?.boundsInWindow}, " +
+                    "focused=${field?.config?.getOrNull(SemanticsProperties.Focused)}, $native", timeout)
             }
             composeRule.waitForIdle()
         }
@@ -222,6 +242,70 @@ class ViewportHistoryInteractionTest {
         fun back() {
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             composeRule.waitForIdle()
+        }
+        fun cameraObservation(): CameraObservation {
+            val bounds = canvas
+            val marker = position(reference.text)
+            lateinit var observation: CameraObservation
+            scenario.onActivity {
+                val root = it.window.decorView
+                val insets = checkNotNull(root.rootWindowInsets)
+                observation = CameraObservation(bounds, checkNotNull(navigation.focus()),
+                    navigation.viewportState.value, marker, insets.isVisible(WindowInsets.Type.ime()),
+                    insets.getInsets(WindowInsets.Type.ime()).bottom,
+                    insets.getInsets(WindowInsets.Type.systemBars()).bottom, root.height, root.hasWindowFocus())
+            }
+            return observation
+        }
+        fun settledCamera(imeVisible: Boolean): CameraObservation {
+            var previous: CameraObservation? = null
+            var stable = 0
+            composeRule.waitUntil(10_000) {
+                val current = cameraObservation()
+                val (x, y) = current.viewport.worldToScreen(reference.x, reference.y)
+                val drawingMatches = kotlin.math.abs(current.marker.x - current.canvas.left - x) <= 2f &&
+                    kotlin.math.abs(current.marker.y - current.canvas.top - y) <= 2f
+                stable = if (current.imeVisible == imeVisible &&
+                    (current.imeBottom > 0) == imeVisible && current.windowFocused &&
+                    drawingMatches && current == previous) stable + 1 else 0
+                previous = current
+                stable >= 2
+            }
+            return checkNotNull(previous).also {
+                android.util.Log.i("ImeViewportRegression", it.toString())
+            }
+        }
+        fun assertCameraReturned(before: CameraObservation) {
+            composeRule.waitUntil(5_000) { editor.draft.value == null }
+            val after = settledCamera(imeVisible = false)
+            val evidence = "before=$before, after=$after"
+            assertEquals(evidence, before.canvas, after.canvas)
+            assertEquals(evidence, before.focus.centerX, after.focus.centerX, 2f / before.focus.scale)
+            assertEquals(evidence, before.focus.centerY, after.focus.centerY, 2f / before.focus.scale)
+            assertEquals(evidence, before.focus.scale, after.focus.scale, .001f)
+            assertEquals(evidence, before.marker.x, after.marker.x, 2f)
+            assertEquals(evidence, before.marker.y, after.marker.y, 2f)
+            assertFalse(navigation.canBack)
+            assertFalse(navigation.canForward)
+        }
+        fun openLowerDraft(before: CameraObservation) {
+            val (x, y) = before.viewport.screenToWorld(before.canvas.width * .65f, before.canvas.height * .85f)
+            // Isolate the IME/camera writer from blank-tap arbitration; input and exit are native.
+            composeRule.runOnUiThread { editor.draft.value = Draft(null, x, y) }
+            waitEditableImeReady("新しいテキスト")
+            val shown = settledCamera(imeVisible = true)
+            sameFocus(before.focus, shown.focus)
+            val field = nodes("新しいテキスト").single().boundsInWindow
+            val done = nodes("完了").first { it.config.contains(SemanticsActions.OnClick) }.boundsInWindow
+            assertTrue("Visible field must remain inside canvas above Done: $field/$shown/$done",
+                !field.isEmpty && field.left >= shown.canvas.left && field.right <= shown.canvas.right &&
+                    field.top >= shown.canvas.top && field.bottom <= done.top)
+        }
+        fun hideTextIme() {
+            assertTrue(instrumentation.uiAutomation.performGlobalAction(
+                android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
+            settledCamera(imeVisible = false)
+            assertNotNull(editor.draft.value)
         }
         fun nextPanAt() {
             fun drawingMatchesCamera(bounds: Rect, position: Offset): Boolean {
@@ -309,6 +393,105 @@ class ViewportHistoryInteractionTest {
         assertEquals(expected!!.centerX, actual!!.centerX, 3f)
         assertEquals(expected.centerY, actual.centerY, 3f)
         assertEquals(expected.scale, actual.scale, .005f)
+    }
+
+    @Test fun fiveImeCancelAndConfirmationCyclesReturnCameraWithoutHistoryOrSave() = withBoard {
+        val before = settledCamera(imeVisible = false)
+        repeat(5) { cycle ->
+            openLowerDraft(before)
+            when (cycle) {
+                1 -> { hideTextIme(); back() }
+                2 -> {
+                    composeRule.onNodeWithContentDescription("新しいテキスト").performTextReplacement("discard draft")
+                    hideTextIme()
+                    back()
+                    composeRule.onNodeWithText("編集内容を破棄しますか？").assertExists()
+                    composeRule.onNodeWithText("編集を続ける").performClick()
+                    composeRule.onNodeWithText("編集内容を破棄しますか？").assertDoesNotExist()
+                    composeRule.waitForIdle()
+                    waitEditableImeReady("新しいテキスト")
+                    settledCamera(imeVisible = true)
+                    hideTextIme()
+                    back()
+                    composeRule.onNodeWithText("破棄する").performClick()
+                }
+                else -> click("やめる")
+            }
+            assertCameraReturned(before)
+            unchanged()
+        }
+    }
+
+    @Test fun fiveImeDoneCyclesAndExistingEditKeepWorldPlacementAndUndo() = withBoard {
+        val before = settledCamera(imeVisible = false)
+        repeat(5) { cycle ->
+            openLowerDraft(before)
+            val draft = checkNotNull(editor.draft.value)
+            composeRule.onNodeWithContentDescription("新しいテキスト").performTextReplacement("saved $cycle")
+            click("完了")
+            assertCameraReturned(before)
+            val created = board.elements.single { it.text == "saved $cycle" }
+            assertEquals(draft.x, created.x, 0f)
+            assertEquals(draft.y, created.y, 0f)
+            assertEquals(board.snapshot(), saved())
+            assertEquals(cycle + 1, saves.get())
+        }
+        val original = board.elements.last()
+        composeRule.runOnUiThread {
+            editor.draft.value = Draft(original.id, original.x, original.y, original.text,
+                original.kind, original.color)
+        }
+        waitEditableImeReady("テキストを編集")
+        settledCamera(imeVisible = true)
+        composeRule.onNodeWithContentDescription("テキストを編集").performTextReplacement("edited existing")
+        click("完了")
+        assertCameraReturned(before)
+        val edited = board.elements.single { it.id == original.id }
+        assertEquals(original.x, edited.x, 0f)
+        assertEquals(original.y, edited.y, 0f)
+        assertEquals("edited existing", edited.text)
+        assertEquals(board.snapshot(), saved())
+        click("戻す")
+        assertEquals(original, board.elements.single { it.id == original.id })
+        assertTrue(board.canRedo)
+        assertCameraReturned(before)
+        click("進む")
+        assertEquals(edited, board.elements.single { it.id == original.id })
+        assertEquals(board.snapshot(), saved())
+        assertEquals(8, saves.get())
+        assertCameraReturned(before)
+    }
+
+    @Test fun imeCameraIsIndependentOfRecreationAndWindowFocus() = withBoard {
+        val before = settledCamera(imeVisible = false)
+        openLowerDraft(before)
+        val draft = checkNotNull(editor.draft.value)
+        scenario.recreate()
+        composeRule.waitForIdle()
+        waitEditableImeReady("新しいテキスト")
+        val recreated = settledCamera(imeVisible = true)
+        sameFocus(before.focus, recreated.focus)
+        assertEquals(draft, editor.draft.value)
+        hideTextIme()
+        lateinit var window: android.app.Dialog
+        scenario.onActivity {
+            window = android.app.Dialog(it).apply {
+                setContentView(android.widget.TextView(it).apply { text = "Window focus fixture" })
+                show()
+            }
+        }
+        composeRule.waitUntil(5_000) {
+            var focused = true
+            scenario.onActivity { focused = it.window.decorView.hasWindowFocus() }
+            !focused
+        }
+        scenario.onActivity { window.dismiss() }
+        val returned = settledCamera(imeVisible = false)
+        sameFocus(before.focus, returned.focus)
+        assertEquals(draft, editor.draft.value)
+        click("やめる")
+        assertCameraReturned(before)
+        unchanged()
     }
 
     @Test fun searchCyclePanPinchAndIndicatorRestoreWithoutContentOrSave() = withBoard {

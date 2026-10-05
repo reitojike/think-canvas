@@ -56,3 +56,11 @@ MVPはUS1。US2の内容操作/保存不変を確認しUS3の寿命/guardへ広�
 ## Delivery同期（2026-10-04）
 
 T012/T013/T016〜T022は[PR90](https://github.com/reitojike/think-canvas/pull/90)のhead 2dd8b354a3でCI154件/canonicalを収束し、merge 047b0a1、[Issue77完了proof](https://github.com/reitojike/think-canvas/issues/77#issuecomment-5979642387)でdelivery完了を確認した。次の必要な統合でcheckboxを同期するという記録に従い、本変更で反映する。過去CIの未確定原因を新しい証拠から推定し直さない。
+
+## Issue #104: IME cycleでのcamera drift
+
+- [x] T023 read-only geometry/insets/lifecycle checkpointでsize authorityと非対称camera writerを区別し、Spec010 FR-008とplanへ限定補正を記録する。既存reviewer-owned UX checklistは変更しない。利用者が限定修正継続を承認。
+- [x] T024 `ViewportHistoryInteractionTest.kt` にnative IME/size/focus/pan/固定要素の同時観測と5-cycle、empty cancel/Done/Back確認/既存編集、再生成/window focusの回帰を先に追加する。旧実装の結果と環境制限を記録する。
+- [ ] T025 `CanvasScreen.kt` のIME表示補助を入力欄の一時screen配置へ限定し、camera writerを除去する。world保存座標、表示bounds、#91、history/resizeを維持し、native回帰・lint/unit/build/公開境界を検証する。
+- [ ] T026 spec/plan/tasksと差分をconvergeし、current-head full CI・canonical review・fresh base・threadsを収束する。実機のalpha.10再現/補正後の再確認は未確認のまま明示する。今回のTask Contractはmerge/Issue closeを含まない。
+- [ ] T027 representative real-deviceでalpha.10の再現/非再現と修正版の反復5回・各終了経路・IME hidden・元の固定要素位置を確認し、Issue #104へ記録する。接続端末なしのため利用者確認が必要。
