@@ -193,3 +193,14 @@ current-head canonical review と unresolved thread 0 の証跡がない間は M
 PR #98 local full185/1/0/0の唯一の失敗は旧 nearbyOutsideTapIsConsumedBeforeBlankDoubleTapZoom の入力 interval precondition。これは今回の依頼で明示された旧 first-tap/editor 契約の再評価対象で、この PR の native shifted pair 回帰へ置換済み。共有PRへgesture補正は広げず、独立して実行中だった同一headのrequired CI185件成功を確認した。blind rerun は行わない。
 
 main更新の有限 surface は共有 checkpoint の5ファイル、Canvas の既存 external/save readiness、blank pending、置換済み shifted native 回帰、source/XML census。競合なしで共有側の authority を取り込み、blank arbitration の製品処理は8e50adcから変更しない。判定は BOUNDED_CORRECTION。追加1roundはbase更新と証跡更新のみ。旧headの成功を新候補へ流用せず、固定final headでunit163、Pixel9/API37全193件、current-head CI/canonical/fresh base/unresolved thread0を確認する。新しいmaterial findingはHOLD/checkpoint。
+## semantic chrome の HOLD / completeness checkpoint
+
+head135799dはlocal193/0/0/0・unit163/0/0/0・required CI193/0/0/0成功、source/XML exact/head/source不変。canonical review5408912978のP2で、pointerを通らないsemantic zoomがpending singleを残すことを確認しHOLDへ戻した。
+
+有限surfaceはanimateViewport/focusTarget/focusMatch/region-fit/indicator/restoreView、board pill、search open/input/close、tool expand/select/ink、selection share、editHistory/saveSnapshot、editor/dialog。board/restore/tool開始は同期取消済み。viewport、tool展開だけ、selection shareはcontextを維持でき、observerだけではpendingを失効できない。search input/closeとsave入口も同じauthority境界で照合した。
+
+判定BOUNDED_CORRECTION。追加1roundはanimateViewport/saveSnapshot入口と、search input/close・tool expand・selection shareのadmitted callbackに同期cancelBlankTapを置くこと、及びsemantic deadline regressionに限定する。倍率/animation/history/content/save writer/ツール/共有guardは変更しない。新material findingは再度HOLD/checkpoint。
+
+追加native回帰は補正前fresh exact1/1/0/0。zoomのsemantic callback後、observer/recomposition frameより前のdeadlineでDraft生成を確認した。source194件候補として記録し、旧193件結果を新headへ流用しない。
+
+限定補正後のfocused nativeはfresh source/XML exact **1/0/0/0**。一つのtestcase内でzoom（選択なし/あり）・tool展開・selection shareの4caseを完走した。deadline直前のsemantic callback後、observer/frame前にもDraft不在、選択保持、実際のtool/共有操作、zoomの1navigation、Room/content/save/Undo不変を確認した。新候補を固定し、unit163/全194件とcurrent-head CI/canonicalを確認する。旧135799dの193件結果は最終gateに使わない。

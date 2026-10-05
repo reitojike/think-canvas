@@ -12,3 +12,6 @@ Constitution の standard-first と位置保持を満たす。first world 座標
 現行 Task Contract は MERGE_READY 確認後の merge まで。Issue close は含まない。
 
 標準 timing/slop の参照: [Android GestureDetector](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/java/android/view/GestureDetector.java)。
+
+semantic callbackはpointer DOWNを通らないため、pendingの取消は既存authorityの入口でも同期実行する。animateViewportでzoom/search/region-fit/historyのnavigationを、saveSnapshotで保存に進むcontent操作を取消境界とする。search input/close、tool展開、selection shareのadmitted callbackもpendingを取消す。既存guard、animation/history、保存writer、各操作自体は変更しない。
+回帰はnative blank UP後、platform deadline直前にsemantic actionを実行し、observer/recomposition frameより前にも旧JobがDraftを生成しないことを確認する。選択ありのzoomと画像共有は選択を保持し、tool展開は実際の展開、zoomは一つのnavigation、各caseはRoom/content/save/Undo不変を確認する。

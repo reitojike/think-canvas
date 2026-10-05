@@ -861,6 +861,73 @@ class TextEditorDismissalTest {
         assertEquals(0, saves.get())
     }
 
+    @Test fun pendingBlankSingleRejectsSemanticChromeBeforeRecomposition() {
+        var verified = 0
+        for (action in listOf("zoom", "selectedZoom", "tools", "share")) withBoard {
+            val saves = trackSaves()
+            val selected = action == "selectedZoom" || action == "share"
+            if (selected) composeRule.onNodeWithContentDescription(original.text).performClick()
+            val label = when (action) {
+                "tools" -> "図形ツールを開く"
+                "share" -> "選択範囲を画像で共有"
+                else -> "倍率を切り替える、"
+            }
+            val click = checkNotNull(composeRule.onNodeWithContentDescription(label,
+                substring = action == "zoom" || action == "selectedZoom")
+                .fetchSemanticsNode().config[SemanticsActions.OnClick].action)
+            val history = sessions.viewportHistoryFor(1L, BoardSnapshot())
+            val before = history.viewportState.value
+            val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+                .fetchSemanticsNode().layoutInfo.viewConfiguration
+            val location = point(.1f, .23f)
+            val clock = composeRule.mainClock
+            val autoAdvance = clock.autoAdvance
+            val started = clock.currentTime
+            try {
+                clock.autoAdvance = false
+                nativeBlankSingle(location)
+                repeat(3) { clock.advanceTimeByFrame() }
+                clock.advanceTimeBy(configuration.doubleTapTimeoutMillis - (clock.currentTime - started) - 1,
+                    ignoreFrameDuration = true)
+                scenario.onActivity {
+                    assertEquals(null, editor.draft.value)
+                    assertTrue(click.invoke())
+                }
+                // A semantic action must cancel before any observer/dispose frame can help.
+                clock.advanceTimeBy(1, ignoreFrameDuration = true)
+                scenario.onActivity { assertEquals("$action must invalidate the pending single", null, editor.draft.value) }
+                clock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+            } finally {
+                clock.autoAdvance = autoAdvance
+            }
+            if (action == "share") {
+                composeRule.waitUntil(10_000) {
+                    composeRule.onAllNodesWithText("画像で共有").fetchSemanticsNodes().isNotEmpty()
+                }
+                assertTrue(InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(
+                    android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
+                composeRule.waitUntil(5_000) {
+                    composeRule.onAllNodesWithText("画像で共有").fetchSemanticsNodes().isEmpty()
+                }
+            }
+            assertClosed()
+            assertEquals(null, editor.draft.value)
+            if (selected) assertExistingSelected(original)
+            if (action == "tools") composeRule.onNodeWithContentDescription("ペン").assertIsDisplayed()
+            if (action == "zoom" || action == "selectedZoom") {
+                composeRule.waitUntil(5_000) { history.canBack }
+                composeRule.runOnUiThread {
+                    assertEquals(before, history.back())
+                    assertFalse("Semantic zoom records one navigation", history.canBack)
+                }
+            } else assertFalse(history.canBack)
+            assertUnchanged()
+            assertEquals(0, saves.get())
+            verified++
+        }
+        assertEquals(4, verified)
+    }
+
     private fun nativeBlankSingle(point: Offset): Long {
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
         val down = SystemClock.uptimeMillis()

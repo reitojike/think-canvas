@@ -643,6 +643,7 @@ fun CanvasScreen(
     }
 
     fun animateViewport(target: Viewport, group: Any? = null, record: Boolean = true) {
+        cancelBlankTap()
         stopViewportAnimation()
         pendingHistoryFocus = null
         val origin = viewport
@@ -746,6 +747,7 @@ fun CanvasScreen(
 
     fun saveSnapshot(closeDraft: Boolean = false) {
         if (closeDraft && pendingDraftAcknowledgement != null) return
+        cancelBlankTap()
         val acknowledgement = onRequestSave(board.snapshot())
         if (closeDraft) pendingDraftAcknowledgement = acknowledgement
     }
@@ -1999,6 +2001,7 @@ fun CanvasScreen(
                     verticalAlignment = Alignment.CenterVertically) {
                     BasicTextField(searchQuery, onValueChange = {
                         if (!latestExternalBlock.value()) {
+                            cancelBlankTap()
                             searchQuery = it
                             searchPosition = 0
                         }
@@ -2034,6 +2037,7 @@ fun CanvasScreen(
                         Text("›", color = ink, fontSize = 24.sp)
                     }
                     IconButton(onClick = {
+                        cancelBlankTap()
                         searchOpen = false; searchQuery = ""; searchPosition = 0; hideEditorIme()
                     }, modifier = Modifier.size(44.dp).semantics { contentDescription = "検索を閉じる" }) {
                         Text("×", color = ink, fontSize = 22.sp)
@@ -2150,6 +2154,7 @@ fun CanvasScreen(
                 SpatialTools(tool, toolsExpanded, !saveBlocked(),
                     onExpand = {
                         if (!saveBlocked()) {
+                            cancelBlankTap()
                             if (tool == SpatialTool.NONE) toolsExpanded = !toolsExpanded
                             else finishToolInteraction()
                         }
@@ -2241,7 +2246,10 @@ fun CanvasScreen(
                         onDispose { chromeBounds.remove("shareSelection") }
                     }
                     val enabled = !saveBlocked()
-                    Button(onClick = { onShareSelection(selectedIds.toSet()) }, enabled = enabled,
+                    Button(onClick = {
+                        cancelBlankTap()
+                        onShareSelection(selectedIds.toSet())
+                    }, enabled = enabled,
                         modifier = Modifier.height(48.dp).semantics {
                             contentDescription = "選択範囲を画像で共有"
                             if (!enabled) disabled()
