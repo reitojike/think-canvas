@@ -22,6 +22,29 @@ import com.thinkcanvas.canvas.ArrowEnd
 import com.thinkcanvas.canvas.ShapeElement
 import com.thinkcanvas.canvas.ShapeKind
 import com.thinkcanvas.canvas.BoardSnapshot
+import com.thinkcanvas.canvas.ImageElement
+
+@Entity(tableName = "image_elements")
+data class ImageElementRow(
+    @PrimaryKey val id: String,
+    val boardId: Long,
+    val assetId: String,
+    val x: Float,
+    val y: Float,
+    val width: Float,
+    val height: Float,
+    val intrinsicWidth: Int,
+    val intrinsicHeight: Int,
+    val altText: String,
+) {
+    fun toModel() = ImageElement(id, assetId, x, y, width, height, intrinsicWidth, intrinsicHeight, altText)
+
+    companion object {
+        fun fromModel(boardId: Long, image: ImageElement) = ImageElementRow(image.id, boardId,
+            image.assetId, image.x, image.y, image.width, image.height,
+            image.intrinsicWidth, image.intrinsicHeight, image.altText)
+    }
+}
 
 @Entity(tableName = "boards")
 data class BoardRow(
@@ -136,6 +159,18 @@ data class ArrowElementRow(
 
 @Dao
 interface CanvasDao {
+    @Query("SELECT * FROM image_elements WHERE boardId = :boardId ORDER BY rowid")
+    suspend fun images(boardId: Long): List<ImageElementRow>
+
+    @Query("SELECT DISTINCT assetId FROM image_elements")
+    suspend fun allImageAssetIds(): List<String>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putImages(images: List<ImageElementRow>)
+
+    @Query("DELETE FROM image_elements WHERE boardId = :boardId")
+    suspend fun clearImages(boardId: Long)
+
     @Query("SELECT * FROM boards ORDER BY updatedAt DESC, id DESC")
     suspend fun boards(): List<BoardRow>
 
@@ -224,7 +259,8 @@ interface CanvasDao {
         replaceAll(row.id, snapshot.texts.map { TextElementRow.fromModel(row.id, it) },
             snapshot.shapes.map { SpatialElementRow.fromModel(row.id, it) },
             snapshot.arrows.map { ArrowElementRow.fromModel(row.id, it) },
-            snapshot.ink.flatMap { InkStrokeRow.fromModel(row.id, it) })
+            snapshot.ink.flatMap { InkStrokeRow.fromModel(row.id, it) },
+            snapshot.images.map { ImageElementRow.fromModel(row.id, it) })
         return row
     }
 
@@ -235,20 +271,23 @@ interface CanvasDao {
         spatialElements: List<SpatialElementRow>,
         arrows: List<ArrowElementRow>,
         inkStrokes: List<InkStrokeRow> = emptyList(),
+        images: List<ImageElementRow> = emptyList(),
     ) {
         require(board(boardId) != null) { "保存先のボードが見つかりません" }
         require((elements.map { it.boardId } + spatialElements.map { it.boardId } +
-            arrows.map { it.boardId } + inkStrokes.map { it.boardId }).all { it == boardId }) {
+            arrows.map { it.boardId } + inkStrokes.map { it.boardId } + images.map { it.boardId }).all { it == boardId }) {
             "別ボードの要素が含まれています"
         }
         clearElements(boardId)
         clearSpatialElements(boardId)
         clearArrows(boardId)
         clearInkStrokes(boardId)
+        clearImages(boardId)
         putElements(elements)
         putSpatialElements(spatialElements)
         putArrows(arrows)
         putInkStrokes(inkStrokes)
+        putImages(images)
         setUpdatedAt(boardId, nextUpdateTime())
     }
 
@@ -259,6 +298,7 @@ interface CanvasDao {
         spatialElements: List<SpatialElementRow>,
         arrows: List<ArrowElementRow>,
         inkStrokes: List<InkStrokeRow> = emptyList(),
+        images: List<ImageElementRow> = emptyList(),
     ) {
         val existing = shareReceipt(receipt.requestId)
         if (existing != null) {
@@ -268,10 +308,11 @@ interface CanvasDao {
             return
         }
 
-        require(elements.any { it.id == receipt.elementId && it.boardId == receipt.boardId }) {
-            "共有要求の文字が保存内容に含まれていません"
+        require(elements.any { it.id == receipt.elementId && it.boardId == receipt.boardId } ||
+            images.any { it.id == receipt.elementId && it.boardId == receipt.boardId }) {
+            "取り込み要求の要素が保存内容に含まれていません"
         }
-        replaceAll(receipt.boardId, elements, spatialElements, arrows, inkStrokes)
+        replaceAll(receipt.boardId, elements, spatialElements, arrows, inkStrokes, images)
         putShareReceipt(receipt)
     }
 
@@ -282,20 +323,29 @@ interface CanvasDao {
         clearSpatialElements(boardId)
         clearArrows(boardId)
         clearInkStrokes(boardId)
+        clearImages(boardId)
         return removeBoard(boardId) == 1
     }
 }
 
 @Database(
     entities = [BoardRow::class, TextElementRow::class, SpatialElementRow::class,
-        ArrowElementRow::class, InkStrokeRow::class, ShareImportReceiptRow::class],
-    version = 3,
+        ArrowElementRow::class, InkStrokeRow::class, ShareImportReceiptRow::class, ImageElementRow::class],
+    version = 4,
     exportSchema = true,
 )
 abstract class CanvasDatabase : RoomDatabase() {
     abstract fun canvasDao(): CanvasDao
 
     companion object {
+        val MIGRATION_3_4 = Migration(3, 4) { connection ->
+            connection.execSQL("""CREATE TABLE IF NOT EXISTS `image_elements` (
+                `id` TEXT NOT NULL, `boardId` INTEGER NOT NULL, `assetId` TEXT NOT NULL,
+                `x` REAL NOT NULL, `y` REAL NOT NULL, `width` REAL NOT NULL, `height` REAL NOT NULL,
+                `intrinsicWidth` INTEGER NOT NULL, `intrinsicHeight` INTEGER NOT NULL,
+                `altText` TEXT NOT NULL, PRIMARY KEY(`id`))""".trimIndent())
+        }
+
         val MIGRATION_1_2 = Migration(1, 2) { connection ->
             connection.execSQL("""CREATE TABLE IF NOT EXISTS `ink_strokes` (
                 `id` TEXT NOT NULL, `boardId` INTEGER NOT NULL, `groupId` TEXT NOT NULL,
@@ -314,6 +364,6 @@ abstract class CanvasDatabase : RoomDatabase() {
             context.applicationContext,
             CanvasDatabase::class.java,
             "thinkcanvas.db",
-        ).setDriver(AndroidSQLiteDriver()).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+        ).setDriver(AndroidSQLiteDriver()).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
     }
 }

@@ -47,6 +47,8 @@ fun ArrowAttachmentDialog(
             ShapeKind.REGION -> "囲み"
         }
         shape.id to "$kind ${index + 1}${shape.name.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ""}"
+    } + snapshot.images.filter { projection.visible(it.id) }.mapIndexed { index, image ->
+        image.id to "画像 ${index + 1}: ${image.altText.ifBlank { "画像" }.take(24)}"
     }
     val current = (if (endKind == HandleKind.FROM) arrow.from else arrow.to) as? ArrowEnd.Attached
     var selectedTarget by remember(arrow.id, endKind, targets) {

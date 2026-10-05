@@ -20,7 +20,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
-import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.BoardSaveState
@@ -183,9 +182,10 @@ class ViewportHistoryInteractionTest {
             hideSearchIme()
             composeRule.waitUntil(5_000) { nodes("1件目、全").isNotEmpty() }
         }
-        fun waitSearchReady() {
+        fun waitSearchReady() = waitEditableImeReady("ボード内を探す")
+        fun waitEditableImeReady(label: String) {
             composeRule.waitUntil(10_000) {
-                val focused = nodes("ボード内を探す").singleOrNull()?.config
+                val focused = nodes(label).singleOrNull()?.config
                     ?.getOrNull(SemanticsProperties.Focused) == true
                 var ready = false
                 scenario.onActivity { activity ->
@@ -224,6 +224,11 @@ class ViewportHistoryInteractionTest {
             composeRule.waitForIdle()
         }
         fun nextPanAt() {
+            fun drawingMatchesCamera(bounds: Rect, position: Offset): Boolean {
+                val (x, y) = navigation.viewportState.value.worldToScreen(reference.x, reference.y)
+                return kotlin.math.abs(position.x - bounds.left - x) <= 2f &&
+                    kotlin.math.abs(position.y - bounds.top - y) <= 2f
+            }
             var previousBounds: Rect? = null
             var previousFocus: ViewportFocus? = null
             var previousPosition: Offset? = null
@@ -238,7 +243,8 @@ class ViewportHistoryInteractionTest {
                 val bounds = canvas
                 val focus = navigation.focus()
                 val referencePosition = position(reference.text)
-                stable = if (imeHidden && !bounds.isEmpty && focus != null && bounds == previousBounds &&
+                stable = if (imeHidden && editor.draft.value == null && !bounds.isEmpty && focus != null &&
+                    drawingMatchesCamera(bounds, referencePosition) && bounds == previousBounds &&
                     focus == previousFocus && referencePosition == previousPosition) stable + 1 else 0
                 previousBounds = bounds
                 previousFocus = focus
@@ -248,10 +254,17 @@ class ViewportHistoryInteractionTest {
             composeRule.waitForIdle()
             val point = Offset(canvas.left + canvas.width * .2f, canvas.top + canvas.height * .72f)
             val before = position(reference.text)
+            val beforeFocus = checkNotNull(navigation.focus())
             pan(Offset(90f, 25f), point)
+            composeRule.waitUntil(5_000) { drawingMatchesCamera(canvas, position(reference.text)) }
             val after = position(reference.text)
-            assertEquals(before.x + 90f, after.x, 2f)
-            assertEquals(before.y + 25f, after.y, 2f)
+            val afterFocus = checkNotNull(navigation.focus())
+            val evidence = "before=$before/$beforeFocus, after=$after/$afterFocus, canvas=$canvas"
+            assertEquals(evidence, beforeFocus.scale, afterFocus.scale, .001f)
+            assertEquals(evidence, 90f, (beforeFocus.centerX - afterFocus.centerX) * beforeFocus.scale, 2f)
+            assertEquals(evidence, 25f, (beforeFocus.centerY - afterFocus.centerY) * beforeFocus.scale, 2f)
+            assertEquals(evidence, before.x + 90f, after.x, 2f)
+            assertEquals(evidence, before.y + 25f, after.y, 2f)
         }
     }
 
@@ -476,15 +489,30 @@ class ViewportHistoryInteractionTest {
         composeRule.waitForIdle()
         sameFocus(camera, navigation.focus())
         assertTrue(nodes("前の視点へ戻る").isEmpty())
+        // Observe native IME ownership and dismissal before removing the editor node.
+        waitEditableImeReady("新しいテキスト")
+        val draftSession = checkNotNull(editor.draft.value).sessionId
+        assertTrue(instrumentation.uiAutomation.performGlobalAction(
+            android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
+        composeRule.waitUntil(5_000) {
+            var hidden = false
+            scenario.onActivity {
+                val insets = checkNotNull(it.window.decorView.rootWindowInsets)
+                hidden = !insets.isVisible(WindowInsets.Type.ime()) &&
+                    insets.getInsets(WindowInsets.Type.ime()).bottom == 0
+            }
+            hidden
+        }
+        assertEquals(draftSession, checkNotNull(editor.draft.value).sessionId)
         composeRule.runOnUiThread { editor.draft.value = null }
-        closeSoftKeyboard()
         composeRule.waitForIdle()
+        val toolCamera = navigation.focus()
         val toolStale = marker("前の視点へ戻る").config[SemanticsActions.OnClick].action!!
         val expand = nodes("図形ツールを開く").first { it.config.contains(SemanticsActions.OnClick) }
             .config[SemanticsActions.OnClick].action!!
         composeRule.runOnUiThread { expand.invoke(); toolStale.invoke() }
         composeRule.waitForIdle()
-        sameFocus(camera, navigation.focus())
+        sameFocus(toolCamera, navigation.focus())
         assertTrue(nodes("前の視点へ戻る").isEmpty())
         back()
         nextPanAt()

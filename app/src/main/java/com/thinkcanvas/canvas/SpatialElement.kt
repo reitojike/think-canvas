@@ -49,4 +49,5 @@ data class BoardSnapshot(
     val shapes: List<ShapeElement> = emptyList(),
     val arrows: List<ArrowElement> = emptyList(),
     val ink: List<InkElement> = emptyList(),
+    val images: List<ImageElement> = emptyList(),
 )

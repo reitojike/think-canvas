@@ -16,6 +16,58 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BoardSessionViewModelTest {
+    private fun image() = com.thinkcanvas.canvas.ImageElement(
+        assetId = "8c0a9b01-94fd-404c-944d-62c1249b4d01", x = 1f, y = 2f,
+        width = 200f, height = 100f, intrinsicWidth = 400, intrinsicHeight = 200)
+
+    @Test fun imageImportSharesSaveOwnerAndReentryAfterUndoCannotAddAnotherImage() {
+        val sessions = testSessions()
+        val image = image()
+        val receipt = com.thinkcanvas.data.ShareImportReceiptRow("image-request", 1, image.id)
+        val durable = CompletableDeferred<Unit>()
+        var writes = 0
+        sessions.setSaveOperation { _, _ -> error("image used ordinary save") }
+        sessions.setShareSaveOperation { _, snapshot, seen ->
+            writes++; assertEquals(receipt, seen); assertEquals(listOf(image), snapshot.images); durable
+        }
+        val ack = sessions.requestImageImport(1, BoardSnapshot(), receipt, image)!!
+        assertSame(ack, sessions.requestImageImport(1, BoardSnapshot(), receipt, image))
+        durable.complete(Unit)
+        val board = sessions.stateFor(1, BoardSnapshot())
+        assertTrue(board.undo()); assertFalse(board.canUndo)
+        assertSame(ack, sessions.requestImageImport(1, BoardSnapshot(), receipt, image))
+        assertTrue(board.images.isEmpty()); assertEquals(1, writes)
+    }
+
+    @Test fun imageSaveFailureRetriesSamePatchAndPublishesUndoRootsUntilDiscard() {
+        val sessions = testSessions()
+        val image = image()
+        val receipt = com.thinkcanvas.data.ShareImportReceiptRow("image-request", 1, image.id)
+        val roots = mutableMapOf<String, Set<String>>()
+        sessions.setSaveOperation { _, _ -> CompletableDeferred(Unit) }
+        sessions.setImageRootsOperation { owner, assets -> roots[owner] = assets }
+        val first = CompletableDeferred<Unit>()
+        val second = CompletableDeferred<Unit>()
+        var writes = 0
+        sessions.setShareSaveOperation { _, snapshot, seen ->
+            assertEquals(receipt, seen); assertEquals(listOf(image), snapshot.images)
+            if (++writes == 1) first else second
+        }
+        val ack = sessions.requestImageImport(1, BoardSnapshot(), receipt, image)!!
+        first.completeExceptionally(IllegalStateException("故障"))
+        assertTrue(sessions.saveStateFor(1, BoardSnapshot()).value is BoardSaveState.Failed)
+        assertEquals(setOf(image.assetId), roots.values.single())
+        sessions.retrySave(1); second.complete(Unit)
+        assertTrue(ack.isCompleted)
+        val board = sessions.stateFor(1, BoardSnapshot())
+        board.undo()
+        sessions.setSaveOperation { _, _ -> CompletableDeferred(Unit) }
+        sessions.requestSave(1, board.snapshot())
+        assertEquals(setOf(image.assetId), roots.values.single())
+        sessions.discard(1)
+        assertTrue(roots.values.single().isEmpty())
+    }
+
     @Test fun shareAddsOneUndoAndReentryAfterUndoDoesNotReplayTheRequest() {
         val sessions = testSessions()
         val initial = BoardSnapshot()

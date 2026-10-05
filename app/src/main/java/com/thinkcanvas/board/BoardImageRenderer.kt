@@ -7,6 +7,9 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
+import android.graphics.RectF
+import com.thinkcanvas.data.ImageAssetReader
+import com.thinkcanvas.image.ImageDecodePolicy
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
@@ -54,7 +57,7 @@ object BoardImageRenderer {
         return resolved
     }
 
-    fun render(plan: SharePlan): Bitmap {
+    fun render(plan: SharePlan, images: ImageAssetReader? = null): Bitmap {
         val bitmap = Bitmap.createBitmap(plan.width, plan.height, Bitmap.Config.ARGB_8888)
         try {
             val canvas = Canvas(bitmap)
@@ -67,6 +70,16 @@ object BoardImageRenderer {
             canvas.save()
             canvas.concat(transform)
             val inkRenderer = CanvasStrokeRenderer.create()
+            plan.source.images.filter { it.id in plan.includedIds }.forEach { image ->
+                val requestedSide = (maxOf(image.width, image.height) * scale).toInt()
+                    .coerceIn(1, ImageDecodePolicy.MAX_SIDE)
+                val decoded = checkNotNull(images) { "画像素材を読み込めません" }.decode(image.assetId, requestedSide)
+                try {
+                    canvas.drawBitmap(decoded, null,
+                        RectF(image.x, image.y, image.x + image.width, image.y + image.height),
+                        Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+                } finally { decoded.recycle() }
+            }
             drawInk(canvas, plan, transform, InkKind.MARKER, inkRenderer)
             drawShapes(canvas, plan)
             drawArrows(canvas, plan)

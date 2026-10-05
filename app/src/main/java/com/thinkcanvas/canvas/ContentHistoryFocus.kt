@@ -10,7 +10,8 @@ fun affectedHistoryIds(before: BoardSnapshot, after: BoardSnapshot): Set<String>
         }
     }
     val targets = changed(before.texts, after.texts) { it.id } +
-        changed(before.shapes, after.shapes) { it.id }
+        changed(before.shapes, after.shapes) { it.id } +
+        changed(before.images, after.images) { it.id }
     return buildSet {
         addAll(targets)
         addAll(changed(before.ink, after.ink) { it.id })

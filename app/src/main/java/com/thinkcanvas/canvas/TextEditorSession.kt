@@ -32,6 +32,8 @@ internal data class RegionNameDraft(
 class TextEditorSession internal constructor() {
     internal val draft = mutableStateOf<Draft?>(null)
     internal val regionNameDraft = mutableStateOf<RegionNameDraft?>(null)
+    internal val imageDescriptionDraft = mutableStateOf<ImageDescriptionDraft?>(null)
+    internal val pendingImageAcknowledgement = mutableStateOf<BoardSaveAcknowledgement?>(null)
     internal val pendingDraftAcknowledgement = mutableStateOf<BoardSaveAcknowledgement?>(null)
     internal val pendingNewElementId = mutableStateOf<String?>(null)
 }

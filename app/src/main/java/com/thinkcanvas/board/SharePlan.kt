@@ -31,7 +31,7 @@ fun planShare(source: BoardSnapshot, selectedIds: Set<String>? = null,
               renderedBounds: Map<String, WorldBounds> = emptyMap(),
               typography: ExportTypography = ExportTypography()): SharePlan {
     val allIds = (source.texts.map { it.id } + source.shapes.map { it.id } +
-        source.arrows.map { it.id } + source.ink.map { it.id }).toSet()
+        source.arrows.map { it.id } + source.ink.map { it.id } + source.images.map { it.id }).toSet()
     val included = if (selectedIds == null) allIds.toMutableSet()
         else selectedIds.intersect(allIds).toMutableSet()
     require(included.isNotEmpty()) { "画像にする内容がありません" }
@@ -52,6 +52,8 @@ fun planShare(source: BoardSnapshot, selectedIds: Set<String>? = null,
                 center(it.id)?.let(area::contains) == true }
                 .forEach { included += it.id }
             source.ink.filter { center(it.id)?.let(area::contains) == true }
+                .forEach { included += it.id }
+            source.images.filter { center(it.id)?.let(area::contains) == true }
                 .forEach { included += it.id }
         }
         source.arrows.filter { arrow ->

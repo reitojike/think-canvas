@@ -38,9 +38,16 @@ enum class SpatialTool(val label: String, val icon: String, @StringRes val label
 fun SpatialTools(tool: SpatialTool, expanded: Boolean, enabled: Boolean,
                  onExpand: () -> Unit, onSelect: (SpatialTool) -> Unit,
                  onAccessibleAction: (SpatialTool) -> Boolean,
-                 onInkSelect: (InkKind) -> Unit) {
+                 onInkSelect: (InkKind) -> Unit, onImageAdd: (() -> Unit)? = null) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
         if (expanded) {
+            if (onImageAdd != null) Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("画像を追加", color = Color.White, fontSize = 12.sp,
+                    modifier = Modifier.background(Color(0xFF23211E), RoundedCornerShape(5.dp))
+                        .padding(horizontal = 8.dp, vertical = 5.dp))
+                ToolButton("▧", "画像を追加", enabled, onClick = onImageAdd)
+            }
             Row(verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("ペン", color = Color.White, fontSize = 12.sp,
