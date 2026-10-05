@@ -14,3 +14,14 @@ internal suspend fun loadSharePreviewIfReady(
     val candidate = candidateId()
     if (isReady()) present(boards, candidate)
 }
+
+/** Recheck the captured picker/preview after store I/O before changing its destination. */
+internal suspend fun loadShareBoardsIfCurrent(
+    isCurrent: () -> Boolean,
+    loadBoards: suspend () -> List<BoardRow>,
+    publish: (List<BoardRow>) -> Unit,
+) {
+    if (!isCurrent()) return
+    val boards = loadBoards()
+    if (isCurrent()) publish(boards)
+}

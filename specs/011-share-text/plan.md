@@ -131,3 +131,13 @@ PR #97 の CI で空の共有 picker から作成後の preview 待ちが失敗�
 回帰は native AtomicFile の startWrite を latch で固定し、同 token の別 owner read と、別 token への task discard を割り込ませる。公開の2引数 constructor は維持し、internal constructor だけで同じ native primitive を渡せるようにする。generic storage backend や test専用状態ownerは追加しない。旧 file が破棄される前の write/read-back 完了と、current token の本文保持を照合する。
 
 picker の操作前提は visible text だけでなく phase=PICKER / writing=false と利用可能な button を確認する。既存 raw guard、操作回数、10秒上限、preview / content / 保存の期待値を維持する。
+
+## picker / preview lookup の stale result follow-up
+
+PR #97 head0e7fa10のrequired CIは194/1/0/0で、empty-createのpreview待機が失敗した。今回のlogにはAtomicFile例外がないため、IO排他の再発と断定しない。Process #36の有限checkpointにより、共有先lookupの別responsibilityとして分離する。
+
+MainActivityのPICKER/PREVIEWはstore.boardsのsuspend後にcaptured requestとlive phaseを混在させる。pickerの古いqueryが新board選択後に戻ると、古いdestination=nullで新previewをmissing扱いし得る。既存SharePreviewAdmissionの局所関数として、captured ShareImportStateのidentityをawait前後に再検査し、同じstateの場合だけ一覧とmissing判定をpublishする。effect cancellation/recompositionより前のguardをauthorityにする。新状態owner、writer、generic coordinatorは追加しない。
+
+controlled unitではqueryをDeferredで止め、pickerからnew-board previewへの遷移、cancel/別要求への遷移、current previewの既存/欠落destinationを照合する。実際のempty-create native回帰と全件GMDも確認する。board create、checkpoint IO、Room/save/Undo、blank arbitration、schema/dependenciesは変更しない。新material findingは補正前にHOLD/checkpointする。
+
+controlled raceは補正前3/2/0/0、補正後3/0/0/0。実画面のempty-create focusedはfresh exact1/0/0/0。取消fixtureはEMPTYを明示し、固定final headのfull unitでも確認する。旧CIのtimeout原因をこの結果だけで断定しない。
