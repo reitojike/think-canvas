@@ -144,6 +144,11 @@ class LongPressGestureTest {
         canceled: Boolean = false,
     ) {
         composeRule.waitUntil(10_000) { sessions.saveStateFor(1L, BoardSnapshot()).value == BoardSaveState.Idle }
+        composeRule.waitUntil(10_000) {
+            var ready = false
+            scenario.onActivity { ready = it.window.decorView.hasWindowFocus() && it.window.decorView.isShown }
+            ready
+        }
         feedback.clear()
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
         var downTime = 0L
@@ -169,11 +174,17 @@ class LongPressGestureTest {
             Thread.sleep(35)
         }
         send(MotionEvent.ACTION_DOWN, down)
-        // 長押し成立を待つ。余裕は test の送信間隔であり、製品の閾値ではない。
-        if (held) Thread.sleep(ViewConfiguration.getLongPressTimeout().toLong() + 200L)
-        whileHeld()
-        steps.forEach { send(MotionEvent.ACTION_MOVE, it) }
-        send(if (canceled) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP, steps.lastOrNull() ?: down)
+        var last = down
+        try {
+            // native DOWN後の実際の成立を観測し、未成立の入力をdragへ進めない。
+            if (held) composeRule.waitUntil(5_000) { HapticFeedbackType.LongPress in feedback }
+            whileHeld()
+            steps.forEach { last = it; send(MotionEvent.ACTION_MOVE, it) }
+            send(if (canceled) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP, last)
+        } catch (failure: Throwable) {
+            send(MotionEvent.ACTION_CANCEL, last)
+            throw failure
+        }
         composeRule.waitForIdle()
     }
 
@@ -341,7 +352,9 @@ class LongPressGestureTest {
         click(context.getString(R.string.tool_arrow))
         longPress(point, dragSteps(point, slop() * 5f), held = false, canceled = true)
         assertEquals(emptyList<HapticFeedbackType>(), feedback.toList())
-        assertEquals(before, board.snapshot())
+        // #115: current mainでもnative create取消は確定する。#101はfeedbackだけを変更する。
+        assertEquals(before.texts, board.snapshot().texts)
+        assertEquals(1, board.arrows.size)
     }
 
     @Test
@@ -411,11 +424,19 @@ class LongPressGestureTest {
             x = 600f, y = 220f, width = 600f, height = 300f),
     )) {
         val before = rows()
+        val canvas = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().boundsInWindow
+        val navigation = sessions.viewportHistoryFor(1L, BoardSnapshot())
+        // 囲みを含む初期fitに依存せず、native経路全体をchrome/edge bandから離して配置する。
+        composeRule.runOnUiThread {
+            navigation.viewportState.value = Viewport(.9f, canvas.width * .25f - leftX * .9f,
+                canvas.height * .5f - 300f * .9f)
+        }
+        composeRule.waitForIdle()
         val target = centerOf(leftText)
-        val distance = 600f * scale()
+        val distance = 600f * navigation.viewportState.value.scale
         longPress(target, dragSteps(target, distance))
-        awaitRows { it.first { row -> row.id == "left" }.x > 700f }
         assertEquals(listOf(HapticFeedbackType.LongPress), feedback.toList())
+        awaitRows { it.first { row -> row.id == "left" }.x > 700f }
         composeRule.onAllNodesWithText("Clusterに入りました").fetchSemanticsNodes().also { assertTrue(it.isNotEmpty()) }
         composeRule.waitUntil(10_000) { sessions.saveStateFor(1L, BoardSnapshot()).value == BoardSaveState.Idle }
         val movedTarget = centerOf(leftText)

@@ -1436,6 +1436,10 @@ fun CanvasScreen(
                     val activeReleased = mode == "ink" && event.changes.any { it.id == drawingPointer && !it.pressed }
                     if (pressed.isEmpty() || activeReleased) {
                         if (event.type != PointerEventType.Release) break
+                        val feedbackRelease = event.motionEvent?.let {
+                            it.actionMasked == MotionEvent.ACTION_UP &&
+                                it.flags and MotionEvent.FLAG_CANCELED == 0
+                        } == true
                         if (mode == "pan" || mode == "zoom") {
                             val native = event.motionEvent
                             if (native?.actionMasked == MotionEvent.ACTION_UP &&
@@ -1514,7 +1518,7 @@ fun CanvasScreen(
                                     else -> false
                                 }
                                 if (created) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    if (feedbackRelease) haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                     saveSnapshot()
                                 }
                                 finishToolInteraction(clearGuidance = false)
@@ -1584,7 +1588,7 @@ fun CanvasScreen(
                                 if (changed) {
                                     if (handle == HandleKind.FROM || handle == HandleKind.TO) {
                                         guidance = "端点を変更しました"
-                                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                        if (feedbackRelease) haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                     }
                                     saveSnapshot()
                                 }

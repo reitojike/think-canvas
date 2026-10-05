@@ -8,7 +8,7 @@ CanvasScreenの6 call siteに限定。長押し成立のLongPressを維持し、
 
 ## Technical Context
 
-Kotlin / Compose compiler 2.4.20、現行BOM 2026.09.00 / UI 1.12.1、AndroidX Core 1.19.1。Android min26/target37のmobile app。依存・Room schema変更なし。native MotionEventとLocalHapticFeedback recorderで種類・回数・操作結果を観測する。gesture/frameごとの処理追加なし。
+Kotlin / Compose compiler 2.4.20、現行BOM 2026.09.00 / UI 1.12.1、AndroidX Core 1.19.1。Android min26/target37のmobile app。依存・Room schema変更なし。native MotionEventとLocalHapticFeedback recorderで種類・回数・操作結果を観測する。frameごとの処理追加なし。正常native UPの確認は成功feedback条件だけに適用する。
 
 ## Constitution Check
 
@@ -23,7 +23,7 @@ I: #101と既存merged specを出発点にfeedbackのみ上書き。II: Compose�
 
 ## Design
 
-LocalHapticFeedbackを維持。Confirmは現行版で使用可能。Core標準fallbackに任せ、VibratorやAPI level分岐を追加しない。shape/region/arrowのcreated共通成功でConfirm一度、arrow内の旧feedbackは除去。endpointは既存changed境界を維持する。
+LocalHapticFeedbackを維持。Confirmは現行版で使用可能。Core標準fallbackに任せ、VibratorやAPI level分岐を追加しない。shape/region/arrowのcreated共通成功でConfirm一度、arrow内の旧feedbackは除去。endpointは既存changed境界を維持する。create共通成功とendpointのConfirmは正常native UPかつFLAG_CANCELEDなしに限定し、既存の確定・保存条件には波及しない。native取消で既存の確定が残る問題は#115で扱う。
 
 inkのboard.addInkStrokeとsaveSnapshotを従来通り一度呼ぶ。regionのtransition計算と案内を残す。gapのthreshold・previewは維持。操作判定・保存順序・geometry/Undo/save authorityを変更しない。
 

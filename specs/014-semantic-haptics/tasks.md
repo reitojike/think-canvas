@@ -23,9 +23,13 @@
 ## Phase 5: 検証と収束
 
 - [x] T009 `specs/014-semantic-haptics/quickstart.md` にローカルlint/unit/build/androidTest compile、focused GMD、公開境界と差分検査の結果を記録する。（FR-005/006）
-- [ ] T010 `specs/014-semantic-haptics/quickstart.md` を参照しPixel9a/Android17実機評価をIssue #101に記録する。（FR-006、未評価ならIssue open）
+- [x] T010 `specs/014-semantic-haptics/quickstart.md` を参照しPixel9a/Android17実機評価をIssue #101に記録する。（FR-006、未評価ならIssue open）
 - [ ] T011 `specs/014-semantic-haptics/quickstart.md` の手順からfinal-head full required CI/canonical review/fresh base/thread0をPRで確認しmergeする。
 
 ## Dependencies and strategy
 
-T001→T002→T003→US1→US2→T009→T011。T010は利用者による実機結果待ち。US1だけでも重複削減の価値があるが、今回は同じfeedback familyを一つのPRにまとめる。テストと同一ファイルの変更は逐次実行する。researchと文書の独立な読み取りは並行可能。新しい並列implementation agentは不要。
+T001→T002→T003→US1→US2→T009→T011。T010は利用者の実機結果を記録済み。US1だけでも重複削減の価値があるが、今回は同じfeedback familyを一つのPRにまとめる。テストと同一ファイルの変更は逐次実行する。researchと文書の独立な読み取りは並行可能。新しい並列implementation agentは不要。
+
+## Phase 6: Convergence
+
+- [x] T012 create共通成功とarrow endpoint成功のfeedbackを正常native UPに限定し、ACTION_CANCEL/FLAG_CANCELEDを無振動にする。既存の確定・保存処理は維持し#115へ分離する。（FR-003、Edge Cases、partial）
