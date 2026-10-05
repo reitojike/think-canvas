@@ -29,4 +29,3 @@
 ## Dependencies and strategy
 
 T001→T002→T003→US1→US2→T009→T011。T010は利用者による実機結果待ち。US1だけでも重複削減の価値があるが、今回は同じfeedback familyを一つのPRにまとめる。テストと同一ファイルの変更は逐次実行する。researchと文書の独立な読み取りは並行可能。新しい並列implementation agentは不要。
-
