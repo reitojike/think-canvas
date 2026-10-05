@@ -223,7 +223,30 @@ class ViewportHistoryInteractionTest {
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             composeRule.waitForIdle()
         }
-        fun nextPanAt(point: Offset) {
+        fun nextPanAt() {
+            var previousBounds: Rect? = null
+            var previousFocus: ViewportFocus? = null
+            var previousPosition: Offset? = null
+            var stable = 0
+            composeRule.waitUntil(5_000) {
+                var imeHidden = false
+                scenario.onActivity {
+                    val insets = checkNotNull(it.window.decorView.rootWindowInsets)
+                    imeHidden = !insets.isVisible(WindowInsets.Type.ime()) &&
+                        insets.getInsets(WindowInsets.Type.ime()).bottom == 0
+                }
+                val bounds = canvas
+                val focus = navigation.focus()
+                val referencePosition = position(reference.text)
+                stable = if (imeHidden && !bounds.isEmpty && focus != null && bounds == previousBounds &&
+                    focus == previousFocus && referencePosition == previousPosition) stable + 1 else 0
+                previousBounds = bounds
+                previousFocus = focus
+                previousPosition = referencePosition
+                stable >= 2
+            }
+            composeRule.waitForIdle()
+            val point = Offset(canvas.left + canvas.width * .2f, canvas.top + canvas.height * .72f)
             val before = position(reference.text)
             pan(Offset(90f, 25f), point)
             val after = position(reference.text)
@@ -464,7 +487,7 @@ class ViewportHistoryInteractionTest {
         sameFocus(camera, navigation.focus())
         assertTrue(nodes("前の視点へ戻る").isEmpty())
         back()
-        nextPanAt(Offset(canvas.left + canvas.width * .2f, canvas.top + canvas.height * .72f))
+        nextPanAt()
         unchanged()
     }
     @Test fun everyFamilyDeletionAndMultipleUndoTargetsUseOneDisplayNavigation() {

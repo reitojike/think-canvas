@@ -204,3 +204,11 @@ head135799dはlocal193/0/0/0・unit163/0/0/0・required CI193/0/0/0成功、sour
 追加native回帰は補正前fresh exact1/1/0/0。zoomのsemantic callback後、observer/recomposition frameより前のdeadlineでDraft生成を確認した。source194件候補として記録し、旧193件結果を新headへ流用しない。
 
 限定補正後のfocused nativeはfresh source/XML exact **1/0/0/0**。一つのtestcase内でzoom（選択なし/あり）・tool展開・selection shareの4caseを完走した。deadline直前のsemantic callback後、observer/frame前にもDraft不在、選択保持、実際のtool/共有操作、zoomの1navigation、Room/content/save/Undo不変を確認した。新候補を固定し、unit163/全194件とcurrent-head CI/canonicalを確認する。旧135799dの193件結果は最終gateに使わない。
+
+## next-pan fixture と共有先 lookup の HOLD
+
+head0e7fa10のlocal fullはfresh source/XML exact194/1/0/0、unit163/0/0/0、head/source不変。唯一の失敗は既存staleViewAction回帰のnext-panでexpected Y1005 / actual1008（許容2px）。当該testにはblank UP/pendingがなく、製品pan/resize差分もない。read-only checkpointでmanual Draft終了後のnative IME inset0とCanvas/viewport/参照位置の安定観測がなかったことを確認した。正確な3px差の因果は断定しない。
+
+判定BOUNDED_CORRECTION。追加1roundを当該fixtureのnative IME非表示/inset0と位置の安定待ち、その後の現在boundsからのpan開始点算出に限定した。90/25px入力、2px許容、stale save/editor/tool・履歴・content/saveの期待値は維持する。限定補正のfocused nativeはfresh exact1/0/0/0。製品pan/pinch/animationは変更しない。
+
+同headのrequired CIはfresh source/XML exact194/1/0/0。唯一の失敗は共有empty-createのpreview待機で、localのnext-panとは異なる。AtomicFile例外は今回のlogにない。共有picker/previewのboard lookupはsuspend後にcaptured requestとlive phaseを混在させ、picker中の古い結果が新previewのdestinationをmissing扱いする可能性がある。blank arbitrationとは別authorityのためHOLD/checkpointし、共有先lookupの独立follow-upとして扱う。再実行でgreenを選ばず、controlled raceで成立を確認してから補正する。
