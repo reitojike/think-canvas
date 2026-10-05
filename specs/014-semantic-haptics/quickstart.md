@@ -20,6 +20,8 @@ full Android17 GMDとcanonical reviewはPRの現行headで確認する。
 - 変更後の同じfocused: WINDOWS_GMD_PASS / FRESH_EXACT_XML、1 test / failure0 / error0 / skipped0、sourceUnchanged=true、manualInterventions0。保存とUndo/Redoも成功。
 - public boundary / git diff --check成功。
 - その後のendpoint取消テストの記述補正を含むfinal candidateはfull CIで確認する。
+- endpoint focusedの初回は短い矢印の48dp端点/曲げhandleが重なり、端点変更を観測できず失敗。テストfixtureだけを12×touchSlopの長さに補正し、保存Idleをnative操作の開始条件として待つようにした。本番のhit判定は変更していない。
+- 補正後の`arrowCreationAndEndpointChangesConfirmOnce`: WINDOWS_GMD_PASS / FRESH_EXACT_XML、1/0/0/0、sourceUnchanged=true、manualInterventions0。作成と端点変更のConfirm各1回、取消0回、保存とUndo/Redoを確認。
 
 ## 実機評価（未実施）
 

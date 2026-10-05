@@ -143,6 +143,7 @@ class LongPressGestureTest {
         toolType: Int = MotionEvent.TOOL_TYPE_FINGER,
         canceled: Boolean = false,
     ) {
+        composeRule.waitUntil(10_000) { sessions.saveStateFor(1L, BoardSnapshot()).value == BoardSaveState.Idle }
         feedback.clear()
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
         var downTime = 0L
@@ -349,7 +350,8 @@ class LongPressGestureTest {
         click(context.getString(R.string.tool_open))
         click(context.getString(R.string.tool_arrow))
         val point = blankPoint()
-        longPress(point, dragSteps(point, slop() * 5f), held = false)
+        // 端点と曲げhandleの48dp hit領域が重ならない長さで、端点操作だけを検証する。
+        longPress(point, dragSteps(point, slop() * 12f), held = false)
         composeRule.waitUntil(10_000) { runBlocking { database.canvasDao().arrows(1L).size } == 1 }
         assertEquals(1, board.arrows.size)
         assertEquals(listOf(HapticFeedbackType.Confirm), feedback.toList())
