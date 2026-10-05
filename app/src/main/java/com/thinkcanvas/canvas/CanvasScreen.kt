@@ -149,6 +149,12 @@ private class ViewportAnimationBoundary {
     var generation = 0
 }
 
+private class BlankTapBoundary {
+    var active = true
+    var pending: BlankTap? = null
+    var confirmation: Job? = null
+}
+
 private data class HistoryFocusRequest(
     val before: BoardSnapshot,
     val expected: BoardSnapshot,
@@ -215,7 +221,7 @@ fun CanvasScreen(
     var searchQuery by remember { mutableStateOf("") }
     var searchHistoryNavigation by remember { mutableStateOf<Pair<BoardSnapshot, String>?>(null) }
     var searchPosition by remember { mutableStateOf(0) }
-    var lastBlankTap by remember { mutableStateOf<Pair<Long, Offset>?>(null) }
+    val blankTapBoundary = remember(board, editorSession) { BlankTapBoundary() }
     val elementSizes = remember { mutableStateMapOf<String, IntSize>() }
     val chromeBounds = remember { mutableStateMapOf<String, Rect>() }
     var textEditorBounds by remember { mutableStateOf<Rect?>(null) }
@@ -239,7 +245,9 @@ fun CanvasScreen(
     val touchSlop = viewConfiguration.touchSlop
     val longPressMillis = viewConfiguration.longPressTimeoutMillis
     val doubleTapTimeoutMillis = viewConfiguration.doubleTapTimeoutMillis
+    val doubleTapMinTimeMillis = viewConfiguration.doubleTapMinTimeMillis
     val doubleTapSlop = android.view.ViewConfiguration.get(context).scaledDoubleTapSlop.toFloat()
+    val lifecycleOwner = LocalLifecycleOwner.current
     val imeInsets = WindowInsets.ime
     val imeBottom = imeInsets.getBottom(density)
     val latestViewport = rememberUpdatedState(viewport)
@@ -370,7 +378,6 @@ fun CanvasScreen(
         keptIds, density.density, titleDp, titleLineHeightWorld,
         renderedGeometry.boundsById)
     val latestProjection = rememberUpdatedState(projection)
-    val latestSearchOpen = rememberUpdatedState(searchOpen)
     val latestBodyDp = rememberUpdatedState(bodyDp)
     val latestSelected = rememberUpdatedState(selectedId)
     val latestSelectedIds = rememberUpdatedState(selectedIds)
@@ -452,10 +459,52 @@ fun CanvasScreen(
         keyboard?.hide()
     }
 
+    fun cancelBlankTap() {
+        blankTapBoundary.pending = null
+        blankTapBoundary.confirmation?.cancel()
+        blankTapBoundary.confirmation = null
+    }
+
+    fun blankTapIsLive(pending: BlankTap): Boolean = blankTapBoundary.active &&
+        pending.generation == gestureGeneration &&
+        lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
+        editorSession.draft.value == null && editorSession.regionNameDraft.value == pending.regionDraft &&
+        editorSession.pendingDraftAcknowledgement.value == null && !saveBlocked() &&
+        tool == SpatialTool.NONE && inkTool == null && discardTarget == null &&
+        menuTarget == null && attachmentEditor == null && moveOwner == null &&
+        board.snapshot() == pending.content && selectedId == pending.selectedId &&
+        selectedIds == pending.selectedIds && searchOpen == pending.searchOpen
+
+    fun confirmBlankTap(pending: BlankTap) {
+        if (blankTapBoundary.pending !== pending) return
+        val live = blankTapIsLive(pending)
+        cancelBlankTap()
+        if (!live) return
+        if (selectedIds.isNotEmpty()) { selectedId = null; selectedIds = emptySet() }
+        else if (!searchOpen) draft = Draft(null, pending.world.x, pending.world.y)
+    }
+
+    DisposableEffect(blankTapBoundary) {
+        onDispose {
+            blankTapBoundary.active = false
+            cancelBlankTap()
+        }
+    }
+    LaunchedEffect(board, editorSession, blankTapBoundary) {
+        snapshotFlow {
+            // Observe authority changes independently of the confirmation job's final check.
+            listOf(draft, regionDraft, pendingDraftAcknowledgement, currentSaveState, tool, inkTool,
+                discardTarget, menuTarget, attachmentEditor, moveOwner, gestureGeneration,
+                board.snapshot(), selectedId, selectedIds, searchOpen, latestExternalBlock.value())
+        }.collect {
+            blankTapBoundary.pending?.let { if (!blankTapIsLive(it)) cancelBlankTap() }
+        }
+    }
+
     fun clearEditorFocus() {
         hideEditorIme()
         focusManager.clearFocus(force = true)
-        lastBlankTap = null
+        cancelBlankTap()
     }
 
     fun closeDraft() {
@@ -467,6 +516,7 @@ fun CanvasScreen(
     }
 
     fun openRegionName(id: String, name: String) {
+        cancelBlankTap()
         regionDraft = RegionNameDraft(id, name)
     }
 
@@ -517,7 +567,7 @@ fun CanvasScreen(
         // Back can arrive after DOWN, before a preview exists or recomposition runs.
         gestureGeneration++
         moveOwner = null
-        lastBlankTap = null
+        cancelBlankTap()
     }
 
     fun moveIsLive(owner: MoveDragSession): Boolean = moveOwner === owner &&
@@ -567,7 +617,6 @@ fun CanvasScreen(
         menuTarget, searchOpen) {
         moveOwner?.let { if (!moveIsLive(it)) cancelMove(it) }
     }
-    val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(board, lifecycleOwner, edgeAutoPanProfile, density.density) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
@@ -628,6 +677,7 @@ fun CanvasScreen(
     }
 
     fun animateViewport(target: Viewport, group: Any? = null, record: Boolean = true) {
+        cancelBlankTap()
         stopViewportAnimation()
         pendingHistoryFocus = null
         val origin = viewport
@@ -711,7 +761,7 @@ fun CanvasScreen(
                 }
             }
         }
-        lastBlankTap = null
+        cancelBlankTap()
         return true
     }
     val selectedLabel = stringResource(R.string.selection_state_selected)
@@ -731,6 +781,7 @@ fun CanvasScreen(
 
     fun saveSnapshot(closeDraft: Boolean = false) {
         if (closeDraft && pendingDraftAcknowledgement != null) return
+        cancelBlankTap()
         val acknowledgement = onRequestSave(board.snapshot())
         if (closeDraft) pendingDraftAcknowledgement = acknowledgement
     }
@@ -784,7 +835,7 @@ fun CanvasScreen(
         val target = if (forward) navigation.forward() else navigation.back()
         if (target != null) {
             invalidatePointerContinuation()
-            lastBlankTap = null
+            cancelBlankTap()
             animateViewport(target, record = false)
         }
     }
@@ -947,19 +998,23 @@ fun CanvasScreen(
     }
 
     fun tap(point: Offset, eventUptimeMillis: Long?) {
-        if (latestDraft.value != null || saveBlocked()) return
+        if (editorSession.draft.value != null || exitBlocked()) return
         if (chromeContains(point)) return
         val (element, spatial) = hitCanvas(point)
         if (latestInkTool.value != null) return
         if (element == null && spatial == null) {
-            lastBlankTap = eventUptimeMillis?.let { it to point }
-            if (latestSelectedIds.value.isNotEmpty()) { selectedId = null; selectedIds = emptySet() }
-            else if (!latestSearchOpen.value) {
-                val (x, y) = latestViewport.value.screenToWorld(point.x, point.y)
-                draft = Draft(null, x, y)
+            if (eventUptimeMillis == null || tool != SpatialTool.NONE) return
+            cancelBlankTap()
+            val (x, y) = latestViewport.value.screenToWorld(point.x, point.y)
+            val pending = BlankTap(eventUptimeMillis, point, WorldPoint(x, y), gestureGeneration,
+                board.snapshot(), selectedId, selectedIds.toSet(), searchOpen, editorSession.regionNameDraft.value)
+            blankTapBoundary.pending = pending
+            blankTapBoundary.confirmation = uiScope.launch {
+                delay(doubleTapTimeoutMillis)
+                confirmBlankTap(pending)
             }
         } else if (element == null && spatial != null) {
-            lastBlankTap = null
+            cancelBlankTap()
             val region = board.shapes.firstOrNull { it.id == spatial && it.kind == ShapeKind.REGION }
             if (region != null && latestProjection.value.farLikeRegion(spatial) && canvasSize != IntSize.Zero) {
                 animateViewport(latestViewport.value.fitRegion(region,
@@ -972,12 +1027,12 @@ fun CanvasScreen(
                 openRegionName(spatial, board.shapes.first { it.id == spatial }.name)
             } else { selectedId = null; selectedIds = setOf(spatial) }
         } else if (element != null && latestSelectedIds.value.size > 1 && element.id in latestSelectedIds.value) {
-            lastBlankTap = null
+            cancelBlankTap()
             selectedIds = latestSelectedIds.value - element.id
         } else if (element != null && latestSelected.value == element.id) {
-            lastBlankTap = null
+            cancelBlankTap()
             draft = Draft(element.id, element.x, element.y, element.text, element.kind, element.color)
-        } else if (element != null) { lastBlankTap = null; selectedId = element.id; selectedIds = setOf(element.id) }
+        } else if (element != null) { cancelBlankTap(); selectedId = element.id; selectedIds = setOf(element.id) }
     }
 
     fun nudge(id: String, dx: Float, dy: Float): Boolean {
@@ -1217,7 +1272,7 @@ fun CanvasScreen(
                         }
                     }
                 }
-            }.pointerInput(board, pointerGeneration) {
+            }.pointerInput(board, editorSession, pointerGeneration) {
             awaitEachGesture {
                 var gestureMove: MoveDragSession? = null
                 try {
@@ -1230,29 +1285,30 @@ fun CanvasScreen(
                     down.consume()
                     return@awaitEachGesture
                 }
-                // An outside dismissal must never enter the existing blank-double-tap path.
-                // Keep the original double tap at the initial blank point inside the new field.
-                if (latestDraft.value != null && textEditorBounds?.contains(down.position) != true)
-                    return@awaitEachGesture
+                if (editorSession.draft.value != null) return@awaitEachGesture
                 val requestedInk = down.type == PointerType.Stylus || latestInkTool.value != null
-                if (chromeContains(down.position)) return@awaitEachGesture
+                if (chromeContains(down.position)) { cancelBlankTap(); return@awaitEachGesture }
                 stopViewportAnimation()
                 pendingHistoryFocus = null
-                val previousBlankTap = lastBlankTap
-                if (previousBlankTap != null && !saveBlocked() &&
-                    pendingDraftAcknowledgement == null && latestTool.value == SpatialTool.NONE &&
-                    latestInkTool.value == null &&
-                    down.uptimeMillis - previousBlankTap.first <= doubleTapTimeoutMillis &&
-                    (down.position - previousBlankTap.second).getDistance() <= doubleTapSlop &&
-                    hitCanvas(down.position).let { it.first == null && it.second == null } &&
-                    canvasSize != IntSize.Zero) {
-                    closeDraft()
-                    animateViewport(latestViewport.value.doubleTapZoom(down.position.x, down.position.y,
-                        latestBodyDp.value, canvasSize.width.toFloat(), canvasSize.height.toFloat()))
-                    down.consume()
-                    return@awaitEachGesture
+                val previousBlankTap = blankTapBoundary.pending
+                if (previousBlankTap != null) {
+                    if (!blankTapIsLive(previousBlankTap) || requestedInk) cancelBlankTap()
+                    else if (previousBlankTap.matchesSecondDown(down.uptimeMillis, down.position,
+                        doubleTapMinTimeMillis, doubleTapTimeoutMillis, doubleTapSlop) &&
+                        hitCanvas(down.position).let { it.first == null && it.second == null } &&
+                        canvasSize != IntSize.Zero) {
+                        cancelBlankTap()
+                        animateViewport(latestViewport.value.doubleTapZoom(down.position.x, down.position.y,
+                            latestBodyDp.value, canvasSize.width.toFloat(), canvasSize.height.toFloat()))
+                        down.consume()
+                        return@awaitEachGesture
+                    } else {
+                        // Two independent taps: preserve the first action before admitting the next.
+                        confirmBlankTap(previousBlankTap)
+                    }
                 }
-                if (latestDraft.value != null || saveFailed || (saving && !requestedInk))
+                // #71 owns only an editor that has actually started. Never create then cancel for zoom.
+                if (editorSession.draft.value != null || saveFailed || (saving && !requestedInk))
                     return@awaitEachGesture
                 val (target, topId) = hitCanvas(down.position)
                 var targetId = target?.id ?: topId
@@ -1401,6 +1457,9 @@ fun CanvasScreen(
                                 saveSnapshot()
                             }
                             "tap" -> {
+                                val native = event.motionEvent
+                                if (native == null || native.actionMasked == MotionEvent.ACTION_CANCEL ||
+                                    native.flags and MotionEvent.FLAG_CANCELED != 0) break
                                 val release = checkNotNull(event.changes.firstOrNull {
                                     it.id == down.id && it.previousPressed && !it.pressed
                                 }) { "Tap release for active pointer is missing" }
@@ -2018,6 +2077,7 @@ fun CanvasScreen(
                     verticalAlignment = Alignment.CenterVertically) {
                     BasicTextField(searchQuery, onValueChange = {
                         if (!latestExternalBlock.value()) {
+                            cancelBlankTap()
                             searchQuery = it
                             searchPosition = 0
                         }
@@ -2053,6 +2113,7 @@ fun CanvasScreen(
                         Text("›", color = ink, fontSize = 24.sp)
                     }
                     IconButton(onClick = {
+                        cancelBlankTap()
                         searchOpen = false; searchQuery = ""; searchPosition = 0; hideEditorIme()
                     }, modifier = Modifier.size(44.dp).semantics { contentDescription = "検索を閉じる" }) {
                         Text("×", color = ink, fontSize = 22.sp)
@@ -2064,6 +2125,7 @@ fun CanvasScreen(
                     .height(44.dp).background(Color.White, RoundedCornerShape(24.dp))
                     .pillBorder(24f).padding(horizontal = 14.dp)
                     .clickable(enabled = !saveBlocked() && draft == null && regionNameId == null) {
+                        cancelBlankTap()
                         onOpenList()
                     }
                     .semantics { contentDescription = "ボード一覧を開く" }
@@ -2168,6 +2230,7 @@ fun CanvasScreen(
                 SpatialTools(tool, toolsExpanded, !saveBlocked(),
                     onExpand = {
                         if (!saveBlocked()) {
+                            cancelBlankTap()
                             if (tool == SpatialTool.NONE) toolsExpanded = !toolsExpanded
                             else finishToolInteraction()
                         }
@@ -2266,7 +2329,10 @@ fun CanvasScreen(
                         onDispose { chromeBounds.remove("shareSelection") }
                     }
                     val enabled = !saveBlocked()
-                    Button(onClick = { onShareSelection(selectedIds.toSet()) }, enabled = enabled,
+                    Button(onClick = {
+                        cancelBlankTap()
+                        onShareSelection(selectedIds.toSet())
+                    }, enabled = enabled,
                         modifier = Modifier.height(48.dp).semantics {
                             contentDescription = "選択範囲を画像で共有"
                             if (!enabled) disabled()
@@ -2344,7 +2410,10 @@ fun CanvasScreen(
                         chromeBounds["regionName"] = it.boundsInParent()
                     }, verticalAlignment = Alignment.CenterVertically) {
                     BasicTextField(regionName, onValueChange = {
-                        if (!latestExternalBlock.value()) regionDraft = regionDraft?.copy(name = it)
+                        if (!latestExternalBlock.value()) {
+                            cancelBlankTap()
+                            regionDraft = regionDraft?.copy(name = it)
+                        }
                     },
                         singleLine = true, modifier = Modifier.width(140.dp).padding(8.dp)
                             .focusRequester(regionNameFocusRequester)
