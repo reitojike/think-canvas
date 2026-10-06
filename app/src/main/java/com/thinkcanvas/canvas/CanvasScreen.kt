@@ -93,6 +93,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.disabled
@@ -200,6 +202,7 @@ fun CanvasScreen(
     var discardTarget by rememberSaveable { mutableStateOf<String?>(null) }
     var gestureGeneration by remember { mutableStateOf(0) }
     var guidance by remember { mutableStateOf<String?>(null) }
+    var pickupHint by remember { mutableStateOf<String?>(null) }
     var draft by editorSession.draft
     var movePreview by remember { mutableStateOf<Pair<Set<String>, WorldPoint>?>(null) }
     var moveOwner by remember { mutableStateOf<MoveDragSession?>(null) }
@@ -555,6 +558,7 @@ fun CanvasScreen(
     }
 
     fun clearInteractionPreviews() {
+        pickupHint = null
         movePreview = null
         handlePreview = null
         spatialPreview = null
@@ -564,6 +568,7 @@ fun CanvasScreen(
     }
 
     fun invalidatePointerContinuation() {
+        pickupHint = null
         // Back can arrive after DOWN, before a preview exists or recomposition runs.
         gestureGeneration++
         moveOwner = null
@@ -858,6 +863,7 @@ fun CanvasScreen(
         } else if (!exitBlocked()) {
             val currentDraft = editorSession.draft.value
             val currentRegion = editorSession.regionNameDraft.value
+            val hadPickup = pickupHint != null
             // Preserve preview/selection until the existing priority chooses one stage.
             invalidatePointerContinuation()
             when {
@@ -879,7 +885,7 @@ fun CanvasScreen(
                 }
                 tool != SpatialTool.NONE || inkTool != null || spatialPreview != null ||
                     inkPreview != null || movePreview != null || handlePreview != null ||
-                    gapPreview != null || lassoPoints.isNotEmpty() -> clearToolInteraction(true)
+                    gapPreview != null || lassoPoints.isNotEmpty() || hadPickup -> clearToolInteraction(true)
                 toolsExpanded -> toolsExpanded = false
                 selectedIds.isNotEmpty() -> {
                     selectedId = null; selectedIds = emptySet(); guidance = null
@@ -1215,8 +1221,8 @@ fun CanvasScreen(
             }
         }
     }
-    LaunchedEffect(guidance, tool, inkTool, selectedIds) {
-        if (guidance == null && tool == SpatialTool.NONE && inkTool == null && selectedIds.size <= 1)
+    LaunchedEffect(guidance, pickupHint, tool, inkTool, selectedIds) {
+        if (guidance == null && pickupHint == null && tool == SpatialTool.NONE && inkTool == null && selectedIds.size <= 1)
             chromeBounds.remove("guidance")
     }
     LaunchedEffect(guidance, tool) {
@@ -1438,8 +1444,15 @@ fun CanvasScreen(
                     if (event == null) {
                         mode = "longPressPending"
                         // 長押し成立は視覚表示と振動で知らせる。drag の admission は touchSlop だけが決める。
-                        if (activeId == null) guidance = "ドラッグして余白を作る"
-                        else movePreview = (if (activeId in latestSelectedIds.value)
+                        pickupHint = when {
+                            activeId == null -> "ドラッグして余白を作る"
+                            activeId !in latestSelectedIds.value && latestSelectedIds.value.isNotEmpty() ->
+                                "ドラッグで移動、離すと選択に追加"
+                            activeId in latestSelectedIds.value && latestSelectedIds.value.size > 1 ->
+                                "ドラッグでまとめて移動、離すとメニュー"
+                            else -> "ドラッグで移動、離すとメニュー"
+                        }
+                        if (activeId != null) movePreview = (if (activeId in latestSelectedIds.value)
                             latestSelectedIds.value else setOf(activeId)) to WorldPoint(0f, 0f)
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         continue
@@ -1633,6 +1646,7 @@ fun CanvasScreen(
                     }
                     val activeStylus = pressed.firstOrNull { it.type == PointerType.Stylus }
                     if (activeStylus != null && drawingInput != InkInputType.STYLUS) {
+                        pickupHint = null
                         if (moveOwner === gestureMove) moveOwner = null
                         gestureMove = null
                         movePreview = null
@@ -1646,6 +1660,7 @@ fun CanvasScreen(
                             activeStylus.position.x, activeStylus.position.y).let { (x, y) -> InkPoint(x, y, 0L) })
                         inkPreview = InkPreview(InkKind.PEN, InkInputType.STYLUS, drawingPoints)
                     } else if (pressed.size >= 2 && activeStylus == null) {
+                        pickupHint = null
                         panVelocity.resetTracking()
                         if (moveOwner === gestureMove) moveOwner = null
                         gestureMove = null
@@ -1685,6 +1700,7 @@ fun CanvasScreen(
                         if (mode == "handle" && handle == HandleKind.MOVE &&
                             (change.position - start).getDistance() > touchSlop) dragAdmitted = true
                         if (mode == "longPressPending" && (change.position - start).getDistance() > touchSlop) {
+                            pickupHint = null
                             dragAdmitted = true
                             if (activeId == null) {
                                 mode = "gap"
@@ -1789,7 +1805,7 @@ fun CanvasScreen(
             return true
         }
         ImageElements(displaySnapshot, viewport, displayProjection, selectedIds, canvasSize,
-            imageResources, enabled = indicatorsAllowed() && !searchOpen,
+            imageResources, enabled = indicatorsAllowed() && !searchOpen, moving = movingIds,
             onSelect = { id -> if (!admitImageAction(id)) false else {
                 selectedIds = setOf(id); selectedId = null; true
             } },
@@ -1931,7 +1947,9 @@ fun CanvasScreen(
                 val availableDp = availableWorld?.takeUnless { element.id in selectedIds || element.id in matchIds }
                     ?.let { with(density) { it.toDp() } }
                 val (screenX, screenY) = viewport.worldToScreen(element.x, element.y)
-                val selected = element.id in selectedIds || element.id in movingIds
+                val selected = element.id in selectedIds
+                val moving = element.id in movingIds
+                val framed = selected || moving
                 val elementActionsEnabled = !saveBlocked()
                 val baseSize = if (title) 15.sp else 14.sp
                 val minimumDp = when (tier) {
@@ -1943,7 +1961,7 @@ fun CanvasScreen(
                     maxOf(baseSize.toDp().value, minimumDp / viewport.scale).dp.toSp()
                 }
                 val faded = searchOpen && searchQuery.isNotBlank() &&
-                    element.id !in matchIds && !selected
+                    element.id !in matchIds && !framed
                 val tierAlpha = if (!title && tier == SemanticTier.MID)
                     1f - .55f * displayProjection.midProgress
                 else if (title && tier == SemanticTier.FAR) .55f else 1f
@@ -1963,7 +1981,7 @@ fun CanvasScreen(
                             scaleX = viewport.scale
                             scaleY = viewport.scale
                             transformOrigin = TransformOrigin(0f, 0f)
-                            shadowElevation = if (element.id in movingIds) 8.dp.toPx() else 0f
+                            shadowElevation = if (moving) 8.dp.toPx() else 0f
                         }
                         .widthIn(max = if (tier == SemanticTier.NEAR) 166.dp else availableDp ?: 166.dp)
                         .then(if (element.id in matchIds) Modifier
@@ -1972,7 +1990,7 @@ fun CanvasScreen(
                                 if (element.id == currentMatch?.id) drawRect(vermilion,
                                     style = Stroke(2.dp.toPx()))
                             } else Modifier)
-                        .then(if (selected) Modifier.selectionFrame(element.id in movingIds) else Modifier)
+                        .then(if (framed) Modifier.selectionFrame(moving) else Modifier)
                         .onSizeChanged { elementSizes[element.id] = it }
                         .semantics {
                             contentDescription = element.text
@@ -2334,7 +2352,7 @@ fun CanvasScreen(
                     })
             }
 
-            val message = if (inkTool != null) "1本指で描く ・ 2本指で移動" else guidance ?: when (tool) {
+            val message = if (inkTool != null) "1本指で描く ・ 2本指で移動" else pickupHint ?: guidance ?: when (tool) {
                 SpatialTool.NONE -> if (selectedIds.size > 1) "${selectedIds.size}個を選択" else null
                 SpatialTool.LASSO -> "指で囲んで選択"
                 SpatialTool.ARROW -> "ドラッグして矢印を作成"
@@ -2342,6 +2360,7 @@ fun CanvasScreen(
             }
             if (message != null) {
                 Box(Modifier.align(Alignment.TopCenter).padding(top = 62.dp)
+                    .semantics { if (pickupHint != null) liveRegion = LiveRegionMode.Polite }
                     .onGloballyPositioned { chromeBounds["guidance"] = it.boundsInParent() }) {
                     Guidance(message)
                 }

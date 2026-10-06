@@ -21,6 +21,10 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.Espresso.closeSoftKeyboard
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.matcher.RootMatchers.isDialog
+import androidx.test.espresso.matcher.ViewMatchers.isRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.BoardSaveState
@@ -155,6 +159,8 @@ class ViewportHistoryInteractionTest {
             try {
                 event(MotionEvent.ACTION_DOWN, listOf(start), time)
                 event(MotionEvent.ACTION_MOVE, listOf(start + delta), time)
+                // 履歴と停止位置の観測を高速releaseの慣性から分ける。
+                Thread.sleep(180L)
                 event(MotionEvent.ACTION_UP, listOf(start + delta), time)
             } catch (failure: Throwable) {
                 event(MotionEvent.ACTION_CANCEL, listOf(start + delta), time)
@@ -224,8 +230,8 @@ class ViewportHistoryInteractionTest {
         }
         fun hideSearchIme() {
             val query = nodes("ボード内を探す").single().config[SemanticsProperties.EditableText]
-            assertTrue(instrumentation.uiAutomation.performGlobalAction(
-                android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
+            // 検索を保つfixtureのkeyboard cleanup。実際のBackはhideTextImeで別に検証する。
+            closeSoftKeyboard()
             composeRule.waitForIdle()
             composeRule.waitUntil(5_000) {
                 var hidden = false
@@ -238,6 +244,20 @@ class ViewportHistoryInteractionTest {
             }
             composeRule.waitForIdle()
             assertEquals(query, nodes("ボード内を探す").single().config[SemanticsProperties.EditableText])
+        }
+        fun waitDiscardWindowOwned() {
+            composeRule.waitUntil(5_000) {
+                var dialogReady = false
+                onView(isRoot()).inRoot(isDialog()).check { view, failure ->
+                    if (failure != null) throw failure
+                    val insets = checkNotNull(view.rootWindowInsets)
+                    dialogReady = view.hasWindowFocus() && !insets.isVisible(WindowInsets.Type.ime()) &&
+                        insets.getInsets(WindowInsets.Type.ime()).bottom == 0
+                }
+                var activityFocused = true
+                scenario.onActivity { activityFocused = it.window.decorView.hasWindowFocus() }
+                dialogReady && !activityFocused
+            }
         }
         fun back() {
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
@@ -406,6 +426,8 @@ class ViewportHistoryInteractionTest {
                     hideTextIme()
                     back()
                     composeRule.onNodeWithText("編集内容を破棄しますか？").assertExists()
+                    // Semanticsだけではnative dialogのwindow ownershipを確定できない。
+                    waitDiscardWindowOwned()
                     composeRule.onNodeWithText("編集を続ける").performClick()
                     composeRule.onNodeWithText("編集内容を破棄しますか？").assertDoesNotExist()
                     composeRule.waitForIdle()

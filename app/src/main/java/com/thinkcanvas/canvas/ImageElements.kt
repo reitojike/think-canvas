@@ -41,7 +41,8 @@ fun ImageElements(snapshot: BoardSnapshot, viewport: Viewport, projection: Seman
                   selected: Set<String>, canvasSize: IntSize, resources: ImageResources?, enabled: Boolean,
                   onSelect: (String) -> Boolean, onAdd: (String) -> Boolean, onRemove: (String) -> Boolean,
                   onMove: (String, Float, Float) -> Boolean, onResize: (String, Float) -> Boolean,
-                  onDelete: (String) -> Boolean, onDescribe: (String) -> Boolean) {
+                  onDelete: (String) -> Boolean, onDescribe: (String) -> Boolean,
+                  moving: Set<String> = emptySet()) {
     val density = LocalDensity.current
     val visible = snapshot.images.filter { image ->
         val (x, y) = viewport.worldToScreen(image.x, image.y)
@@ -72,8 +73,10 @@ fun ImageElements(snapshot: BoardSnapshot, viewport: Viewport, projection: Seman
                 drawLine(Color(0xFF8D8882), Offset(x + width, y), Offset(x, y + height))
             } else drawContext.canvas.nativeCanvas.drawBitmap(bitmap, null, RectF(x, y, x + width, y + height),
                 Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
-            if (image.id in selected) drawRect(Color(0xFFC54B32), Offset(x, y), Size(width, height),
-                style = Stroke(1.5.dp.toPx()))
+            val pickedUp = image.id in moving
+            if (pickedUp) drawRect(Color(0xFFC54B32).copy(alpha = .06f), Offset(x, y), Size(width, height))
+            if (pickedUp || image.id in selected) drawRect(Color(0xFFC54B32), Offset(x, y), Size(width, height),
+                style = Stroke((if (pickedUp) 2.dp else 1.5.dp).toPx()))
         }
     }
     visible.forEach { image ->
