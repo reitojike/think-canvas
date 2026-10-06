@@ -78,7 +78,8 @@ class FlingGestureTest {
             } }
             val event = MotionEvent.obtain(downTime, time, action, points.size, properties, coordinates,
                 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
-            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
+            try { assertTrue("native action=$action down=$downTime time=$time now=${SystemClock.uptimeMillis()}",
+                instrumentation.uiAutomation.injectInputEvent(event, true)) }
             finally { event.recycle() }
             composeRule.runOnUiThread {} // native event処理のbarrier。animation clockは進めない。
         }
@@ -87,6 +88,8 @@ class FlingGestureTest {
             val from = Offset(bounds.left + bounds.width * .2f, bounds.top + bounds.height * .65f)
             val delta = Offset(bounds.width * .35f, 0f)
             // 過去のuptimeでnative traceを再生し、host/renderの遅延を指の速度に混ぜない。
+            // historyのnativeクリック等より前へ時刻を戻さない。
+            Thread.sleep(duration + pause + 60L)
             val time = SystemClock.uptimeMillis() - duration - pause
             var last = from
             var released = false
@@ -102,7 +105,9 @@ class FlingGestureTest {
                 released = true
                 return camera()
             } finally {
-                if (!released) event(MotionEvent.ACTION_CANCEL, listOf(last), time, SystemClock.uptimeMillis())
+                if (!released) runCatching {
+                    event(MotionEvent.ACTION_CANCEL, listOf(last), time, SystemClock.uptimeMillis())
+                }
             }
         }
         fun advance(ms: Long) { composeRule.mainClock.advanceTimeBy(ms); composeRule.waitForIdle() }

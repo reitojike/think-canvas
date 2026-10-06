@@ -183,6 +183,8 @@ class EdgeAutoPanTest {
             try {
                 gesture.send(MotionEvent.ACTION_DOWN, start)
                 gesture.send(MotionEvent.ACTION_MOVE, start + Offset(110f, 35f))
+                // handoff後の精密panを確認する。停止してreleaseし、速い払いの慣性は別testで扱う。
+                Thread.sleep(180L)
                 gesture.send(MotionEvent.ACTION_UP)
             } finally {
                 try { if (!gesture.ended) gesture.send(MotionEvent.ACTION_CANCEL) }
