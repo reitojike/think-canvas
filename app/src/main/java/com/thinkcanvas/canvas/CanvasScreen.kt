@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -78,6 +79,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInParent
@@ -144,14 +147,6 @@ private val textEditorWidth = 166.dp
 private val textEditorMaxHeight = 150.dp
 private val editorToolbarHeight = 54.dp
 
-private class ViewportAnimationBoundary {
-    var active = true
-    var job: Job? = null
-    var origin: ViewportFocus? = null
-    var group: Any? = null
-    var generation = 0
-}
-
 private class BlankTapBoundary {
     var active = true
     var pending: BlankTap? = null
@@ -183,7 +178,7 @@ fun CanvasScreen(
 ) {
     val navigation = viewportHistory ?: remember(board) { ViewportHistory() }
     var viewport by navigation.viewportState
-    val animationBoundary = remember(navigation) { ViewportAnimationBoundary() }
+    val animationBoundary = remember(navigation) { ViewportAnimationBoundary(navigation) }
     var pendingHistoryFocus by remember { mutableStateOf<HistoryFocusRequest?>(null) }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -211,7 +206,7 @@ fun CanvasScreen(
     var handlePreview by remember { mutableStateOf<BoardSnapshot?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var manualGestureActive by remember { mutableStateOf(false) }
-    var viewportAnimating by remember { mutableStateOf(false) }
+    var viewportAnimating by animationBoundary.animatingState
     var pendingDraftAcknowledgement by editorSession.pendingDraftAcknowledgement
     val currentSaveState by saveState.collectAsState()
     val latestExternalBlock = rememberUpdatedState(externalInteractionBlocked)
@@ -316,22 +311,17 @@ fun CanvasScreen(
     }
     val latestRegionLabelSizes = rememberUpdatedState(measuredRegionLabelSizes)
     fun stopViewportAnimation(record: Boolean = true) {
-        viewportAnimating = false
-        animationBoundary.job?.cancel()
-        animationBoundary.generation++
-        val origin = animationBoundary.origin
-        animationBoundary.origin = null
-        if (record) navigation.record(origin, animationBoundary.group)
-        animationBoundary.group = null
+        animationBoundary.stop(record)
     }
+    fun stopFling() { animationBoundary.stopFling() }
     DisposableEffect(navigation) {
         onDispose {
             animationBoundary.active = false
-            stopViewportAnimation(record = false)
+            stopViewportAnimation(record = animationBoundary.fling)
         }
     }
     LaunchedEffect(board, canvasSize, density, canvasTextStyle) {
-        stopViewportAnimation(record = false)
+        stopViewportAnimation(record = animationBoundary.fling)
         navigation.resize(canvasSize.width.toFloat(), canvasSize.height.toFloat(), density.density)
         if (!navigation.initialized && canvasSize.width > 0 && canvasSize.height > 0) {
             var fitted = snapshot.fittedViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat())
@@ -465,6 +455,7 @@ fun CanvasScreen(
     }
 
     fun cancelBlankTap() {
+        stopFling()
         blankTapBoundary.pending = null
         blankTapBoundary.confirmation?.cancel()
         blankTapBoundary.confirmation = null
@@ -666,6 +657,16 @@ fun CanvasScreen(
         closeDraft()
     }
 
+    val panFling = rememberPanFling(animationBoundary, navigation, uiScope, { stopViewportAnimation() }) {
+        PanFlingContext(board, editorSession, board.snapshot(), selectedIds, canvasSize, density.density,
+            animationBoundary.active && windowInfo.isWindowFocused &&
+                lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !exitBlocked() &&
+                draft == null && regionDraft == null && imageDraft == null && !imagePickerOpen &&
+                discardTarget == null && menuTarget == null && attachmentEditor == null && !searchOpen &&
+                tool == SpatialTool.NONE && inkTool == null && !toolsExpanded && moveOwner == null &&
+                canvasSize != IntSize.Zero)
+    }
+
     LaunchedEffect(pendingDraftAcknowledgement) {
         val acknowledgement = pendingDraftAcknowledgement ?: return@LaunchedEffect
         acknowledgement.await()
@@ -850,6 +851,7 @@ fun CanvasScreen(
     }
 
     BackHandler {
+        stopFling()
         if (imeBottom > 0) {
             invalidatePointerContinuation()
             hideEditorIme()
@@ -1007,6 +1009,7 @@ fun CanvasScreen(
     }
 
     fun tap(point: Offset, eventUptimeMillis: Long?) {
+        stopFling()
         if (editorSession.draft.value != null || exitBlocked()) return
         if (chromeContains(point)) return
         val (element, spatial) = hitCanvas(point)
@@ -1045,6 +1048,7 @@ fun CanvasScreen(
     }
 
     fun nudge(id: String, dx: Float, dy: Float): Boolean {
+        stopFling()
         if (saveBlocked()) return false
         if (board.elements.none { it.id == id }) return false
         val ids = if (id in selectedIds) selectedIds else setOf(id)
@@ -1054,6 +1058,7 @@ fun CanvasScreen(
     }
 
     fun removeSelection(id: String): Boolean {
+        stopFling()
         if (saveBlocked()) return false
         if (id !in selectedIds) return false
         selectedIds = selectedIds - id
@@ -1247,6 +1252,7 @@ fun CanvasScreen(
             }.pointerInput(board, editorSession, pointerGeneration) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    stopFling()
                     val admittedGeneration = gestureGeneration
                     if (admittedGeneration != pointerGeneration) {
                         down.consume()
@@ -1400,6 +1406,7 @@ fun CanvasScreen(
                     else -> "tap"
                 }
                 var manualViewportOrigin: ViewportFocus? = null
+                val panVelocity = VelocityTracker().also { it.addPointerInputChange(down) }
                 val startWorld = viewport.screenToWorld(start.x, start.y).let { WorldPoint(it.first, it.second) }
                 fun previewMove(pointer: Offset) {
                     if (moveIds.isEmpty()) return
@@ -1451,8 +1458,16 @@ fun CanvasScreen(
                         if (mode == "pan" || mode == "zoom") {
                             val native = event.motionEvent
                             if (native?.actionMasked == MotionEvent.ACTION_UP &&
-                                native.flags and MotionEvent.FLAG_CANCELED == 0)
-                                navigation.record(manualViewportOrigin)
+                                native.flags and MotionEvent.FLAG_CANCELED == 0) {
+                                val continued = if (mode == "pan" && down.type == PointerType.Touch) {
+                                    event.changes.firstOrNull { it.id == down.id }?.let {
+                                        panVelocity.addPointerInputChange(it)
+                                    }
+                                    val velocity = panVelocity.calculateVelocity()
+                                    panFling.start(Offset(velocity.x, velocity.y), manualViewportOrigin)
+                                } else false
+                                if (!continued) navigation.record(manualViewportOrigin)
+                            }
                         }
                         if (mode == "move" || mode == "longPressPending" ||
                             mode == "handle" && handle == HandleKind.MOVE) {
@@ -1634,6 +1649,7 @@ fun CanvasScreen(
                             activeStylus.position.x, activeStylus.position.y).let { (x, y) -> InkPoint(x, y, 0L) })
                         inkPreview = InkPreview(InkKind.PEN, InkInputType.STYLUS, drawingPoints)
                     } else if (pressed.size >= 2 && activeStylus == null) {
+                        panVelocity.resetTracking()
                         if (moveOwner === gestureMove) moveOwner = null
                         gestureMove = null
                         mode = "zoom"
@@ -1664,6 +1680,7 @@ fun CanvasScreen(
                             ?: pressed.first() else pressed.first()
                         end = change.position
                         val delta = change.position - change.previousPosition
+                        if (mode == "tap" || mode == "pan") panVelocity.addPointerInputChange(change)
                         if (mode == "tap" && (change.position - start).getDistance() > touchSlop) mode = "pan"
                         if (mode == "move" && !dragAdmitted && (change.position - start).getDistance() > touchSlop) {
                             dragAdmitted = true
@@ -2218,42 +2235,23 @@ fun CanvasScreen(
                 DisposableEffect(navigation) {
                     onDispose { chromeBounds.remove("viewportHistory") }
                 }
-                Row(
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 70.dp)
-                        .background(Color.White, RoundedCornerShape(24.dp)).pillBorder(24f)
-                        .onGloballyPositioned { chromeBounds["viewportHistory"] = it.boundsInParent() },
-                ) {
-                    IconButton(onClick = { restoreView(forward = false) }, enabled = navigation.canBack,
-                        modifier = Modifier.size(48.dp).semantics {
-                            contentDescription = "前の視点へ戻る"
-                        }) { Text("←", color = if (navigation.canBack) ink else muted, fontSize = 23.sp) }
-                    IconButton(onClick = { restoreView(forward = true) }, enabled = navigation.canForward,
-                        modifier = Modifier.size(48.dp).semantics {
-                            contentDescription = "次の視点へ進む"
-                        }) { Text("→", color = if (navigation.canForward) ink else muted, fontSize = 23.sp) }
-                }
+                CanvasViewHistoryControl(navigation.canBack, navigation.canForward,
+                    onBack = { restoreView(forward = false) }, onForward = { restoreView(forward = true) },
+                    onBounds = { chromeBounds["viewportHistory"] = it })
             }
             val zoomText = "${(viewport.scale * 100).roundToInt()}%  ${when (projection.tier) {
                 SemanticTier.NEAR -> "近"
                 SemanticTier.MID -> "中"
                 SemanticTier.FAR -> "遠"
             }}"
-            Box(
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 22.dp)
-                    .background(Color.White, RoundedCornerShape(16.dp)).pillBorder(16f)
-                    .heightIn(min = 44.dp).padding(horizontal = 10.dp, vertical = 5.dp)
-                    .clickable(enabled = !saveBlocked()) {
-                        if (!saveBlocked() && canvasSize != IntSize.Zero) animateViewport(viewport.cycleZoom(bodyDp,
-                            canvasSize.width.toFloat(), canvasSize.height.toFloat()))
-                    }
-                    .semantics { contentDescription = "倍率を切り替える、$zoomText" }
-                    .onGloballyPositioned { chromeBounds["zoom"] = it.boundsInParent() },
-                contentAlignment = Alignment.Center,
-            ) { Text(zoomText, color = muted, fontSize = 11.sp) }
+            CanvasZoomControl(zoomText, !saveBlocked(), onClick = {
+                if (!saveBlocked() && canvasSize != IntSize.Zero) animateViewport(viewport.cycleZoom(bodyDp,
+                    canvasSize.width.toFloat(), canvasSize.height.toFloat()))
+            }, onBounds = { chromeBounds["zoom"] = it })
 
             if (inkTool == null) Column(
                 modifier = Modifier.align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = if (viewControlsVisible) 126.dp else 70.dp)
+                    .padding(end = 16.dp, bottom = if (viewControlsVisible || animationBoundary.fling) 126.dp else 70.dp)
                     .onGloballyPositioned { chromeBounds["tools"] = it.boundsInParent() },
                 horizontalAlignment = Alignment.End,
             ) {
@@ -2589,6 +2587,48 @@ fun CanvasScreen(
             }
         }
     }
+}
+
+@Composable
+private fun BoxScope.CanvasViewHistoryControl(
+    canBack: Boolean,
+    canForward: Boolean,
+    onBack: () -> Unit,
+    onForward: () -> Unit,
+    onBounds: (Rect) -> Unit,
+) {
+    Row(
+        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 70.dp)
+            .background(Color.White, RoundedCornerShape(24.dp)).pillBorder(24f)
+            .onGloballyPositioned { onBounds(it.boundsInParent()) },
+    ) {
+        IconButton(onClick = onBack, enabled = canBack,
+            modifier = Modifier.size(48.dp).semantics { contentDescription = "前の視点へ戻る" }) {
+            Text("←", color = if (canBack) ink else muted, fontSize = 23.sp)
+        }
+        IconButton(onClick = onForward, enabled = canForward,
+            modifier = Modifier.size(48.dp).semantics { contentDescription = "次の視点へ進む" }) {
+            Text("→", color = if (canForward) ink else muted, fontSize = 23.sp)
+        }
+    }
+}
+
+@Composable
+private fun BoxScope.CanvasZoomControl(
+    zoomText: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    onBounds: (Rect) -> Unit,
+) {
+    Box(
+        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 22.dp)
+            .background(Color.White, RoundedCornerShape(16.dp)).pillBorder(16f)
+            .heightIn(min = 44.dp).padding(horizontal = 10.dp, vertical = 5.dp)
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics { contentDescription = "倍率を切り替える、$zoomText" }
+            .onGloballyPositioned { onBounds(it.boundsInParent()) },
+        contentAlignment = Alignment.Center,
+    ) { Text(zoomText, color = muted, fontSize = 11.sp) }
 }
 
 @Composable
