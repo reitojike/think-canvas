@@ -1,0 +1,3 @@
+# データと寿命
+
+永続model/schemaの変更なし。ViewportAnimationBoundaryのsession-local job/generation/active/originにflingの識別を加える。Gesture内のVelocityTrackerはUP/取消で破棄する。pan＋flingのoriginは既存ViewportHistoryへ停止時に一度だけ記録する。Board/Room/編集Undoは所有しない。
