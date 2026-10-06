@@ -155,6 +155,8 @@ class ViewportHistoryInteractionTest {
             try {
                 event(MotionEvent.ACTION_DOWN, listOf(start), time)
                 event(MotionEvent.ACTION_MOVE, listOf(start + delta), time)
+                // 履歴と停止位置の観測を高速releaseの慣性から分ける。
+                Thread.sleep(180L)
                 event(MotionEvent.ACTION_UP, listOf(start + delta), time)
             } catch (failure: Throwable) {
                 event(MotionEvent.ACTION_CANCEL, listOf(start + delta), time)

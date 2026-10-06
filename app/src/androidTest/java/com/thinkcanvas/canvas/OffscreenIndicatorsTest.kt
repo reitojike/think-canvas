@@ -117,6 +117,8 @@ class OffscreenIndicatorsTest {
             try {
                 event(MotionEvent.ACTION_DOWN, listOf(start), time)
                 event(MotionEvent.ACTION_MOVE, listOf(start + delta), time)
+                // 精密panの停止位置を確認する。高速releaseの慣性はFlingGestureTestで扱う。
+                Thread.sleep(180L)
                 event(MotionEvent.ACTION_UP, listOf(start + delta), time)
             } catch (failure: Throwable) {
                 event(MotionEvent.ACTION_CANCEL, listOf(start + delta), time)

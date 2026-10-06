@@ -19,3 +19,5 @@
 - 初回candidateのWindows Android17 fullとGitHub CI head `3b2e7b9` は251件成功、failures/errors/skipped=0。WindowsはsourceUnchanged=true、fresh exact XML。長押し16件、fling8件と既存保存/Undo/pinch/stylus/Back/画像resourceの回帰を含む。
 - 初回canonical reviewのblank pickup/Back指摘をT013へ追加した。選択あり/なしのblank held→Back→UPを取消stageで消費し、次のBackで選択解除、さらに次でlistへ進むことを検証する。補正後の全CIは252件を対象とし、最終証拠はPRへ記録する。
 - T013補正後のblank pickup/Back native focusedは1件成功、failures/errors/skipped=0、sourceUnchanged=true、fresh exact XML。選択あり/なしの取消、後続Backの選択解除/list移動を観測。基本検証も再成功。
+- bc9e386のCIは同一headの37411214336で252件成功、37411215013でOffscreenIndicatorsTestの次pan停止位置1件失敗。成功結果だけを採らず、有限checkpoint後にT014で停止位置を期待する2 helperの入力を静止後releaseへ揃えた。production codeとfling専用traceは変更しない。
+- T014後のOffscreenIndicatorsTest.recreationDoesNotRestoreStaleTargetsOrHitRegionsとViewportHistoryInteractionTest.staleViewActionRejectsSaveEditorToolAndNextGestureUsesCurrentStateのnative focusedは各1件成功、failures/errors/skipped=0、sourceUnchanged=true、fresh exact XML。新しいheadの全252件CIとcanonical reviewはPRへ記録する。

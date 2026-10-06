@@ -37,3 +37,7 @@ US2のImageElements描画とテストfixture調査は別ファイルなら並行
 ## Phase 7: Convergence
 
 - [x] T013 空白pickupのBackをselection/listより先に消費する per FR-004、US3/AC1 (partial)。app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.kt と app/src/androidTest/java/com/thinkcanvas/canvas/LongPressGestureTest.kt で、選択あり/なしのblank held→Back→UPと内容不変を確認する。
+
+## Phase 8: Convergence
+
+- [x] T014 停止位置を期待するnative panのreleaseを静止後の入力へ揃える per FR-005/006 (partial)。app/src/androidTest/java/com/thinkcanvas/canvas/OffscreenIndicatorsTest.kt と ViewportHistoryInteractionTest.kt のpan helperだけを補正し、recreation後の旧hit解除と次pan、viewport historyを再検証する。高速fling traceとproduction decayは維持する。

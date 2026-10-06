@@ -30,6 +30,7 @@ Android標準は成立時にcontext menuを開くが、canvasではrelease/menu�
 - `app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.kt`: 案内とgesture寿命。
 - `app/src/main/java/com/thinkcanvas/canvas/ImageElements.kt`: moving枠。
 - `app/src/androidTest/java/com/thinkcanvas/canvas/LongPressGestureTest.kt`: native回帰。
+- `app/src/androidTest/java/com/thinkcanvas/canvas/{OffscreenIndicatorsTest,ViewportHistoryInteractionTest}.kt`: 停止位置を期待するpan helperは静止後releaseとし、現行fling契約と区別する。
 
 既存generation/owner guardを再利用し、pointerInputのkeyには案内stateを加えない。
 
