@@ -3,7 +3,7 @@
 **Branch**: `codex/issue-77-viewport-history` | **Date**: 2026-10-04 | **Spec**: [spec.md](spec.md)
 
 ## Summary
-現在cameraをboard sessionへ移し、world中心/倍率の有限back/forwardを内容履歴と独立に保持する。既存navigationをanimation終了境界で、manual pan/pinchを正常releaseで一度記録する。Undo/Redo差分から画面外の変更対象だけ表示する。BoardStateのChange/保存/schemaは変更しない。
+現在cameraをboard sessionへ移し、world中心/倍率の有限back/forwardを内容履歴と独立に保持する。既存navigationをanimation終了境界で、manual pan/pinchを正常完了で一度記録する。Spec015の速いpanは標準decayの継続を含め停止時に一度、低速pan/pinchは正常releaseで記録する。Undo/Redo差分から画面外の変更対象だけ表示する。BoardStateのChange/保存/schemaは変更しない。
 
 ## Technical Context
 **Language/Version**: Kotlin 2.4.20 / Java target17
