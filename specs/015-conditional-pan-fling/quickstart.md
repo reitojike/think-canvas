@@ -29,3 +29,5 @@ disabledSystemAnimationsKeepStandardTouchDecayはWINDOWS_GMD_PASS / FRESH_EXACT_
 初回head25e10cfの全CIは247件中2 failure（newTouchのnative時刻順序/cleanup、既存handoff後helperの無条件即停止期待）。PRへ入力family checkpointを記録し、test-only correctionへ限定した。補正後newTouchStopsAndNextSlowPanOwnsCameraはWINDOWS_GMD_PASS / FRESH_EXACT_XML、1/0/0/0、sourceUnchanged=true、manualInterventions0。同期停止、一回のhistory往復、次の低速pan、内容/保存不変を確認した。
 
 既存secondFingerCancelsMoveAndHandsOffToPinchWithoutSavingも停止後UPを明示した補正でWINDOWS_GMD_PASS / FRESH_EXACT_XML、1/0/0/0、sourceUnchanged=true、manualInterventions0。move取消→pinch handoff、次の精密pan、内容/Room/保存不変を確認した。今回の補正はtest-onlyでAPK本体はhead25e10cfと同じ。
+
+headccb957bの全CIは247件中1 failure（未変更BoardListScreenTestのDone activation→Running待ち）。保存entryのcheckpointをPRへ記録し、当該testのDone/Retryをsemantic UI-thread actionへ限定補正した。failedDraftSaveKeepsContinuationUntilRetrySucceedsはWINDOWS_GMD_PASS / FRESH_EXACT_XML、1/0/0/0、sourceUnchanged=true、manualInterventions0。実際の失敗・編集保持・再試行・Room保存を確認し、save実装は変更していない。
