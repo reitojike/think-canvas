@@ -314,6 +314,15 @@ class BoardImageDeliveryTest {
     @Test fun mediaStoreSaveCanBeReadAndCleanedUp() { runBlocking {
         if (Build.VERSION.SDK_INT < 29) return@runBlocking
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        // The first MediaProvider call can overlap the emulator's mounted-volume scan.
+        // Drain its pending work before publishing and immediately reading our image.
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val idleResult = android.os.ParcelFileDescriptor.AutoCloseInputStream(
+            instrumentation.uiAutomation.executeShellCommand(
+                "content call --uri content://media --method wait_for_idle"))
+            .bufferedReader().use { it.readText() }
+        assertTrue("MediaProvider idle barrier failed: $idleResult",
+            idleResult.trim() == "Result: null")
         val source = BoardSnapshot(shapes = listOf(ShapeElement(id = "oval",
             kind = ShapeKind.ELLIPSE, x = 0f, y = 0f, width = 80f, height = 60f)))
         val bitmap = BoardImageRenderer.render(planShare(source))

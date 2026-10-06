@@ -1104,6 +1104,8 @@ fun CanvasScreen(
             val controller = if (Build.VERSION.SDK_INT >= 30) {
                 inputView.windowInsetsController ?: return
             } else null
+            val inputMethod = inputView.context.getSystemService(
+                android.view.inputmethod.InputMethodManager::class.java)
             val ready = awaitEditorImeWindow(
                 isCurrent = { isCurrent() && !exitBlocked() },
                 awaitWindowOwnership = {
@@ -1142,6 +1144,7 @@ fun CanvasScreen(
                     }
                 },
                 hasWindowFocus = { inputView.hasWindowFocus() },
+                isInputReady = { inputMethod.isActive(inputView) && inputMethod.isAcceptingText },
             )
             if (ready) keyboard?.show()
         } finally {

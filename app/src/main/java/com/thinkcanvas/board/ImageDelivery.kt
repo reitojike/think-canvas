@@ -39,7 +39,7 @@ object ImageDelivery {
             }
             val resolver = context.contentResolver
             val uri = requireNotNull(resolver.insert(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)) {
+                MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values)) {
                 "画像の保存先を作成できません"
             }
             try {
