@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 import android.view.InputDevice
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import androidx.activity.compose.setContent
@@ -17,6 +18,8 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -29,6 +32,8 @@ import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.CanvasDatabase
 import com.thinkcanvas.data.TextElementRow
 import com.thinkcanvas.data.SpatialElementRow
+import com.thinkcanvas.data.ImageElementRow
+import com.thinkcanvas.image.seedImage
 import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -56,16 +61,19 @@ class LongPressGestureTest {
         val feedback: MutableList<HapticFeedbackType>,
     )
 
-    private fun withBoard(shapes: List<ShapeElement> = emptyList(), block: Harness.() -> Unit) {
+    private fun withBoard(shapes: List<ShapeElement> = emptyList(), image: Boolean = false,
+                          block: Harness.() -> Unit) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
+        val images = if (image) listOf(seedImage(context).copy(x = 600f)) else emptyList()
         val seed = CanvasDatabase.open(context)
         runBlocking {
             if (seed.canvasDao().board(1) == null) seed.canvasDao().putBoard(BoardRow())
             seed.canvasDao().replaceAll(1, listOf(
                 TextElementRow.fromModel(1, TextElement(id = "left", text = leftText, x = leftX, y = 300f)),
                 TextElementRow.fromModel(1, TextElement(id = "right", text = rightText, x = rightX, y = 300f)),
-            ), shapes.map { SpatialElementRow.fromModel(1L, it) }, emptyList())
+            ), shapes.map { SpatialElementRow.fromModel(1L, it) }, emptyList(),
+                images = images.map { ImageElementRow.fromModel(1L, it) })
         }
         seed.close()
         showBoardOneAtStartup(context)
@@ -142,6 +150,7 @@ class LongPressGestureTest {
         held: Boolean = true,
         toolType: Int = MotionEvent.TOOL_TYPE_FINGER,
         canceled: Boolean = false,
+        afterMoves: () -> Unit = {},
     ) {
         composeRule.waitUntil(10_000) { sessions.saveStateFor(1L, BoardSnapshot()).value == BoardSaveState.Idle }
         composeRule.waitUntil(10_000) {
@@ -180,6 +189,7 @@ class LongPressGestureTest {
             if (held) composeRule.waitUntil(5_000) { HapticFeedbackType.LongPress in feedback }
             whileHeld()
             steps.forEach { last = it; send(MotionEvent.ACTION_MOVE, it) }
+            afterMoves()
             send(if (canceled) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP, last)
         } catch (failure: Throwable) {
             send(MotionEvent.ACTION_CANCEL, last)
@@ -216,12 +226,28 @@ class LongPressGestureTest {
         composeRule.waitUntil(10_000) { predicate(rows()) }
     }
 
+    private fun assertPickup(message: String) {
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText(message).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    private fun assertNoPickup() {
+        listOf("ドラッグで移動、離すとメニュー", "ドラッグで移動、離すと選択に追加",
+            "ドラッグでまとめて移動、離すとメニュー", "ドラッグして余白を作る").forEach {
+            assertEquals(0, composeRule.onAllNodesWithText(it).fetchSemanticsNodes().size)
+        }
+    }
+
     @Test
     fun elementLongPressReleaseOpensMenuAndDeleteIsReachable() = withBoard {
         val before = rows()
         val target = centerOf(leftText)
         val leftBefore = screenLeftTop(leftText)
-        longPress(target, jitter(target))
+        longPress(target, jitter(target), whileHeld = {
+            assertPickup("ドラッグで移動、離すとメニュー")
+        })
+        assertNoPickup()
         assertEquals(listOf(HapticFeedbackType.LongPress), feedback.toList())
         assertEquals(before, rows())
         assertEquals(leftBefore, screenLeftTop(leftText))
@@ -239,7 +265,10 @@ class LongPressGestureTest {
         val scale = scale()
         val target = centerOf(leftText)
         val distance = slop() * 5f
-        longPress(target, dragSteps(target, distance))
+        longPress(target, dragSteps(target, distance), whileHeld = {
+            assertPickup("ドラッグで移動、離すとメニュー")
+        }, afterMoves = { assertNoPickup() })
+        assertNoPickup()
         assertEquals(listOf(HapticFeedbackType.LongPress), feedback.toList())
         awaitRows { rows -> rows.first { it.id == "left" }.x != leftX }
         val moved = rows()
@@ -268,6 +297,7 @@ class LongPressGestureTest {
         })
         assertEquals(listOf(HapticFeedbackType.LongPress), feedback.toList())
         Thread.sleep(500)
+        assertNoPickup()
         assertEquals(before, rows())
         assertEquals(leftBefore, screenLeftTop(leftText))
         assertEquals(rightBefore, screenLeftTop(rightText))
@@ -282,7 +312,10 @@ class LongPressGestureTest {
         val scale = scale()
         val point = blankPoint()
         val distance = slop() * 5f
-        longPress(point, dragSteps(point, distance))
+        longPress(point, dragSteps(point, distance), whileHeld = {
+            assertPickup("ドラッグして余白を作る")
+        }, afterMoves = { assertNoPickup() })
+        assertNoPickup()
         assertEquals(listOf(HapticFeedbackType.LongPress), feedback.toList())
         awaitRows { rows -> rows.first { it.id == "right" }.x != rightX }
         val after = rows()
@@ -293,6 +326,84 @@ class LongPressGestureTest {
         awaitRows { it == before }
         click(context.getString(R.string.redo))
         awaitRows { it == after }
+    }
+
+    @Test
+    fun pickupSurvivesNotificationTimeoutAndCancelClearsIt() = withBoard {
+        val before = rows()
+        longPress(centerOf(leftText), emptyList(), canceled = true, whileHeld = {
+            assertPickup("ドラッグで移動、離すとメニュー")
+            Thread.sleep(2_100)
+            assertPickup("ドラッグで移動、離すとメニュー")
+        })
+        assertNoPickup()
+        assertEquals(before, rows())
+        assertEquals(listOf(HapticFeedbackType.LongPress), feedback.toList())
+        assertEquals(0, composeRule.onAllNodesWithContentDescription(
+            context.getString(R.string.menu_delete)).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun backCancelsPickupBeforeSelectionOrBoardNavigation() = withBoard {
+        val before = rows()
+        longPress(centerOf(leftText), emptyList(), whileHeld = {
+            assertPickup("ドラッグで移動、離すとメニュー")
+            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            composeRule.waitForIdle()
+            assertNoPickup()
+        })
+        assertNoPickup()
+        assertEquals(before, rows())
+        composeRule.onNodeWithContentDescription("キャンバス").assertExists()
+        assertEquals(0, composeRule.onAllNodesWithContentDescription(
+            context.getString(R.string.menu_delete)).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun pickupExplainsSelectionAdditionAndGroupMovement() = withBoard {
+        val before = rows()
+        click(leftText)
+        longPress(centerOf(rightText), emptyList(), whileHeld = {
+            assertPickup("ドラッグで移動、離すと選択に追加")
+        })
+        assertNoPickup()
+        assertPickup("2個を選択")
+        assertEquals(0, composeRule.onAllNodesWithContentDescription(
+            context.getString(R.string.menu_delete)).fetchSemanticsNodes().size)
+        val target = centerOf(leftText)
+        longPress(target, dragSteps(target, slop() * 5f), whileHeld = {
+            assertPickup("ドラッグでまとめて移動、離すとメニュー")
+        }, afterMoves = { assertNoPickup() })
+        assertNoPickup()
+        awaitRows { it.all { row -> row.x > before.first { old -> old.id == row.id }.x } }
+        val moved = rows()
+        assertEquals(moved.first { it.id == "left" }.x - leftX,
+            moved.first { it.id == "right" }.x - rightX, 1f)
+        click(context.getString(R.string.undo))
+        awaitRows { it == before }
+    }
+
+    @Test
+    fun imagePickupShowsTemporaryFrameWithoutSelectingOrSaving() = withBoard(image = true) {
+        val board = sessions.stateFor(1L, BoardSnapshot())
+        val image = board.images.single()
+        val before = board.snapshot()
+        val canvas = composeRule.onNodeWithContentDescription("キャンバス")
+        val viewport = sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value
+        val (x, y) = viewport.worldToScreen(image.x, image.y + image.height * .65f)
+        val beforeColor = canvas.captureToImage().toPixelMap()[x.toInt(), y.toInt()]
+        longPress(centerOf("テスト画像"), emptyList(), canceled = true, whileHeld = {
+            assertPickup("ドラッグで移動、離すとメニュー")
+            val color = canvas.captureToImage().toPixelMap()[x.toInt(), y.toInt()]
+            assertTrue("pickup frame is red", color.red - color.green > .25f)
+            assertTrue("normal placeholder has no pickup frame", beforeColor.red - beforeColor.green < .1f)
+            assertEquals(0, composeRule.onAllNodesWithContentDescription("画像のサイズ変更")
+                .fetchSemanticsNodes().size)
+            assertEquals(before, board.snapshot())
+        })
+        assertNoPickup()
+        assertEquals(before, board.snapshot())
+        assertEquals(image, runBlocking { database.canvasDao().images(1L).single().toModel() })
     }
 
     @Test
