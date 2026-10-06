@@ -1,0 +1,152 @@
+name: Android targeted GMD
+run-name: Android targeted GMD · ${{ inputs.selector }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      selector:
+        description: '単一の完全修飾 test class または class#method'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  targeted:
+    name: Android 17 targeted Gradle Managed Device
+    runs-on: ubuntu-26.04
+    env:
+      GMD_SELECTOR: ${{ inputs.selector }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: selector と source identity を起動前に確認
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+
+          selector = os.environ['GMD_SELECTOR']
+          identifier = r'[A-Za-z_][A-Za-z0-9_]*'
+          if not re.fullmatch(rf'(?:{identifier}\.)+{identifier}(?:#{identifier})?', selector):
+              raise SystemExit('TARGETED_GMD_INVALID_SELECTOR')
+          class_name, _, method = selector.partition('#')
+          source = Path('app/src/androidTest/java') / (class_name.replace('.', '/') + '.kt')
+          if not source.is_file():
+              raise SystemExit('TARGETED_GMD_CLASS_NOT_FOUND')
+          text = source.read_text(encoding='utf-8')
+          package, _, simple_class = class_name.rpartition('.')
+          if (not re.search(rf'^package\s+{re.escape(package)}\s*$', text, re.M)
+                  or not re.search(rf'^class\s+{re.escape(simple_class)}\b', text, re.M)):
+              raise SystemExit('TARGETED_GMD_CLASS_IDENTITY_MISMATCH')
+          # 現行 suite の @Test + fun declaration だけを読む。Kotlin parserを増やさない。
+          methods = re.findall(r'^\s*@Test\s+fun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(', text, re.M)
+          if not methods or len(methods) != len(set(methods)) or (method and method not in methods):
+              raise SystemExit('TARGETED_GMD_TEST_IDENTITY_NOT_FOUND')
+          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          if head != os.environ['GITHUB_SHA']:
+              raise SystemExit('TARGETED_GMD_CHECKOUT_SHA_MISMATCH')
+          result_dir = Path('app/build/outputs/androidTest-results/managedDevice')
+          if result_dir.exists():
+              raise SystemExit('TARGETED_GMD_EXISTING_RESULTS')
+          expected = [f'{class_name}#{name}' for name in ([method] if method else methods)]
+          manifest = dict(selector=selector, sha=head, run_id=os.environ['GITHUB_RUN_ID'],
+                          run_attempt=os.environ['GITHUB_RUN_ATTEMPT'], expected=sorted(expected))
+          path = Path(os.environ['RUNNER_TEMP']) / 'targeted-gmd-selection.json'
+          path.write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(manifest, indent=2))
+          PY
+          printf 'runner_os=%s\n' "$RUNNER_OS"
+          cat /etc/os-release
+          sed -n '/create("pixel9Api37") {/,/^[[:space:]]*}/p' app/build.gradle.kts
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: android-actions/setup-android@v4
+        with:
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+      - name: エミュレーターの KVM を有効化
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: 指定した class または method を GMD で実行
+        id: gmd
+        shell: bash
+        run: |
+          set -euo pipefail
+          date -u +%s > "$RUNNER_TEMP/targeted-gmd-started-at"
+          printf 'task=:app:pixel9Api37DebugAndroidTest\nselector=%s\n' "$GMD_SELECTOR"
+          ./gradlew :app:pixel9Api37DebugAndroidTest --rerun \
+            "-Pandroid.testInstrumentationRunnerArguments.class=$GMD_SELECTOR" \
+            -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
+      - name: fresh XML の identity と counters を確認
+        if: ${{ always() && steps.gmd.outcome != 'skipped' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from collections import Counter
+          import json
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          temporary = Path(os.environ['RUNNER_TEMP'])
+          selection = json.loads((temporary / 'targeted-gmd-selection.json').read_text(encoding='utf-8'))
+          started = int((temporary / 'targeted-gmd-started-at').read_text())
+          result_dir = Path('app/build/outputs/androidTest-results/managedDevice')
+          files = list(result_dir.rglob('TEST-*.xml'))
+          expected_file = result_dir / 'debug/pixel9Api37/TEST-pixel9Api37.xml'
+          if files != [expected_file] or expected_file.stat().st_mtime < started:
+              raise SystemExit('TARGETED_GMD_FRESH_XML_REQUIRED')
+          xml = expected_file.read_bytes()
+          if b'<!DOCTYPE' in xml.upper() or b'<!ENTITY' in xml.upper():
+              raise SystemExit('TARGETED_GMD_INVALID_XML')
+          root = ET.fromstring(xml)
+          cases = root.findall('.//testcase')
+          actual = [f'{case.get("classname")}#{case.get("name")}' for case in cases]
+          summary = dict(selection, observed=sorted(actual), tests=len(cases),
+                         failures=sum(len(case.findall('failure')) for case in cases),
+                         errors=sum(len(case.findall('error')) for case in cases),
+                         skipped=sum(len(case.findall('skipped')) for case in cases))
+          path = temporary / 'targeted-gmd-verification.json'
+          path.write_text(json.dumps(summary, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(summary, indent=2))
+          if not actual or Counter(actual) != Counter(selection['expected']):
+              raise SystemExit('TARGETED_GMD_SELECTOR_NOT_ENFORCED')
+          if root.tag != 'testsuites' or any(
+                  int(root.get(key, '-1')) != summary[key]
+                  for key in ('tests', 'failures', 'errors', 'skipped')):
+              raise SystemExit('TARGETED_GMD_COUNTER_MISMATCH')
+          devices = root.findall('.//property[@name="device"]')
+          if not devices or any(device.get('value') != '_app_pixel9Api37DebugAndroidTest' for device in devices):
+              raise SystemExit('TARGETED_GMD_DEVICE_MISMATCH')
+          if any(summary[key] for key in ('failures', 'errors', 'skipped')):
+              raise SystemExit('TARGETED_GMD_TEST_FAILURE')
+          print('TARGETED_GMD_EXACT_IDENTITIES_PASS')
+          PY
+      - name: targeted GMD の結果を保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-17-gmd-targeted-results
+          path: |
+            app/build/reports/androidTests/managedDevice/
+            app/build/outputs/androidTest-results/managedDevice/
+            ${{ runner.temp }}/targeted-gmd-selection.json
+            ${{ runner.temp }}/targeted-gmd-verification.json
+          if-no-files-found: warn
+          retention-days: 7
