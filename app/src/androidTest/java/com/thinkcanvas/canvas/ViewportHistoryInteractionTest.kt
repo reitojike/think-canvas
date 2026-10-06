@@ -21,6 +21,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.BoardSaveState
@@ -226,8 +227,8 @@ class ViewportHistoryInteractionTest {
         }
         fun hideSearchIme() {
             val query = nodes("ボード内を探す").single().config[SemanticsProperties.EditableText]
-            assertTrue(instrumentation.uiAutomation.performGlobalAction(
-                android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
+            // 検索を保つfixtureのkeyboard cleanup。実際のBackはhideTextImeで別に検証する。
+            closeSoftKeyboard()
             composeRule.waitForIdle()
             composeRule.waitUntil(5_000) {
                 var hidden = false

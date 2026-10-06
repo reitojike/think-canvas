@@ -41,3 +41,7 @@ US2のImageElements描画とテストfixture調査は別ファイルなら並行
 ## Phase 8: Convergence
 
 - [x] T014 停止位置を期待するnative panのreleaseを静止後の入力へ揃える per FR-005/006 (partial)。app/src/androidTest/java/com/thinkcanvas/canvas/OffscreenIndicatorsTest.kt と ViewportHistoryInteractionTest.kt のpan helperだけを補正し、recreation後の旧hit解除と次pan、viewport historyを再検証する。高速fling traceとproduction decayは維持する。
+
+## Phase 9: Convergence
+
+- [x] T015 検索/Undo/Redo間のIME cleanupを検索closeのBack routingから独立させる per FR-005/006 (partial)。app/src/androidTest/java/com/thinkcanvas/canvas/ViewportHistoryInteractionTest.kt のhideSearchImeだけを既存Espresso.closeSoftKeyboardへ揃え、query保持・native IME非表示・内容/保存/historyを再検証する。productionとhideTextImeのactual Backは維持する。

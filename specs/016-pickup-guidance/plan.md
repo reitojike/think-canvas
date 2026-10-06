@@ -31,6 +31,7 @@ Android標準は成立時にcontext menuを開くが、canvasではrelease/menu�
 - `app/src/main/java/com/thinkcanvas/canvas/ImageElements.kt`: moving枠。
 - `app/src/androidTest/java/com/thinkcanvas/canvas/LongPressGestureTest.kt`: native回帰。
 - `app/src/androidTest/java/com/thinkcanvas/canvas/{OffscreenIndicatorsTest,ViewportHistoryInteractionTest}.kt`: 停止位置を期待するpan helperは静止後releaseとし、現行fling契約と区別する。
+- ViewportHistoryInteractionTestの検索間のkeyboard cleanupは既存Espresso.closeSoftKeyboardを使い、query保持とnative IME非表示を観測する。実際のBack/取消とproduction Backは維持する。
 
 既存generation/owner guardを再利用し、pointerInputのkeyには案内stateを加えない。
 
