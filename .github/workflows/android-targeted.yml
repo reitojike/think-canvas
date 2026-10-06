@@ -1,0 +1,25 @@
+name: Android targeted GMD
+run-name: Issue 118 registration bootstrap · ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      selector:
+        description: '単一の完全修飾 test class または class#method'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    name: Issue 118 workflow registration only
+    runs-on: ubuntu-26.04
+    env:
+      BOOTSTRAP_SHA: ${{ github.sha }}
+    steps:
+      - name: 登録用 bootstrap の SHA を記録
+        run: |
+          printf 'Issue #118 registration bootstrap only\nsha=%s\n' "$BOOTSTRAP_SHA"
+          printf 'Selector is not interpreted. No Gradle, Android, emulator, or GMD execution.\n'
