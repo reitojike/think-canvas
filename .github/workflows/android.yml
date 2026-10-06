@@ -39,16 +39,78 @@ jobs:
           test -z "$(git ls-files --others --exclude-standard app/schemas)"
       - name: 単体テスト
         run: ./gradlew :app:testDebugUnitTest --no-daemon
-      - name: デバッグビルド
+      - name: PR debug 署名鍵を復元
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          KEYSTORE_BASE64: ${{ secrets.THINKCANVAS_PR_DEBUG_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.THINKCANVAS_PR_DEBUG_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.THINKCANVAS_PR_DEBUG_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.THINKCANVAS_PR_DEBUG_KEY_PASSWORD }}
+          EXPECTED_CERT_SHA256: ${{ secrets.THINKCANVAS_PR_DEBUG_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          for value in "$KEYSTORE_BASE64" "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" "$EXPECTED_CERT_SHA256"; do
+            test -n "$value" || {
+              echo 'PR debug 固定署名用の GitHub Actions Secrets が不足しています' >&2
+              exit 1
+            }
+          done
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/think-canvas-pr-debug.p12"
+          chmod 600 "$RUNNER_TEMP/think-canvas-pr-debug.p12"
+      - name: デバッグビルド（固定署名 PR）
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          THINKCANVAS_PR_DEBUG_KEYSTORE_FILE: ${{ runner.temp }}/think-canvas-pr-debug.p12
+          THINKCANVAS_PR_DEBUG_STORE_PASSWORD: ${{ secrets.THINKCANVAS_PR_DEBUG_STORE_PASSWORD }}
+          THINKCANVAS_PR_DEBUG_KEY_ALIAS: ${{ secrets.THINKCANVAS_PR_DEBUG_KEY_ALIAS }}
+          THINKCANVAS_PR_DEBUG_KEY_PASSWORD: ${{ secrets.THINKCANVAS_PR_DEBUG_KEY_PASSWORD }}
+          THINKCANVAS_VERSION_NAME: 0.1.0-pr.${{ github.event.pull_request.number }}.${{ github.run_number }}
+          THINKCANVAS_VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew :app:assembleDebug --no-daemon
-      - name: PR のデバッグ APK を保存
-        if: github.event_name == 'pull_request'
+      - name: デバッグビルド（通常）
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+        run: ./gradlew :app:assembleDebug --no-daemon
+      - name: PR debug APK の署名と識別子を確認
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          EXPECTED_CERT_SHA256: ${{ secrets.THINKCANVAS_PR_DEBUG_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          apk='app/build/outputs/apk/debug/app-debug.apk'
+          test -f "$apk"
+
+          certs="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk")"
+          printf '%s\n' "$certs"
+          actual_cert_sha256="$(printf '%s\n' "$certs" | awk -F ': ' '/^Signer #1 certificate SHA-256 digest: / { print toupper($2) }' | tr -d ':')"
+          expected_cert_sha256="$(printf '%s' "$EXPECTED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
+          test -n "$actual_cert_sha256"
+          test "$actual_cert_sha256" = "$expected_cert_sha256" || {
+            echo 'PR debug APK の署名証明書が登録済み証明書と異なります' >&2
+            exit 1
+          }
+
+          badging="$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk")"
+          printf '%s\n' "$badging" | grep -E "^package: name='com\.thinkcanvas\.internal\.debug' versionCode='${{ github.run_number }}'"
+          printf '%s\n' "$badging" | grep -E "^targetSdkVersion:'37'$"
+      - name: PR の固定署名デバッグ APK を保存
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/upload-artifact@v7
         with:
           name: think-canvas-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
+      - name: fork PR の一時 debug APK を保存
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        uses: actions/upload-artifact@v7
+        with:
+          name: think-canvas-debug-apk-ephemeral
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+      - name: PR debug 署名鍵を削除
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: rm -f "$RUNNER_TEMP/think-canvas-pr-debug.p12"
       - name: 公開情報境界
         shell: pwsh
         run: ./scripts/check-public-boundary.ps1

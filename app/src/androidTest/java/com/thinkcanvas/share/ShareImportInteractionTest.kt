@@ -119,7 +119,10 @@ class ShareImportInteractionTest {
     }
 
     private fun awaitText(text: String) {
-        composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText(text)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
         composeRule.waitForIdle()
     }
 

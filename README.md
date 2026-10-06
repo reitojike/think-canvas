@@ -56,7 +56,8 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 [Android 実機確認 runbook](docs/runbooks/device-verification.md) に配布と確認の手順をまとめています。
 
 - **PR debug APK**: PR の [Android checks](https://github.com/reitojike/think-canvas/actions/workflows/android.yml)
-  から `think-canvas-debug-apk` artifact（7 日保存）を zip で取得します。
+  から、same-repository PR は `think-canvas-debug-apk`（専用固定署名）、fork PR は
+  `think-canvas-debug-apk-ephemeral`（run 固有署名）の artifact を zip で取得します（各7日保存）。
   applicationId は `com.thinkcanvas.internal.debug` です。詳しくは [配布経路](docs/runbooks/device-verification.md#配布経路) を参照してください。
 - **署名済み internal APK**: 継続利用・更新確認には [Releases](https://github.com/reitojike/think-canvas/releases)
   の pre-release にある `think-canvas.apk`（`com.thinkcanvas.internal`）を使います。
