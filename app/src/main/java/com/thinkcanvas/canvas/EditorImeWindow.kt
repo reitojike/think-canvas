@@ -7,7 +7,6 @@ internal suspend fun awaitEditorImeWindow(
     awaitImeControl: suspend () -> Unit,
     awaitFrame: suspend () -> Unit,
     hasWindowFocus: () -> Boolean,
-    isInputReady: () -> Boolean = { true },
 ): Boolean {
     while (isCurrent()) {
         awaitWindowOwnership()
@@ -15,7 +14,7 @@ internal suspend fun awaitEditorImeWindow(
         awaitImeControl()
         awaitFrame()
         if (!isCurrent()) return false
-        if (hasWindowFocus() && isInputReady()) return true
+        if (hasWindowFocus()) return true
     }
     return false
 }

@@ -21,7 +21,6 @@ class EditorImeWindowTest {
         val control = MutableStateFlow(true)
         val frames = Channel<Unit>(Channel.UNLIMITED)
         var current = true
-        var inputReady = true
         var frameCount = 0
         var controlCount = 0
         val result = scope.async {
@@ -34,7 +33,6 @@ class EditorImeWindowTest {
                 },
                 awaitFrame = { frameCount++; frames.receive() },
                 hasWindowFocus = { window.value },
-                isInputReady = { inputReady },
             )
         }
         fun loseWindowDuringFrame() {
@@ -109,18 +107,5 @@ class EditorImeWindowTest {
                 assertEquals(1, request.frameCount)
             } finally { request.close() }
         }
-    }
-
-    @Test fun restoredWindowWaitsForEditableInputConnectionBeforeShowingIme() = runBlocking {
-        val request = Request(modern = true)
-        try {
-            request.inputReady = false
-            request.frames.send(Unit)
-            assertTrue("Window ownership alone does not make the editor ready", request.result.isActive)
-            assertEquals(2, request.frameCount)
-            request.inputReady = true
-            request.frames.send(Unit)
-            assertTrue(request.result.await())
-        } finally { request.close() }
     }
 }
