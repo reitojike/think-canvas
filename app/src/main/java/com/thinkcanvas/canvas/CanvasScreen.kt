@@ -1947,7 +1947,9 @@ fun CanvasScreen(
                 val availableDp = availableWorld?.takeUnless { element.id in selectedIds || element.id in matchIds }
                     ?.let { with(density) { it.toDp() } }
                 val (screenX, screenY) = viewport.worldToScreen(element.x, element.y)
-                val selected = element.id in selectedIds || element.id in movingIds
+                val selected = element.id in selectedIds
+                val moving = element.id in movingIds
+                val framed = selected || moving
                 val elementActionsEnabled = !saveBlocked()
                 val baseSize = if (title) 15.sp else 14.sp
                 val minimumDp = when (tier) {
@@ -1959,7 +1961,7 @@ fun CanvasScreen(
                     maxOf(baseSize.toDp().value, minimumDp / viewport.scale).dp.toSp()
                 }
                 val faded = searchOpen && searchQuery.isNotBlank() &&
-                    element.id !in matchIds && !selected
+                    element.id !in matchIds && !framed
                 val tierAlpha = if (!title && tier == SemanticTier.MID)
                     1f - .55f * displayProjection.midProgress
                 else if (title && tier == SemanticTier.FAR) .55f else 1f
@@ -1979,7 +1981,7 @@ fun CanvasScreen(
                             scaleX = viewport.scale
                             scaleY = viewport.scale
                             transformOrigin = TransformOrigin(0f, 0f)
-                            shadowElevation = if (element.id in movingIds) 8.dp.toPx() else 0f
+                            shadowElevation = if (moving) 8.dp.toPx() else 0f
                         }
                         .widthIn(max = if (tier == SemanticTier.NEAR) 166.dp else availableDp ?: 166.dp)
                         .then(if (element.id in matchIds) Modifier
@@ -1988,7 +1990,7 @@ fun CanvasScreen(
                                 if (element.id == currentMatch?.id) drawRect(vermilion,
                                     style = Stroke(2.dp.toPx()))
                             } else Modifier)
-                        .then(if (selected) Modifier.selectionFrame(element.id in movingIds) else Modifier)
+                        .then(if (framed) Modifier.selectionFrame(moving) else Modifier)
                         .onSizeChanged { elementSizes[element.id] = it }
                         .semantics {
                             contentDescription = element.text

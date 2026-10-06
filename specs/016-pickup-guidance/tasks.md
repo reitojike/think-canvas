@@ -45,3 +45,7 @@ US2のImageElements描画とテストfixture調査は別ファイルなら並行
 ## Phase 9: Convergence
 
 - [x] T015 検索/Undo/Redo間のIME cleanupを検索closeのBack routingから独立させる per FR-005/006 (partial)。app/src/androidTest/java/com/thinkcanvas/canvas/ViewportHistoryInteractionTest.kt のhideSearchImeだけを既存Espresso.closeSoftKeyboardへ揃え、query保持・native IME非表示・内容/保存/historyを再検証する。productionとhideTextImeのactual Backは維持する。
+
+## Phase 10: Convergence
+
+- [x] T016 textのpickup stylingとactual selection semantics/gripを分ける per FR-002/003/005、Spec002 FR-014/018 (partial)。app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.kt と app/src/androidTest/java/com/thinkcanvas/canvas/LongPressGestureTest.kt で、未選択held/drag、選択追加前後、選択集合のstate/gripとframe/haptic/保存を照合する。他family・BoardState・Roomは変更しない。

@@ -35,6 +35,8 @@ Android標準は成立時にcontext menuを開くが、canvasではrelease/menu�
 
 既存generation/owner guardを再利用し、pointerInputのkeyには案内stateを加えない。
 
+textのpickup frame/shadowはmoving IDs、selection semantics/click label/gripはactual selectedIdsから導く。shape/region/arrow/ink/imageは既にこの表示と選択の責務を分けている。
+
 ## Complexity Tracking
 
 新永続entity/service/gesture abstractionなし。サイズ制約が実際に発生した場合は有限の表示責務だけ抽出する。

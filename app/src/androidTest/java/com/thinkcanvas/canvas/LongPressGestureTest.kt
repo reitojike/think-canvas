@@ -21,6 +21,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.test.core.app.ActivityScenario
@@ -246,6 +247,20 @@ class LongPressGestureTest {
         }
     }
 
+    private fun Harness.assertSelection(text: String, selected: Boolean) {
+        composeRule.onNodeWithContentDescription(text).assert(SemanticsMatcher.expectValue(
+            SemanticsProperties.StateDescription, context.getString(
+                if (selected) R.string.selection_state_selected else R.string.unselected)))
+        if (!selected) assertEquals(context.getString(R.string.select),
+            composeRule.onNodeWithContentDescription(text).fetchSemanticsNode()
+                .config[SemanticsActions.OnClick].label)
+    }
+
+    private fun assertGripCount(expected: Int) {
+        assertEquals(expected, composeRule.onAllNodesWithContentDescription("要素を移動")
+            .fetchSemanticsNodes().size)
+    }
+
     @Test
     fun elementLongPressReleaseOpensMenuAndDeleteIsReachable() = withBoard {
         val before = rows()
@@ -253,6 +268,8 @@ class LongPressGestureTest {
         val leftBefore = screenLeftTop(leftText)
         longPress(target, jitter(target), whileHeld = {
             assertPickup("ドラッグで移動、離すとメニュー")
+            assertSelection(leftText, false)
+            assertGripCount(0)
         })
         assertNoPickup()
         assertEquals(listOf(HapticFeedbackType.LongPress), feedback.toList())
@@ -274,7 +291,13 @@ class LongPressGestureTest {
         val distance = slop() * 5f
         longPress(target, dragSteps(target, distance), whileHeld = {
             assertPickup("ドラッグで移動、離すとメニュー")
-        }, afterMoves = { assertNoPickup() })
+            assertSelection(leftText, false)
+            assertGripCount(0)
+        }, afterMoves = {
+            assertNoPickup()
+            assertSelection(leftText, false)
+            assertGripCount(0)
+        })
         assertNoPickup()
         assertEquals(listOf(HapticFeedbackType.LongPress), feedback.toList())
         awaitRows { rows -> rows.first { it.id == "left" }.x != leftX }
@@ -342,6 +365,8 @@ class LongPressGestureTest {
             assertPickup("ドラッグで移動、離すとメニュー")
             Thread.sleep(2_100)
             assertPickup("ドラッグで移動、離すとメニュー")
+            assertSelection(leftText, false)
+            assertGripCount(0)
         })
         assertNoPickup()
         assertEquals(before, rows())
@@ -403,14 +428,22 @@ class LongPressGestureTest {
         click(leftText)
         longPress(centerOf(rightText), emptyList(), whileHeld = {
             assertPickup("ドラッグで移動、離すと選択に追加")
+            assertSelection(leftText, true)
+            assertSelection(rightText, false)
+            assertGripCount(1)
         })
         assertNoPickup()
         assertPickup("2個を選択")
+        assertSelection(rightText, true)
+        assertGripCount(2)
         assertEquals(0, composeRule.onAllNodesWithContentDescription(
             context.getString(R.string.menu_delete)).fetchSemanticsNodes().size)
         val target = centerOf(leftText)
         longPress(target, dragSteps(target, slop() * 5f), whileHeld = {
             assertPickup("ドラッグでまとめて移動、離すとメニュー")
+            assertSelection(leftText, true)
+            assertSelection(rightText, true)
+            assertGripCount(2)
         }, afterMoves = { assertNoPickup() })
         assertNoPickup()
         awaitRows { it.all { row -> row.x > before.first { old -> old.id == row.id }.x } }
