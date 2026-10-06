@@ -459,7 +459,9 @@ fun CanvasScreen(
 
     fun hideEditorIme() {
         pendingInputRequests.toList().forEach { it.cancel() }
-        keyboard?.hide()
+        val controller = if (Build.VERSION.SDK_INT >= 30) inputView.windowInsetsController else null
+        if (Build.VERSION.SDK_INT >= 30 && controller != null) controller.hide(android.view.WindowInsets.Type.ime())
+        else keyboard?.hide()
     }
 
     fun cancelBlankTap() {
@@ -1146,7 +1148,10 @@ fun CanvasScreen(
                 hasWindowFocus = { inputView.hasWindowFocus() },
                 isInputReady = { inputMethod.isActive(inputView) && inputMethod.isAcceptingText },
             )
-            if (ready) keyboard?.show()
+            if (ready) {
+                if (Build.VERSION.SDK_INT >= 30 && controller != null) controller.show(android.view.WindowInsets.Type.ime())
+                else keyboard?.show()
+            }
         } finally {
             pendingInputRequests.remove(requestJob)
         }
