@@ -140,6 +140,9 @@ private val vermilion = Color(0xFFC54B32)
 private val muted = Color(0xFF8D8882)
 private val outline = Color(0xFFE8E6E2)
 private val toolbar = Color(0xFFF3F2EF)
+private val textEditorWidth = 166.dp
+private val textEditorMaxHeight = 150.dp
+private val editorToolbarHeight = 54.dp
 
 private class ViewportAnimationBoundary {
     var active = true
@@ -1126,7 +1129,18 @@ fun CanvasScreen(
                         }
                     }
                 },
-                awaitFrame = { withFrameNanos { } },
+                awaitFrame = {
+                    withFrameNanos { }
+                    // A Compose frame can precede the native window/input dispatch.
+                    // Hand off to the View queue before the final ownership check and show.
+                    suspendCancellableCoroutine<Unit> { continuation ->
+                        val dispatch = Runnable {
+                            if (continuation.isActive) continuation.resume(Unit)
+                        }
+                        continuation.invokeOnCancellation { inputView.removeCallbacks(dispatch) }
+                        inputView.post(dispatch)
+                    }
+                },
                 hasWindowFocus = { inputView.hasWindowFocus() },
             )
             if (ready) keyboard?.show()
@@ -1200,17 +1214,6 @@ fun CanvasScreen(
             delay(1800)
             guidance = null
         }
-    }
-
-    LaunchedEffect(draft?.id, draft?.x, draft?.y, imeBottom, canvasSize) {
-        val current = draft ?: return@LaunchedEffect
-        if (canvasSize == IntSize.Zero || imeBottom == 0) return@LaunchedEffect
-        val (screenX, screenY) = viewport.worldToScreen(current.x, current.y)
-        val maxX = canvasSize.width - with(density) { 174.dp.toPx() }
-        val maxY = canvasSize.height - with(density) { 150.dp.toPx() }
-        val dx = (maxX - screenX).coerceAtMost(0f)
-        val dy = (maxY - screenY).coerceAtMost(0f)
-        if (dx != 0f || dy != 0f) viewport = viewport.pan(dx, dy)
     }
 
     val pointerGeneration = gestureGeneration
@@ -1433,6 +1436,10 @@ fun CanvasScreen(
                     val activeReleased = mode == "ink" && event.changes.any { it.id == drawingPointer && !it.pressed }
                     if (pressed.isEmpty() || activeReleased) {
                         if (event.type != PointerEventType.Release) break
+                        val feedbackRelease = event.motionEvent?.let {
+                            it.actionMasked == MotionEvent.ACTION_UP &&
+                                it.flags and MotionEvent.FLAG_CANCELED == 0
+                        } == true
                         if (mode == "pan" || mode == "zoom") {
                             val native = event.motionEvent
                             if (native?.actionMasked == MotionEvent.ACTION_UP &&
@@ -1456,8 +1463,7 @@ fun CanvasScreen(
                                     InkPoint(x, y, (endTime - drawingStart).coerceAtLeast(last.elapsedMillis))
                                 val stroke = InkStroke(startedAt = drawingStart, endedAt = endTime,
                                     inputType = drawingInput, points = drawingPoints)
-                                if (board.addInkStroke(drawingKind, stroke))
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                board.addInkStroke(drawingKind, stroke)
                                 saveSnapshot()
                             }
                             "tap" -> {
@@ -1506,13 +1512,15 @@ fun CanvasScreen(
                                             selectedIds = setOf(arrow.id); selectedId = null
                                             guidance = if (arrow.from is ArrowEnd.Attached || arrow.to is ArrowEnd.Attached)
                                                 "矢印を接続しました" else "矢印を作成しました"
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         }
                                         arrow != null
                                     } else false
                                     else -> false
                                 }
-                                if (created) saveSnapshot()
+                                if (created) {
+                                    if (feedbackRelease) haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    saveSnapshot()
+                                }
                                 finishToolInteraction(clearGuidance = false)
                             }
                             "lasso" -> {
@@ -1558,7 +1566,6 @@ fun CanvasScreen(
                                             val label = board.shapes.firstOrNull { it.id == id }?.name
                                                 ?.takeIf { it.isNotBlank() } ?: "囲み"
                                             guidance = if (afterRegion == null) "${label}から出ました" else "${label}に入りました"
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         }
                                         saveSnapshot()
                                     }
@@ -1581,7 +1588,7 @@ fun CanvasScreen(
                                 if (changed) {
                                     if (handle == HandleKind.FROM || handle == HandleKind.TO) {
                                         guidance = "端点を変更しました"
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        if (feedbackRelease) haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                     }
                                     saveSnapshot()
                                 }
@@ -1660,7 +1667,6 @@ fun CanvasScreen(
                             if (activeId == null) {
                                 mode = "gap"
                                 gapPreview = startWorld to startWorld
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             } else mode = "move"
                         }
                         when (mode) {
@@ -1998,7 +2004,17 @@ fun CanvasScreen(
             DisposableEffect(editorSession) {
                 onDispose { textEditorBounds = null; editorToolbarBounds = null }
             }
-            val (screenX, screenY) = viewport.worldToScreen(current.x, current.y)
+            val (worldScreenX, worldScreenY) = viewport.worldToScreen(current.x, current.y)
+            // IME avoidance owns only field presentation, never the world camera or draft position.
+            // safeDrawingPadding already excludes the IME; reserve the actual toolbar and scaled field.
+            val maxX = (canvasSize.width - with(density) {
+                textEditorWidth.toPx() * viewport.scale
+            }).coerceAtLeast(0f)
+            val maxY = (canvasSize.height - with(density) {
+                editorToolbarHeight.toPx() + textEditorMaxHeight.toPx() * viewport.scale
+            }).coerceAtLeast(0f)
+            val screenX = if (imeBottom > 0) worldScreenX.coerceIn(0f, maxX) else worldScreenX
+            val screenY = if (imeBottom > 0) worldScreenY.coerceIn(0f, maxY) else worldScreenY
             BasicTextField(
                 value = current.text,
                 onValueChange = { if (!latestExternalBlock.value()) draft = current.copy(text = it) },
@@ -2016,8 +2032,8 @@ fun CanvasScreen(
                         scaleY = viewport.scale
                         transformOrigin = TransformOrigin(0f, 0f)
                     }
-                    .width(166.dp)
-                    .heightIn(max = 150.dp)
+                    .width(textEditorWidth)
+                    .heightIn(max = textEditorMaxHeight)
                     .background(vermilion.copy(alpha = 0.07f), RoundedCornerShape(3.dp))
                     .drawBehind { drawLine(vermilion, Offset(0f, size.height), Offset(size.width, size.height), 1.dp.toPx()) }
                     .onGloballyPositioned { textEditorBounds = it.boundsInParent() }
@@ -2442,7 +2458,7 @@ fun CanvasScreen(
             }
         } else {
             Row(
-                modifier = Modifier.align(Alignment.BottomCenter).imePadding().fillMaxWidth().height(54.dp)
+                modifier = Modifier.align(Alignment.BottomCenter).imePadding().fillMaxWidth().height(editorToolbarHeight)
                     .onGloballyPositioned { editorToolbarBounds = it.boundsInParent() }
                     .background(toolbar)
                     .drawBehind { drawLine(outline, Offset.Zero, Offset(size.width, 0f), 1.dp.toPx()) }
