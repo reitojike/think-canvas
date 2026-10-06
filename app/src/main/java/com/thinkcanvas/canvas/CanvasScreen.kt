@@ -863,6 +863,7 @@ fun CanvasScreen(
         } else if (!exitBlocked()) {
             val currentDraft = editorSession.draft.value
             val currentRegion = editorSession.regionNameDraft.value
+            val hadPickup = pickupHint != null
             // Preserve preview/selection until the existing priority chooses one stage.
             invalidatePointerContinuation()
             when {
@@ -884,7 +885,7 @@ fun CanvasScreen(
                 }
                 tool != SpatialTool.NONE || inkTool != null || spatialPreview != null ||
                     inkPreview != null || movePreview != null || handlePreview != null ||
-                    gapPreview != null || lassoPoints.isNotEmpty() -> clearToolInteraction(true)
+                    gapPreview != null || lassoPoints.isNotEmpty() || hadPickup -> clearToolInteraction(true)
                 toolsExpanded -> toolsExpanded = false
                 selectedIds.isNotEmpty() -> {
                     selectedId = null; selectedIds = emptySet(); guidance = null

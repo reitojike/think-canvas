@@ -33,3 +33,7 @@ US1はMVPだが全storyを同じPRで検証する。US3は寿命、US2はfamily�
 
 ## Parallel Opportunities
 US2のImageElements描画とテストfixture調査は別ファイルなら並行可能。実装は同じCanvasScreenを触るため順次行う。GMDは一件ずつ、他Gradleと重ねない。
+
+## Phase 7: Convergence
+
+- [x] T013 空白pickupのBackをselection/listより先に消費する per FR-004、US3/AC1 (partial)。app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.kt と app/src/androidTest/java/com/thinkcanvas/canvas/LongPressGestureTest.kt で、選択あり/なしのblank held→Back→UPと内容不変を確認する。

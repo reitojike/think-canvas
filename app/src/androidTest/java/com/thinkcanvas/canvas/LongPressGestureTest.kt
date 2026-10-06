@@ -18,6 +18,9 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.test.core.app.ActivityScenario
@@ -42,6 +45,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Spec 002 の long-press release / long-press drag の判定を、実 pointer 入力で確認する。 */
 @RunWith(AndroidJUnit4::class)
@@ -59,6 +63,7 @@ class LongPressGestureTest {
         val database: CanvasDatabase,
         val sessions: BoardSessionViewModel,
         val feedback: MutableList<HapticFeedbackType>,
+        val openListCalls: AtomicInteger,
     )
 
     private fun withBoard(shapes: List<ShapeElement> = emptyList(), image: Boolean = false,
@@ -89,6 +94,7 @@ class LongPressGestureTest {
             composeRule.waitForIdle()
             lateinit var sessions: BoardSessionViewModel
             val feedback = CopyOnWriteArrayList<HapticFeedbackType>()
+            val openListCalls = AtomicInteger()
             val recorder = object : HapticFeedback {
                 override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
                     feedback.add(hapticFeedbackType)
@@ -102,14 +108,15 @@ class LongPressGestureTest {
                             val initial = BoardSnapshot()
                             CanvasScreen(sessions.stateFor(1L, initial), "Haptic regression",
                                 sessions.textEditorFor(1L, initial), sessions.saveStateFor(1L, initial),
-                                { sessions.requestSave(1L, it) }, { sessions.retrySave(1L) }, {}, {},
+                                { sessions.requestSave(1L, it) }, { sessions.retrySave(1L) },
+                                { openListCalls.incrementAndGet() }, {},
                                 viewportHistory = sessions.viewportHistoryFor(1L, initial))
                         }
                     }
                 }
             }
             composeRule.waitForIdle()
-            Harness(context, scenario, database, sessions, feedback).block()
+            Harness(context, scenario, database, sessions, feedback, openListCalls).block()
         } finally {
             database.close()
             scenario.close()
@@ -354,9 +361,40 @@ class LongPressGestureTest {
         })
         assertNoPickup()
         assertEquals(before, rows())
+        assertEquals(0, openListCalls.get())
         composeRule.onNodeWithContentDescription("キャンバス").assertExists()
         assertEquals(0, composeRule.onAllNodesWithContentDescription(
             context.getString(R.string.menu_delete)).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun blankPickupBackPreservesSelectionAndNeverOpensList() = withBoard {
+        val before = rows()
+        fun cancelBlankPickup() {
+            longPress(blankPoint(), emptyList(), whileHeld = {
+                assertPickup("ドラッグして余白を作る")
+                InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+                composeRule.waitForIdle()
+                assertNoPickup()
+                assertEquals(0, openListCalls.get())
+            })
+            assertNoPickup()
+            assertEquals(0, openListCalls.get())
+            assertEquals(before, rows())
+        }
+        cancelBlankPickup()
+        click(leftText)
+        cancelBlankPickup()
+        composeRule.onNodeWithContentDescription(leftText).assert(SemanticsMatcher.expectValue(
+            SemanticsProperties.StateDescription, context.getString(R.string.selection_state_selected)))
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription(leftText).assert(SemanticsMatcher.expectValue(
+            SemanticsProperties.StateDescription, context.getString(R.string.unselected)))
+        assertEquals(0, openListCalls.get())
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        composeRule.waitForIdle()
+        assertEquals(1, openListCalls.get())
     }
 
     @Test

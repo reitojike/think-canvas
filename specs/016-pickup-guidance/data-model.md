@@ -10,4 +10,4 @@ pickupHintはnullableな案内文字列。永続化しない。nullは準備案�
 | blank | ドラッグして余白を作る | no-op | gap |
 
 既存movePreviewがmoving IDsを供給する。画像のtemporary枠をIDsから導き、selection/Roomは変更しない。
-成立→heldは保持。slop超過/UP/cancel/Back/guard失効/pinch/stylus切替でnull。pointerInput keyに入れない。Backはcueだけ先に消し、previewをpriority判定まで保持する。
+成立→heldは保持。slop超過/UP/cancel/Back/guard失効/pinch/stylus切替でnull。pointerInput keyに入れない。Backは失効前のpickup有無を捕捉し、cueを消す。previewをpriority判定まで保持し、previewを持たないblankも取消stageで消費する。
