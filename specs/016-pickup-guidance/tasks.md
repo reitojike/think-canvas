@@ -49,3 +49,7 @@ US2のImageElements描画とテストfixture調査は別ファイルなら並行
 ## Phase 10: Convergence
 
 - [x] T016 textのpickup stylingとactual selection semantics/gripを分ける per FR-002/003/005、Spec002 FR-014/018 (partial)。app/src/main/java/com/thinkcanvas/canvas/CanvasScreen.kt と app/src/androidTest/java/com/thinkcanvas/canvas/LongPressGestureTest.kt で、未選択held/drag、選択追加前後、選択集合のstate/gripとframe/haptic/保存を照合する。他family・BoardState・Roomは変更しない。
+
+## Phase 11: Convergence
+
+- [x] T017 discard cycleのContinue前にnative dialog ownershipを観測する per FR-005/006、Spec010のwindow/IME前提 (partial)。app/src/androidTest/java/com/thinkcanvas/canvas/ViewportHistoryInteractionTest.kt の一箇所で既存isDialog rootのfocus/IMEとActivity focus lossを確認し、5回IME/取消復帰のfocused/fullを再検証する。production・IME再表示・camera/content/save/historyのassertは変更しない。

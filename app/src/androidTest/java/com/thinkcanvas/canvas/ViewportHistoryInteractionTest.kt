@@ -22,6 +22,9 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.closeSoftKeyboard
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.matcher.RootMatchers.isDialog
+import androidx.test.espresso.matcher.ViewMatchers.isRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.BoardSaveState
@@ -242,6 +245,20 @@ class ViewportHistoryInteractionTest {
             composeRule.waitForIdle()
             assertEquals(query, nodes("ボード内を探す").single().config[SemanticsProperties.EditableText])
         }
+        fun waitDiscardWindowOwned() {
+            composeRule.waitUntil(5_000) {
+                var dialogReady = false
+                onView(isRoot()).inRoot(isDialog()).check { view, failure ->
+                    if (failure != null) throw failure
+                    val insets = checkNotNull(view.rootWindowInsets)
+                    dialogReady = view.hasWindowFocus() && !insets.isVisible(WindowInsets.Type.ime()) &&
+                        insets.getInsets(WindowInsets.Type.ime()).bottom == 0
+                }
+                var activityFocused = true
+                scenario.onActivity { activityFocused = it.window.decorView.hasWindowFocus() }
+                dialogReady && !activityFocused
+            }
+        }
         fun back() {
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             composeRule.waitForIdle()
@@ -409,6 +426,8 @@ class ViewportHistoryInteractionTest {
                     hideTextIme()
                     back()
                     composeRule.onNodeWithText("編集内容を破棄しますか？").assertExists()
+                    // Semanticsだけではnative dialogのwindow ownershipを確定できない。
+                    waitDiscardWindowOwned()
                     composeRule.onNodeWithText("編集を続ける").performClick()
                     composeRule.onNodeWithText("編集内容を破棄しますか？").assertDoesNotExist()
                     composeRule.waitForIdle()
