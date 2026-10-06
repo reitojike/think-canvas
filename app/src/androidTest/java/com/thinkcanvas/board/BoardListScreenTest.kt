@@ -1061,7 +1061,10 @@ class BoardListScreenTest {
             tapCanvasCenter()
             awaitDescription("新しいテキスト")
             composeRule.onNode(hasSetTextAction()).performTextInput("失敗後に保存")
-            composeRule.onNodeWithText("完了").performClick()
+            // save/ack継続を対象とする。IME中のnative hit位置は別のDone回帰で検証する。
+            composeRule.onNodeWithText("完了").performSemanticsAction(SemanticsActions.OnClick) { click ->
+                composeRule.runOnUiThread { assertTrue(click()) }
+            }
             composeRule.waitUntil(5_000) {
                 sessions.saveStateFor(1L, BoardSnapshot()).value is com.thinkcanvas.BoardSaveState.Running
             }
@@ -1069,7 +1072,9 @@ class BoardListScreenTest {
             awaitText("再試行")
             awaitDescription("新しいテキスト")
             assertTrue(sessions.saveStateFor(1L, BoardSnapshot()).value is com.thinkcanvas.BoardSaveState.Failed)
-            composeRule.onNodeWithText("再試行").performClick()
+            composeRule.onNodeWithText("再試行").performSemanticsAction(SemanticsActions.OnClick) { click ->
+                composeRule.runOnUiThread { assertTrue(click()) }
+            }
 
             awaitDescription("失敗後に保存", substring = true)
             assertTrue(composeRule.onAllNodesWithContentDescription("新しいテキスト")
