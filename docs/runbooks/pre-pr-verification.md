@@ -27,3 +27,26 @@
 JDK、SDK、network、権限などの環境要因で検証を完走できないときも、実行可能な項目はすべて
 実行します。未実行項目、理由、代替確認を PR に記録し、degraded verification を全項目の
 成功と同一視しません。再現するコードの不具合は修正し、解消できなければ `HOLD` にします。
+
+## Android PR smoke shadow（Issue #118 Slice B）
+
+Issue #118 の migration 中は、従来の full Pixel 9 / API 37 GMD を **変更せず** PR で実行しながら、
+73件の platform-representative smoke suite を別 job で併走します。shadow smoke は full suite の代替ではありません。
+full→smoke の required gate 切替は Slice C の別判断です。
+
+suite partition は `scripts/android-test-suites.json` が authority です。androidTest の全 identity は
+`smoke` / `full_only` / `jvm_candidate` / `review_required` の exactly one bucket に属する必要があり、
+新規・削除・rename・duplicate・未分類があると fail-closed します。
+
+ローカルで manifest と source の整合だけを確認する場合:
+
+```bash
+python3 scripts/check-android-test-suites.py validate
+```
+
+PR smoke job は manifest から固定 regex を生成し、ユーザー入力の regex や shell fragment は受け取りません。
+Gradle は argv list で起動し、`tests_regex` は child environment の project property としてのみ渡します。
+fresh XML が manifest の73 identityと完全一致しない場合（0件、full誤実行、stale XML、missing/extra/duplicateを含む）は失敗です。
+
+このSliceでは test本体、production、Gradle dependency、timeout、retry、ignore は変更しません。
+
