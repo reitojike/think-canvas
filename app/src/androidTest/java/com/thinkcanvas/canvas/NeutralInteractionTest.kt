@@ -46,6 +46,7 @@ import com.thinkcanvas.data.TextElementRow
 import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -269,6 +270,7 @@ class NeutralInteractionTest {
         }
     }
 
+    @PrSmoke
     @Test
     fun systemBackWhileImeVisibleOnlyHidesKeyboardAndRetainsDraft() = withBoard {
         startNew("Keep this draft")
@@ -310,6 +312,7 @@ class NeutralInteractionTest {
         assertCanvasStillOpen()
     }
 
+    @PrSmoke
     @Test
     fun changedNewTextContinueDialogBackAndOutsideKeepDraft() = withBoard {
         startNew("Unsaved note")
@@ -415,6 +418,7 @@ class NeutralInteractionTest {
         assertTrue(board.canUndo)
     }
 
+    @PrSmoke
     @Test
     fun textAndDiscardConfirmationSurviveActivityRecreation() = withBoard {
         startNew("Survives recreation")
@@ -714,6 +718,7 @@ class NeutralInteractionTest {
         assertEquals("Keep the pending outside tap", editor.draft.value?.text)
     }
 
+    @PrSmoke
     @Test fun editorWaitsForWindowOwnerAndDoesNotReshowHiddenImeOnWindowReturn() = withBoard {
         val first = blockingWindow()
         try {
@@ -755,6 +760,7 @@ class NeutralInteractionTest {
         assertOriginalContent()
     }
 
+    @PrSmoke
     @Test fun lateWindowLossDuringInputFrameResumesTextRegionAndSearch() {
         for (label in listOf("新しいテキスト", "囲みの名前", "ボード内を探す")) withBoard {
             val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -824,6 +830,7 @@ class NeutralInteractionTest {
         }
     }
 
+    @PrSmoke
     @Test fun endedPendingEditorDoesNotRegainFocusBeforeRecomposition() = withBoard {
         val blocker = blockingWindow()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -887,6 +894,7 @@ class NeutralInteractionTest {
         assertOriginalContent()
     }
 
+    @PrSmoke
     @Test fun pendingInputIsCanceledByConfirmationAndAcceptedImeBack() = withBoard {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val blocker = blockingWindow()

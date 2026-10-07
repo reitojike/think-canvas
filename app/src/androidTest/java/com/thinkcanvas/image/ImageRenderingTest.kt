@@ -20,6 +20,7 @@ import java.io.DataOutputStream
 import java.io.File
 import java.util.UUID
 import java.util.zip.CRC32
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,6 +34,7 @@ class ImageRenderingTest {
         finally { directory.listFiles()?.forEach { it.delete() }; directory.delete() }
     }
 
+    @PrSmoke
     @Test fun allEightExifOrientationsPreserveQuadrantsAndOrientedIntrinsicRatio() = withStore { context, store, _ ->
         val expected = listOf(
             listOf(Color.RED, Color.GREEN, Color.BLUE, Color.YELLOW),
@@ -185,6 +187,7 @@ class ImageRenderingTest {
         } finally { source.delete() }
     }
 
+    @PrSmoke
     @Test fun highResolutionSourceIsSampledAndMissingAssetFailsTheWholeOutput() = withStore { context, store, _ ->
         val source = File(context.cacheDir, "large-${UUID.randomUUID()}.png")
         try {

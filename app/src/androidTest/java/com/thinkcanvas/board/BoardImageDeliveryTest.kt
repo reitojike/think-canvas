@@ -19,6 +19,7 @@ import com.thinkcanvas.canvas.ShapeKind
 import com.thinkcanvas.canvas.TextElement
 import com.thinkcanvas.canvas.arrowRenderGeometry
 import kotlinx.coroutines.runBlocking
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -149,6 +150,7 @@ class BoardImageDeliveryTest {
         }
     }
 
+    @PrSmoke
     @Test fun exportUsesDeviceTextMetricsForPlanAndBitmap() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val typography = ExportTypography.from(context.resources)
@@ -241,6 +243,7 @@ class BoardImageDeliveryTest {
         outlineOnly.recycle(); withMarker.recycle(); withPen.recycle()
     }
 
+    @PrSmoke
     @Test fun allElementKindsArePresentInSharedBitmap() {
         val source = BoardSnapshot(
             texts = listOf(TextElement(id = "text", text = "A", x = 10f, y = 10f)),
@@ -281,6 +284,7 @@ class BoardImageDeliveryTest {
     }
 
     @Suppress("DEPRECATION")
+    @PrSmoke
     @Test fun renderedPngMatchesPreviewAndCanBeCopiedWithoutChangingBoard() { runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val source = BoardSnapshot(shapes = listOf(ShapeElement(id = "box",
@@ -311,6 +315,7 @@ class BoardImageDeliveryTest {
         preview.recycle()
     } }
 
+    @PrSmoke
     @Test fun mediaStoreSaveCanBeReadAndCleanedUp() { runBlocking {
         if (Build.VERSION.SDK_INT < 29) return@runBlocking
         val context = InstrumentationRegistry.getInstrumentation().targetContext

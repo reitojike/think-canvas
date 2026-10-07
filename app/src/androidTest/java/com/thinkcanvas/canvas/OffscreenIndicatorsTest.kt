@@ -34,6 +34,7 @@ import com.thinkcanvas.data.TextElementRow
 import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -240,6 +241,7 @@ class OffscreenIndicatorsTest {
         } finally { composeRule.mainClock.autoAdvance = true; scenario.close() }
     }
 
+    @PrSmoke
     @Test fun searchIndicatorReturnsToCurrentResultWithoutMutation() = withBoard {
         search()
         assertEquals(0, indicators().size)
@@ -310,6 +312,7 @@ class OffscreenIndicatorsTest {
         unchanged()
     }
 
+    @PrSmoke
     @Test fun searchAndSelectionDeduplicateAndKeepStableAccessibleOrder() = withBoard {
         search()
         click(note.text)
@@ -364,6 +367,7 @@ class OffscreenIndicatorsTest {
         unchanged()
     }
 
+    @PrSmoke
     @Test fun editorAndCreationToolSuppressIndicatorsAndRestoreOnlyCurrentTargets() = withBoard {
         click(note.text)
         outsideToLeft()

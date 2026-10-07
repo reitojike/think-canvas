@@ -5,6 +5,7 @@ import android.os.Parcel
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.canvas.WorldPoint
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -25,6 +26,7 @@ import java.util.concurrent.TimeoutException
 
 @RunWith(AndroidJUnit4::class)
 class ShareImportCheckpointTest {
+    @PrSmoke
     @Test
     fun tokenOnlyBundleFindsLatestAcceptedPatchAtStablePosition() = withTestDirectory { directory, tokens ->
         val token = newToken(tokens)
@@ -104,6 +106,7 @@ class ShareImportCheckpointTest {
             assertEquals(request, ShareImportCheckpoint(directory, restoredToken).read())
         }
 
+    @PrSmoke
     @Test
     fun atomicRenameFailureIsReportedAndSameRequestCanRetry() = withTestDirectory { directory, tokens ->
         val token = newToken(tokens)

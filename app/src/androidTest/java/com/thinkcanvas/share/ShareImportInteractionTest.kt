@@ -40,6 +40,7 @@ import com.thinkcanvas.data.ShareImportReceiptRow
 import com.thinkcanvas.data.TextElementRow
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -183,6 +184,7 @@ class ShareImportInteractionTest {
             .performAction(AccessibilityNodeInfo.ACTION_CLICK))
     }
 
+    @PrSmoke
     @Test fun warmShareUsesCurrentBoardAndWorldCenterWithOneUndoAndOneSave() = withBoards {
         awaitText("‹ 一つ目")
         composeRule.waitUntil(10_000) { sessions.viewportHistoryFor(1, BoardSnapshot()).focus() != null }
@@ -217,6 +219,7 @@ class ShareImportInteractionTest {
         assertFalse(board.canUndo); assertTrue(board.canRedo)
     }
 
+    @PrSmoke
     @Test fun coldShareUsesLastBoardAndAllowsDestinationChangeBeforeMutation() =
         withBoards(last = 2, payload = "cold text") {
             awaitPreview("二つ目")
@@ -272,6 +275,7 @@ class ShareImportInteractionTest {
         assertEquals(2, rows().count { it.text == "same body" })
     }
 
+    @PrSmoke
     @Test fun retainedActivityDuringRunningKeepsOneApplicationAndCompletion() = withBoards(payload = "rotate") {
         awaitPreview()
         val gate = CompletableDeferred<Unit>()
@@ -395,6 +399,7 @@ class ShareImportInteractionTest {
         } finally { next.close() }
     }
 
+    @PrSmoke
     @Test fun editorAndImeKeepTheirDraftUntilTheOriginalEditFinishes() = withBoards {
         awaitText("‹ 一つ目")
         val editor = sessions.textEditorFor(1, BoardSnapshot())
@@ -453,6 +458,7 @@ class ShareImportInteractionTest {
         assertTrue(runBlocking { database.canvasDao().boards() }.isEmpty())
     }
 
+    @PrSmoke
     @Test fun manifestResolvesPlainTextShareAndLauncherWithoutClaimingImagesOrMultipleItems() {
         fun targets(action: String, type: String? = null, category: String = Intent.CATEGORY_DEFAULT) =
             context.packageManager.queryIntentActivities(Intent(action).setPackage(context.packageName)
@@ -668,6 +674,7 @@ class ShareImportInteractionTest {
         assertEquals(2, rows().size)
     }
 
+    @PrSmoke
     @Test fun imagePreviewAndChooserReturnToTheSameOwnerBeforeTextImport() = withBoards {
         awaitText("‹ 一つ目")
         val original = sessions

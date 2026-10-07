@@ -14,12 +14,14 @@ import com.thinkcanvas.data.ImageElementRow
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.runBlocking
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ImageResourcesTest {
+    @PrSmoke
     @Test fun duplicateSharesImmutableAssetAndDeletingOneBoardKeepsTheOtherReadable() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val store = CanvasStore.get(context)

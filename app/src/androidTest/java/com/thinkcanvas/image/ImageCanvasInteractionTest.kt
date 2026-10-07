@@ -31,6 +31,7 @@ import com.thinkcanvas.MainActivity
 import com.thinkcanvas.canvas.*
 import com.thinkcanvas.data.*
 import kotlinx.coroutines.runBlocking
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -106,6 +107,7 @@ class ImageCanvasInteractionTest {
         assertEquals(2f, rows().single().width / rows().single().height, .0001f)
     }
 
+    @PrSmoke
     @Test fun nativeLongPressMoveAndResizeKeepAspectWhileOrdinaryDragPans() = withBoard {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         fun drag(start: Offset, end: Offset, hold: Long) {
@@ -196,6 +198,7 @@ class ImageCanvasInteractionTest {
         assertEquals(original.assetId, rows().single().assetId)
     }
 
+    @PrSmoke
     @Test fun descriptionCancelDirtyBackEmptyCommitUndoAndRecreationKeepExpectedText() = withBoard {
         action("代替テキストを編集")
         compose.onNode(hasSetTextAction()).performTextReplacement("一時説明")

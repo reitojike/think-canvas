@@ -23,6 +23,7 @@ import com.thinkcanvas.data.CanvasStore
 import com.thinkcanvas.data.TextElementRow
 import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -157,6 +158,7 @@ class FlingGestureTest {
         } finally { composeRule.mainClock.autoAdvance = true; scenario.close() }
     }
 
+    @PrSmoke
     @Test fun fastPanContinuesAndUsesOneHistoryBoundary() = withBoard {
         val before = camera()
         val release = pan()
@@ -193,6 +195,7 @@ class FlingGestureTest {
         unchanged()
     }
 
+    @PrSmoke
     @Test fun disabledSystemAnimationsKeepStandardTouchDecay() {
         val resolver = instrumentation.targetContext.contentResolver
         val original = Settings.Global.getString(resolver, Settings.Global.ANIMATOR_DURATION_SCALE)
@@ -231,6 +234,7 @@ class FlingGestureTest {
         unchanged()
     }
 
+    @PrSmoke
     @Test fun pinchStopsOldFlingAndOwnsZoom() = withBoard {
         pan()
         advance(80L)

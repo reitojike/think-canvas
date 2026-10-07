@@ -22,6 +22,7 @@ import com.thinkcanvas.data.SpatialElementRow
 import com.thinkcanvas.data.TextElementRow
 import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -34,6 +35,7 @@ import org.junit.runner.RunWith
 class ConditionalChromeLifecycleTest {
     @get:Rule val composeRule = createEmptyComposeRule()
 
+    @PrSmoke
     @Test
     fun regionNameTransitionRemovesFormerSelectionSharePointUntilReselected() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -134,6 +136,7 @@ class ConditionalChromeLifecycleTest {
         }
     }
 
+    @PrSmoke
     @Test
     fun collapsedAndExpandedToolFormerCentersAdmitPersistedInkAndAllowReentry() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

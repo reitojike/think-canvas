@@ -18,6 +18,7 @@ import com.thinkcanvas.canvas.InkKind
 import com.thinkcanvas.canvas.InkPoint
 import com.thinkcanvas.canvas.InkStroke
 import com.thinkcanvas.canvas.WorldBounds
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -36,6 +37,7 @@ class BoardThumbnailTest {
         typeface = Typeface.DEFAULT_BOLD
     }
 
+    @PrSmoke
     @Test fun fixedScreenThumbnailGeometryPreservesDpAcrossDensity() {
         val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
             name = "Density checked label", x = 180f, y = 80f, width = 220f, height = 120f)

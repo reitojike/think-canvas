@@ -44,6 +44,7 @@ import com.thinkcanvas.data.TextElementRow
 import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -476,6 +477,7 @@ class TextEditorDismissalTest {
         composeRule.waitForIdle()
     }
 
+    @PrSmoke
     @Test fun emptyDraftOutsideTapClosesWithoutCreatingAndNextTapStartsDraft() = withBoard {
         val saves = trackSaves()
         // A discard must preserve redo as well as undo, even when redo is available.
@@ -494,6 +496,7 @@ class TextEditorDismissalTest {
         assertEquals(0, saves.get())
     }
 
+    @PrSmoke
     @Test fun nonEmptyDraftOutsideCommitsOnceWithWorldPositionKindColorAndReopen() = withBoard {
         val saves = trackSaves()
         startNew("Saved outside")
@@ -595,6 +598,7 @@ class TextEditorDismissalTest {
         assertEquals(TextColor.VERMILION, created.color)
     }
 
+    @PrSmoke
     @Test fun outsideDragLongPressAndCancellationKeepDraft() = withBoard {
         val initial = point(.1f, .23f)
         val originalCenter = center(original.text)
@@ -613,6 +617,7 @@ class TextEditorDismissalTest {
         assertUnchanged()
     }
 
+    @PrSmoke
     @Test fun shiftedNativeBlankDoubleTapResolvesBeforeEditorEntry() = withBoard {
         val saves = trackSaves()
         val initial = point(.1f, .23f)
@@ -716,6 +721,7 @@ class TextEditorDismissalTest {
         }
     }
 
+    @PrSmoke
     @Test fun outsideDoubleTapSlopConfirmsBothSinglesInOrder() = withBoard {
         val saves = trackSaves()
         // 選択paddingの表示変化を固定referenceのcamera比較に混ぜない。
@@ -890,6 +896,7 @@ class TextEditorDismissalTest {
         assertEquals(0, saves.get())
     }
 
+    @PrSmoke
     @Test fun pendingBlankSingleRejectsSemanticChromeBeforeRecomposition() {
         var verified = 0
         for (action in listOf("zoom", "selectedZoom", "tools", "share")) withBoard {

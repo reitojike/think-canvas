@@ -34,6 +34,7 @@ import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
 import org.hamcrest.Matcher
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -384,6 +385,7 @@ class SemanticNavigationTest {
             node?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true)
     }
 
+    @PrSmoke
     @Test fun farRegionFitsAndSearchFindsSavedText() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val body = TextElement(id = "search-body",

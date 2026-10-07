@@ -28,6 +28,7 @@ import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.async
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -137,6 +138,7 @@ class ImageImportInteractionTest {
         assertFalse(board.canUndo)
     }
 
+    @PrSmoke
     @Test fun actualFilePickerCallbackFlowsThroughMainIntoOneSavedImage() = withBoard {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val monitor = object : Instrumentation.ActivityMonitor() {
@@ -164,6 +166,7 @@ class ImageImportInteractionTest {
         } finally { instrumentation.removeMonitor(monitor) }
     }
 
+    @PrSmoke
     @Test fun actualPhotoPickerCancellationReturnsToCanvasWithoutAnEdit() = withBoard {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         var launches = 0

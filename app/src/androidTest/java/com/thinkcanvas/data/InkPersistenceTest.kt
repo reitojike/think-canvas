@@ -11,12 +11,14 @@ import com.thinkcanvas.canvas.InkPoint
 import com.thinkcanvas.canvas.InkStroke
 import com.thinkcanvas.canvas.Viewport
 import kotlinx.coroutines.runBlocking
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class InkPersistenceTest {
+    @PrSmoke
     @Test
     fun inkInputEncodingSurvivesDatabaseReopenAtThreeViewports() { runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

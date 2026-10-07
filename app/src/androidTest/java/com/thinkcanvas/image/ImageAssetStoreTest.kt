@@ -11,6 +11,7 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.util.UUID
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -36,6 +37,7 @@ class ImageAssetStoreTest {
         }
     }
 
+    @PrSmoke
     @Test fun privateCopySurvivesSourceLossAndPreservesAlphaWithinDecodeBudget() = withStore { store, directory ->
         val id = UUID.randomUUID().toString()
         val source = File(directory.parentFile, "source-${UUID.randomUUID()}.png")
