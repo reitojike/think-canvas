@@ -244,6 +244,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: PR smoke 73件を GMD で実行
         id: smoke_gmd
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -258,7 +259,8 @@ jobs:
           python3 scripts/check-android-test-suites.py verify-smoke \
             --selection "$RUNNER_TEMP/android-smoke-selection.json" \
             --started-at "$RUNNER_TEMP/android-smoke-started-at" \
-            --verification-out "$RUNNER_TEMP/android-smoke-verification.json"
+            --verification-out "$RUNNER_TEMP/android-smoke-verification.json" \
+            --allow-test-failures
       - name: PR smoke GMD の結果を保存
         if: always()
         uses: actions/upload-artifact@v7

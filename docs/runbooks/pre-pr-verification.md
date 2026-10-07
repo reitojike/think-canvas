@@ -48,5 +48,7 @@ PR smoke job は manifest から固定 regex を生成し、ユーザー入力�
 Gradle は Python の argv list（`shell=False`）で起動し、`tests_regex` は remote shell 用の literal single quote を値に含めた **1つの `-P...tests_regex=...` argv** として渡します。host shell へ文字列展開せず、ユーザー入力regexも受け取りません。
 fresh XML が manifest の73 identityと完全一致しない場合（0件、full誤実行、stale XML、missing/extra/duplicateを含む）は失敗です。
 
+Slice B の **shadow期間だけ** は、73 identity が正しく実行されたうえで発生した testcase の failure/error は観測結果として artifact に残し、shadow job 自体の required gate にはしません。既存 full GMD が引き続きPRのauthorityです。一方、manifest drift、selector不成立、fresh XML不足、device不一致、skipped testcaseは hard failure のままです。Slice C で smoke を required gate に昇格する場合は、この一時的な non-blocking policy をそのまま継承しません。
+
 このSliceでは test本体、production、Gradle dependency、timeout、retry、ignore は変更しません。
 

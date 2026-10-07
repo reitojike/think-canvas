@@ -224,8 +224,13 @@ def command_verify_smoke(args: argparse.Namespace) -> None:
     devices = root.findall('.//property[@name="device"]')
     if not devices or any(device.get("value") != "_app_pixel9Api37DebugAndroidTest" for device in devices):
         fail("ANDROID_TEST_SUITE_DEVICE_MISMATCH")
-    if any(summary[key] for key in ("failures", "errors", "skipped")):
-        fail("ANDROID_TEST_SUITE_SMOKE_FAILURE")
+    if summary["skipped"]:
+        fail("ANDROID_TEST_SUITE_SMOKE_SKIPPED")
+    if summary["failures"] or summary["errors"]:
+        if args.allow_test_failures:
+            print("ANDROID_TEST_SUITE_SMOKE_TEST_FAILURE_OBSERVED")
+        else:
+            fail("ANDROID_TEST_SUITE_SMOKE_FAILURE")
     print("ANDROID_TEST_SUITE_SMOKE_EXACT_IDENTITIES_PASS")
 
 
@@ -248,6 +253,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--selection", type=Path, required=True)
     verify.add_argument("--started-at", type=Path, required=True)
     verify.add_argument("--verification-out", type=Path, required=True)
+    verify.add_argument("--allow-test-failures", action="store_true")
     verify.set_defaults(func=command_verify_smoke)
     return parser
 
