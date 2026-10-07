@@ -18,6 +18,7 @@ CATEGORIES = ("smoke", "full_only", "jvm_candidate", "review_required")
 IDENTIFIER = r"[A-Za-z_][A-Za-z0-9_]*"
 IDENTITY_RE = re.compile(rf"^(?:{IDENTIFIER}\.)+{IDENTIFIER}#{IDENTIFIER}$")
 PACKAGE_RE = re.compile(r"^package\s+([A-Za-z_][A-Za-z0-9_.]*)\s*$", re.M)
+TEST_ANNOTATION_RE = re.compile(r"^\s*@(org\\.junit\\.)?Test\b", re.M)
 TEST_RE = re.compile(r"^\s*@Test\s+fun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", re.M)
 
 
@@ -33,9 +34,19 @@ def source_identities() -> list[str]:
     identities: list[str] = []
     for path in sorted(TEST_ROOT.rglob("*.kt")):
         text = path.read_text(encoding="utf-8")
-        methods = TEST_RE.findall(text)
-        if not methods:
+        annotations = TEST_ANNOTATION_RE.findall(text)
+        if not annotations:
             continue
+        methods = TEST_RE.findall(text)
+        # The manifest must fail closed if Kotlin test declarations move beyond
+        # the deliberately narrow parser shape. Otherwise a valid new @Test
+        # (for example @Test + @LargeTest + fun, or @Test + public fun) could
+        # silently disappear from the suite census.
+        if len(methods) != len(annotations):
+            fail(
+                "ANDROID_TEST_SUITE_UNSUPPORTED_TEST_DECLARATION",
+                str(path.relative_to(ROOT)),
+            )
         package_match = PACKAGE_RE.search(text)
         if not package_match:
             fail("ANDROID_TEST_SUITE_PACKAGE_NOT_FOUND", str(path.relative_to(ROOT)))
