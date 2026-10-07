@@ -58,6 +58,7 @@ import com.thinkcanvas.data.SpatialElementRow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -212,6 +213,7 @@ class BoardListScreenTest {
         } finally { scenario.close() }
     }
 
+    @PrSmoke
     @Test fun emptyBoardShowsExactlyOneCanonicalAccessibleHint() {
         seed(listOf(BoardRow(1, "空のボード", 10)))
         assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
@@ -297,6 +299,7 @@ class BoardListScreenTest {
         } finally { scenario.close() }
     }
 
+    @PrSmoke
     @Test fun guideCtaCanBeScrolledToAndActivatedAtLargeFontInCompactHeight() {
         val previousFontScale = shell("settings get system font_scale").trim()
         val previousSizeOutput = shell("wm size")
@@ -352,6 +355,7 @@ class BoardListScreenTest {
         try { awaitText("‹ 二つ目") } finally { reopened.close() }
     }
 
+    @PrSmoke
     @Test fun systemBackReturnsFromBoardToList() {
         seed(listOf(BoardRow(1, "戻る対象", 10)))
         assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
@@ -408,6 +412,7 @@ class BoardListScreenTest {
         } finally { scenario.close() }
     }
 
+    @PrSmoke
     @Test fun createCompletesOnceAfterActivityRecreation() {
         seed(listOf(BoardRow(1, "既存", 10)))
         val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
@@ -472,6 +477,7 @@ class BoardListScreenTest {
         } finally { scenario.close() }
     }
 
+    @PrSmoke
     @Test fun renameReloadsTheListAfterActivityRecreation() {
         seed(listOf(BoardRow(11, "変更前", 10)))
         val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
@@ -729,6 +735,7 @@ class BoardListScreenTest {
         } finally { scenario.close() }
     }
 
+    @PrSmoke
     @Test fun completedOpenWaitsForStartedSurvivingActivityBeforeConsume() {
         seed(listOf(BoardRow(16, "保存境界の結果", 10)))
         val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
@@ -807,6 +814,7 @@ class BoardListScreenTest {
         } finally { scenario.close() }
     }
 
+    @PrSmoke
     @Test fun pendingBoardSaveSurvivesRecreationAndBlocksLeaving() {
         seed(listOf(BoardRow(21, "保存中のボード", 10)))
         assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
@@ -876,6 +884,7 @@ class BoardListScreenTest {
         }
     }
 
+    @PrSmoke
     @Test fun failedSaveAndRetryRemainObservableAcrossRecreation() {
         seed(listOf(BoardRow(22, "再試行するボード", 10)))
         assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
@@ -967,6 +976,7 @@ class BoardListScreenTest {
         } finally { scenario.close() }
     }
 
+    @PrSmoke
     @Test fun newTextImmediateSaveClosesOnceAndPersistsOneElementAfterRepeatedDone() {
         seed(listOf(BoardRow(1, "即時保存", 10)))
         assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)

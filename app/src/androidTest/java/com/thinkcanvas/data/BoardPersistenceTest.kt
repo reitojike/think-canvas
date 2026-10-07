@@ -5,6 +5,7 @@ import androidx.sqlite.driver.AndroidSQLiteDriver
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -13,6 +14,7 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class BoardPersistenceTest {
+    @PrSmoke
     @Test fun boardsRemainSeparateAcrossReopenDeleteAndLateSave() { runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val name = "board-lifecycle-test.db"

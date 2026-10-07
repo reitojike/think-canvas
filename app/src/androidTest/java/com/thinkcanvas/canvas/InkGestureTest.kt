@@ -24,6 +24,7 @@ import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlin.math.roundToInt
 import kotlinx.coroutines.runBlocking
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -33,6 +34,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class InkGestureTest {
     @get:Rule val composeRule = createEmptyComposeRule()
+    @PrSmoke
     @Test
     fun secondFingerCancelsWetInkAndSingleFingerStillDraws() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

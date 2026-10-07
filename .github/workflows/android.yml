@@ -221,12 +221,12 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
-      - name: smoke manifest と source identity を確認
+      - name: smoke receipt と planning snapshot を確認
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/check-android-test-suites.py validate \
-            --selection-out "$RUNNER_TEMP/android-smoke-selection.json"
+            --receipt-out "$RUNNER_TEMP/android-smoke-receipt.json"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -244,23 +244,22 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: PR smoke 73件を GMD で実行
         id: smoke_gmd
-        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
+          test ! -d app/build/outputs/androidTest-results/managedDevice
           date -u +%s > "$RUNNER_TEMP/android-smoke-started-at"
-          python3 scripts/check-android-test-suites.py run-smoke \
-            --selection "$RUNNER_TEMP/android-smoke-selection.json"
+          ./gradlew :app:pixel9Api37DebugAndroidTest --rerun \
+            -Pandroid.testInstrumentationRunnerArguments.annotation=com.thinkcanvas.test.PrSmoke \
+            -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
       - name: smoke XML の identity と counters を確認
-        if: ${{ always() && steps.smoke_gmd.outcome != 'skipped' }}
+        if: ${{ !cancelled() && steps.smoke_gmd.outcome != 'skipped' }}
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/check-android-test-suites.py verify-smoke \
-            --selection "$RUNNER_TEMP/android-smoke-selection.json" \
             --started-at "$RUNNER_TEMP/android-smoke-started-at" \
-            --verification-out "$RUNNER_TEMP/android-smoke-verification.json" \
-            --allow-test-failures
+            --verification-out "$RUNNER_TEMP/android-smoke-verification.json"
       - name: PR smoke GMD の結果を保存
         if: always()
         uses: actions/upload-artifact@v7
@@ -269,7 +268,7 @@ jobs:
           path: |
             app/build/reports/androidTests/managedDevice/
             app/build/outputs/androidTest-results/managedDevice/
-            ${{ runner.temp }}/android-smoke-selection.json
+            ${{ runner.temp }}/android-smoke-receipt.json
             ${{ runner.temp }}/android-smoke-verification.json
           if-no-files-found: warn
           retention-days: 7

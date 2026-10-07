@@ -40,6 +40,7 @@ import com.thinkcanvas.data.ImageElementRow
 import com.thinkcanvas.image.seedImage
 import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -261,6 +262,7 @@ class LongPressGestureTest {
             .fetchSemanticsNodes().size)
     }
 
+    @PrSmoke
     @Test
     fun elementLongPressReleaseOpensMenuAndDeleteIsReachable() = withBoard {
         val before = rows()
@@ -283,6 +285,7 @@ class LongPressGestureTest {
         awaitRows { it == before }
     }
 
+    @PrSmoke
     @Test
     fun elementLongPressDragMovesAndUndoRedoApply() = withBoard {
         val before = rows()
@@ -336,6 +339,7 @@ class LongPressGestureTest {
             context.getString(R.string.menu_delete)).fetchSemanticsNodes().size)
     }
 
+    @PrSmoke
     @Test
     fun blankLongPressDragInsertsGapAsOneUndoableOperation() = withBoard {
         val before = rows()
@@ -477,6 +481,7 @@ class LongPressGestureTest {
         assertEquals(image, runBlocking { database.canvasDao().images(1L).single().toModel() })
     }
 
+    @PrSmoke
     @Test
     fun touchAndStylusStrokeCompletionIsSilentAndUndoable() = withBoard {
         val board = sessions.stateFor(1L, BoardSnapshot())
@@ -502,6 +507,7 @@ class LongPressGestureTest {
         composeRule.waitUntil(10_000) { board.snapshot() == after }
     }
 
+    @PrSmoke
     @Test
     fun shapeCreationConfirmsOnceAndPreservesUndoRedo() = withBoard {
         val board = sessions.stateFor(1L, BoardSnapshot())

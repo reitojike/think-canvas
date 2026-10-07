@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.thinkcanvas.canvas.WorldPoint
 import java.io.File
 import java.util.UUID
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -22,6 +23,7 @@ class ImageImportCheckpointTest {
         finally { directory.listFiles()?.forEach { it.delete() }; directory.delete() }
     }
 
+    @PrSmoke
     @Test fun acceptedCheckpointRestoresSameIdentityAndFixedPatchForFreshOwner() = withDirectory { directory ->
         val request = request().accepting(ImageAsset(UUID.randomUUID().toString(), 400, 200))
         ImageImportCheckpoint(directory).write(request.taskToken, request)

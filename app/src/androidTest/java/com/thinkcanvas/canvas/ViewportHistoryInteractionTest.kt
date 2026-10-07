@@ -41,6 +41,7 @@ import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.runBlocking
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -415,6 +416,7 @@ class ViewportHistoryInteractionTest {
         assertEquals(expected.scale, actual.scale, .005f)
     }
 
+    @PrSmoke
     @Test fun fiveImeCancelAndConfirmationCyclesReturnCameraWithoutHistoryOrSave() = withBoard {
         val before = settledCamera(imeVisible = false)
         repeat(5) { cycle ->
@@ -444,6 +446,7 @@ class ViewportHistoryInteractionTest {
         }
     }
 
+    @PrSmoke
     @Test fun fiveImeDoneCyclesAndExistingEditKeepWorldPlacementAndUndo() = withBoard {
         val before = settledCamera(imeVisible = false)
         repeat(5) { cycle ->
@@ -484,6 +487,7 @@ class ViewportHistoryInteractionTest {
         assertCameraReturned(before)
     }
 
+    @PrSmoke
     @Test fun imeCameraIsIndependentOfRecreationAndWindowFocus() = withBoard {
         val before = settledCamera(imeVisible = false)
         openLowerDraft(before)
@@ -516,6 +520,7 @@ class ViewportHistoryInteractionTest {
         unchanged()
     }
 
+    @PrSmoke
     @Test fun searchCyclePanPinchAndIndicatorRestoreWithoutContentOrSave() = withBoard {
         val start = navigation.focus()
         search()
@@ -597,6 +602,7 @@ class ViewportHistoryInteractionTest {
         }
     }
 
+    @PrSmoke
     @Test fun visibleAndOffscreenUndoRedoFocusWithoutExtraContentHistoryOrSave() = withBoard {
         search("Find alpha")
         val visible = navigation.focus()

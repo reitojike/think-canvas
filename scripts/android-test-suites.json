@@ -4,7 +4,7 @@
     "issue": 118,
     "baseline_main": "389977dc9253148a5ed7091a86b5b0945e1d3f3e",
     "census_total": 252,
-    "note": "Issue #118 read-only census. Every androidTest identity must appear in exactly one suite."
+    "note": "Issue #118 のdated planning snapshot。smokeは移行時のexact identity receipt、F/J/Rはplanning metadata。actual test discoveryはAndroidJUnitRunnerに委ね、sourceからpartitionを再構築しない。"
   },
   "suites": {
     "smoke": [

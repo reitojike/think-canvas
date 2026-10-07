@@ -34,28 +34,46 @@ Issue #118 の migration 中は、従来の full Pixel 9 / API 37 GMD を **変�
 73件の platform-representative smoke suite を別 job で併走します。shadow smoke は full suite の代替ではありません。
 full→smoke の required gate 切替は Slice C の別判断です。
 
-suite partition は `scripts/android-test-suites.json` が authority です。androidTest の全 identity は
-`smoke` / `full_only` / `jvm_candidate` / `review_required` の exactly one bucket に属する必要があり、
-新規・削除・rename・duplicate・未分類があると fail-closed します。
+smoke execution authority は、compiled test APK を発見する AndroidJUnitRunner と、method-level
+`com.thinkcanvas.test.PrSmoke` annotation です。marker は androidTest source set に置き、
+`AnnotationTarget.FUNCTION` / `AnnotationRetention.RUNTIME` を指定します。class-level smoke は使いません。
+既存 targeted workflow の direct `@Test` → `fun` preflight を保つため、`@PrSmoke` は `@Test` の前に置きます。
 
-source validator は、file 名と一致する1つの top-level class の直接 member として宣言された
-`@Test fun method(...)` のみを identity 化します。文字列・コメントを除いた構造で、全 test annotation
-がその class の直下にあることを確認します。test を持たない helper/nested class は許容しますが、
-別 class・nested class・class 外の `@Test` は ownership failure です。`@org.junit.Test` も annotation
-として検出し、別 annotation や visibility modifier が `@Test` と `fun` の間に入る形と同様、
-この narrow declaration contract の未対応形として明示的に失敗します。認識できない test を skip
-したり、file 名から別 class の identity を生成したりしません。
+`scripts/android-test-suites.json` の `smoke` は移行時の exact73 identity receipt です。
+`full_only`170 / `jvm_candidate`9 / `review_required`0 は dated planning metadata であり、
+Kotlin source から actual inventory や4-way partitionを独自に再構築する runtime gate にはしません。
+migration中のsnapshot countsとJSONのidentity形式・sort・duplicateは検証します。
+actual discovery は runner に委ねます。markerがないtestも unfiltered full に残り、J9も移管まで保持します。
+runtime上の unmarked complement179とplanning FULL_ONLY170は異なります。
 
-ローカルで manifest と source の整合だけを確認する場合:
+ローカルで receipt / planning snapshot の self-consistency を確認する場合:
 
 ```bash
 python3 scripts/check-android-test-suites.py validate
 ```
 
-PR smoke job は manifest から固定 regex を生成し、ユーザー入力の regex や shell fragment は受け取りません。
-Gradle は Python の argv list（`shell=False`）で起動し、`tests_regex` は remote shell 用の literal single quote を値に含めた **1つの `-P...tests_regex=...` argv** として渡します。host shell へ文字列展開せず、ユーザー入力regexも受け取りません。
-fresh XML が manifest の73 identityと完全一致しない場合（0件、full誤実行、stale XML、missing/extra/duplicateを含む）は失敗です。
+PR-only shadow invocation は [Android公式のannotation filtering](https://developer.android.com/training/testing/different-screens/tools#test-filtering-with-the-test-runner) を使用します。
 
-Slice B の **shadow期間だけ** は、73 identity が正しく実行されたうえで発生した testcase の failure/error は観測結果として artifact に残し、shadow job 自体の required gate にはしません。既存 full GMD が引き続きPRのauthorityです。一方、manifest drift、selector不成立、fresh XML不足、device不一致、skipped testcaseは hard failure のままです。Slice C で smoke を required gate に昇格する場合は、この一時的な non-blocking policy をそのまま継承しません。
+```bash
+./gradlew :app:pixel9Api37DebugAndroidTest --rerun \
+  -Pandroid.testInstrumentationRunnerArguments.annotation=com.thinkcanvas.test.PrSmoke \
+  -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
+```
 
-このSliceでは test本体、production、Gradle dependency、timeout、retry、ignore は変更しません。
+JSONからselectorを生成せず、long regexやremote shell用quote workaround、Python Gradle launcherは使いません。
+filterはshadow invocationだけに指定し、defaultConfig/global arguments/full/targetedへ設定しません。
+fresh XMLのactual Class#method CounterをS73 receiptと比較し、0件、同数の別集合、full誤実行、
+missing/extra/duplicate、stale/missing XML、malformed counters、wrong device、skippedをfail-closedにします。
+
+shadowは **strict red optional check** です。testcase failure/errorもnon-test Gradle failureもjob failureを保持し、
+continue-on-errorや独自failure classifierでgreen化しません。failure後もverificationとartifactを収集します。
+optionalはbranch required checkへ昇格していないという意味で、aggregate workflowがredでも隠しません。
+cancelledや証跡不足はsuccessとして使いません。
+
+Slice Cまでは既存lint/unit/build/公開境界とunfiltered full GMDをdelivery/convergence authorityとして保持します。
+各laneの証跡を確認し、unrelated testcase-only flakeは [Issue #118 convergence policy](https://github.com/reitojike/think-canvas/issues/118#issuecomment-6030890580) に沿って人間/agentが分類・記録します。
+selector/receipt/freshness/device/infraの不成立やcause不明のmixed failureはHOLDです。
+optional shadowのredだけを理由にtestを外したり、greenを引くまでrerunしたりしません。
+
+このarchitecture correctionのandroidTest差分はmarker定義・import・method markerだけです。
+test本体、production、Gradle dependency、timeout、retry、ignoreは変更しません。

@@ -38,6 +38,7 @@ import com.thinkcanvas.data.InkStrokeRow
 import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CompletableDeferred
+import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -377,9 +378,12 @@ class EdgeAutoPanTest {
         }
     }
 
+    @PrSmoke
     @Test fun stationaryPointerPreservesOffsetStopsInCenterAndCommitsOnce() = withBoard { stationaryDrag() }
+    @PrSmoke
     @Test fun nativeCancelDiscardsPreviewWithoutSavingOrHistory() = withBoard { stationaryDrag(cancel = true) }
 
+    @PrSmoke
     @Test fun backRejectsQueuedFrameAndSameTurnStaleMoveAndUp() = withBoard {
         val before = board.snapshot()
         val (start, edge) = startAndEdge()
@@ -398,6 +402,7 @@ class EdgeAutoPanTest {
         assertNextPanWorks()
     }
 
+    @PrSmoke
     @Test fun secondFingerCancelsMoveAndHandsOffToPinchWithoutSaving() = withBoard {
         val before = board.snapshot()
         val (start, edge) = startAndEdge()
@@ -420,6 +425,7 @@ class EdgeAutoPanTest {
         assertNextPanWorks()
     }
 
+    @PrSmoke
     @Test fun stylusTakeoverCancelsMoveAndCommitsOnlyTheStroke() = withBoard {
         val before = board.snapshot()
         val (start, edge) = startAndEdge()
@@ -812,6 +818,7 @@ class EdgeAutoPanTest {
         }
     }
 
+    @PrSmoke
     @Test fun tapAndSlopJitterDoNotStartAutoPan() {
         withBoard {
             select(moving.text)
@@ -953,6 +960,7 @@ class EdgeAutoPanTest {
         }
     }
 
+    @PrSmoke
     @Test fun accessibilityMoveRetainsItsOneStepAndDoesNotStartTheTicker() = withBoard {
         val before = board.snapshot()
         val camera = position(fixed.text)
