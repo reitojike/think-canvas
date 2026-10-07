@@ -16,9 +16,9 @@ TEST_ROOT = ROOT / "app/src/androidTest/java"
 DEFAULT_MANIFEST = ROOT / "scripts/android-test-suites.json"
 CATEGORIES = ("smoke", "full_only", "jvm_candidate", "review_required")
 IDENTIFIER = r"[A-Za-z_][A-Za-z0-9_]*"
-IDENTITY_RE = re.compile(rf"^(?:{IDENTIFIER}\\.)+{IDENTIFIER}#{IDENTIFIER}$")
-PACKAGE_RE = re.compile(r"^package\\s+([A-Za-z_][A-Za-z0-9_.]*)\\s*$", re.M)
-TEST_RE = re.compile(r"^\\s*@Test\\s+fun\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(", re.M)
+IDENTITY_RE = re.compile(rf"^(?:{IDENTIFIER}\.)+{IDENTIFIER}#{IDENTIFIER}$")
+PACKAGE_RE = re.compile(r"^package\s+([A-Za-z_][A-Za-z0-9_.]*)\s*$", re.M)
+TEST_RE = re.compile(r"^\s*@Test\s+fun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", re.M)
 
 
 def fail(code: str, detail: str | None = None):
@@ -40,7 +40,7 @@ def source_identities() -> list[str]:
         if not package_match:
             fail("ANDROID_TEST_SUITE_PACKAGE_NOT_FOUND", str(path.relative_to(ROOT)))
         simple_class = path.stem
-        if not re.search(rf"^\\s*(?:public\\s+|internal\\s+)?class\\s+{re.escape(simple_class)}\\b", text, re.M):
+        if not re.search(rf"^\s*(?:public\s+|internal\s+)?class\s+{re.escape(simple_class)}\b", text, re.M):
             fail("ANDROID_TEST_SUITE_CLASS_MISMATCH", str(path.relative_to(ROOT)))
         if len(methods) != len(set(methods)):
             fail("ANDROID_TEST_SUITE_DUPLICATE_METHOD", str(path.relative_to(ROOT)))
