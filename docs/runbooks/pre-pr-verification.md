@@ -38,6 +38,14 @@ suite partition は `scripts/android-test-suites.json` が authority です。an
 `smoke` / `full_only` / `jvm_candidate` / `review_required` の exactly one bucket に属する必要があり、
 新規・削除・rename・duplicate・未分類があると fail-closed します。
 
+source validator は、file 名と一致する1つの top-level class の直接 member として宣言された
+`@Test fun method(...)` のみを identity 化します。文字列・コメントを除いた構造で、全 test annotation
+がその class の直下にあることを確認します。test を持たない helper/nested class は許容しますが、
+別 class・nested class・class 外の `@Test` は ownership failure です。`@org.junit.Test` も annotation
+として検出し、別 annotation や visibility modifier が `@Test` と `fun` の間に入る形と同様、
+この narrow declaration contract の未対応形として明示的に失敗します。認識できない test を skip
+したり、file 名から別 class の identity を生成したりしません。
+
 ローカルで manifest と source の整合だけを確認する場合:
 
 ```bash
@@ -51,4 +59,3 @@ fresh XML が manifest の73 identityと完全一致しない場合（0件、ful
 Slice B の **shadow期間だけ** は、73 identity が正しく実行されたうえで発生した testcase の failure/error は観測結果として artifact に残し、shadow job 自体の required gate にはしません。既存 full GMD が引き続きPRのauthorityです。一方、manifest drift、selector不成立、fresh XML不足、device不一致、skipped testcaseは hard failure のままです。Slice C で smoke を required gate に昇格する場合は、この一時的な non-blocking policy をそのまま継承しません。
 
 このSliceでは test本体、production、Gradle dependency、timeout、retry、ignore は変更しません。
-

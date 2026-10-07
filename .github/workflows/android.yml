@@ -273,4 +273,3 @@ jobs:
             ${{ runner.temp }}/android-smoke-verification.json
           if-no-files-found: warn
           retention-days: 7
-

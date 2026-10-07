@@ -18,8 +18,10 @@ CATEGORIES = ("smoke", "full_only", "jvm_candidate", "review_required")
 IDENTIFIER = r"[A-Za-z_][A-Za-z0-9_]*"
 IDENTITY_RE = re.compile(rf"^(?:{IDENTIFIER}\.)+{IDENTIFIER}#{IDENTIFIER}$")
 PACKAGE_RE = re.compile(r"^package\s+([A-Za-z_][A-Za-z0-9_.]*)\s*$", re.M)
-TEST_ANNOTATION_RE = re.compile(r"^\s*@(org\\.junit\\.)?Test\b", re.M)
-TEST_RE = re.compile(r"^\s*@Test\s+fun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", re.M)
+TEST_ANNOTATION_RE = re.compile(r"@(?:org\.junit\.)?Test\b")
+TEST_RE = re.compile(r"@Test\s+fun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+CLASS_RE = re.compile(rf"^[ \t]*(?:(?:public|internal)\s+)?class\s+({IDENTIFIER})\s*\{{", re.M)
+NON_CODE_START_RE = re.compile(r'//|/\*|"""|"|\'|`')
 
 
 def fail(code: str, detail: str | None = None):
@@ -30,10 +32,71 @@ def fail(code: str, detail: str | None = None):
     raise SystemExit(1)
 
 
+def structural_source(text: str, detail: str) -> str:
+    # Preserve offsets/newlines while masking comments and literals. This is only
+    # a brace/annotation ownership check, not a general Kotlin declaration parser.
+    masked = list(text)
+    offset = 0
+    while start := NON_CODE_START_RE.search(text, offset):
+        token = start.group()
+        end = start.end()
+        if token == "//":
+            newline = text.find("\n", end)
+            end = len(text) if newline < 0 else newline
+        elif token == "/*":
+            depth = 1
+            while depth:
+                boundary = re.search(r"/\*|\*/", text[end:])
+                if not boundary:
+                    fail("ANDROID_TEST_SUITE_UNSUPPORTED_TEST_STRUCTURE", detail)
+                depth += 1 if boundary.group() == "/*" else -1
+                end += boundary.end()
+        else:
+            while True:
+                if end >= len(text):
+                    fail("ANDROID_TEST_SUITE_UNSUPPORTED_TEST_STRUCTURE", detail)
+                if text.startswith(token, end):
+                    end += len(token)
+                    break
+                if token in ('"', "'") and text[end] == "\\":
+                    end += 2
+                else:
+                    end += 1
+        for index in range(start.start(), end):
+            if text[index] not in "\r\n":
+                masked[index] = " "
+        offset = end
+    return "".join(masked)
+
+
+def check_test_ownership(text: str, simple_class: str, detail: str) -> None:
+    classes = [match for match in CLASS_RE.finditer(text) if match.group(1) == simple_class]
+    if len(classes) != 1:
+        fail("ANDROID_TEST_SUITE_CLASS_MISMATCH", detail)
+    class_open = classes[0].end() - 1
+    braces: list[int] = []
+    for token in re.finditer(r"[{}]|@(?:org\.junit\.)?Test\b", text):
+        if token.group() == "{":
+            if token.start() == class_open and braces:
+                fail("ANDROID_TEST_SUITE_UNSUPPORTED_TEST_OWNERSHIP", detail)
+            braces.append(token.start())
+        elif token.group() == "}":
+            if not braces:
+                fail("ANDROID_TEST_SUITE_UNSUPPORTED_TEST_STRUCTURE", detail)
+            braces.pop()
+        elif braces != [class_open]:
+            # All tests must be direct members of the sole stem-matching
+            # top-level class. Other helper/nested classes may have no @Test.
+            fail("ANDROID_TEST_SUITE_UNSUPPORTED_TEST_OWNERSHIP", detail)
+    if braces:
+        fail("ANDROID_TEST_SUITE_UNSUPPORTED_TEST_STRUCTURE", detail)
+
+
 def source_identities() -> list[str]:
     identities: list[str] = []
     for path in sorted(TEST_ROOT.rglob("*.kt")):
-        text = path.read_text(encoding="utf-8")
+        detail = str(path.relative_to(ROOT))
+        text = structural_source(path.read_text(encoding="utf-8"), detail)
         annotations = TEST_ANNOTATION_RE.findall(text)
         if not annotations:
             continue
@@ -51,8 +114,7 @@ def source_identities() -> list[str]:
         if not package_match:
             fail("ANDROID_TEST_SUITE_PACKAGE_NOT_FOUND", str(path.relative_to(ROOT)))
         simple_class = path.stem
-        if not re.search(rf"^\s*(?:public\s+|internal\s+)?class\s+{re.escape(simple_class)}\b", text, re.M):
-            fail("ANDROID_TEST_SUITE_CLASS_MISMATCH", str(path.relative_to(ROOT)))
+        check_test_ownership(text, simple_class, detail)
         if len(methods) != len(set(methods)):
             fail("ANDROID_TEST_SUITE_DUPLICATE_METHOD", str(path.relative_to(ROOT)))
         class_name = f"{package_match.group(1)}.{simple_class}"
