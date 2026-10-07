@@ -126,10 +126,25 @@ class OffscreenIndicatorsTest {
             }
             composeRule.waitForIdle()
         }
-        fun outsideToLeft() {
+        val navigation get() = sessions.viewportHistoryFor(1L, initial)
+        fun nativeOutsideToLeft() {
             // Each swipe stays inside the native window; no synthetic off-window motion.
             repeat(4) { pan(Offset(-canvas.width * .62f, 0f),
                 Offset(canvas.left + canvas.width * .8f, canvas.top + canvas.height * .72f)) }
+            composeRule.waitUntil(5_000) { indicators().isNotEmpty() }
+        }
+        /**
+         * Indicator setup only: applies nativeOutsideToLeft()'s camera displacement and records it like a
+         * manual pan release. Native pan admission stays with nativeOutsideToLeft(), nextPanAt() and FlingGestureTest.
+         */
+        fun outsideToLeft() {
+            val dx = -canvas.width * .62f * 4
+            composeRule.runOnUiThread {
+                val origin = checkNotNull(navigation.focus())
+                navigation.viewportState.value = navigation.viewportState.value.pan(dx, 0f)
+                assertTrue(navigation.record(origin))
+            }
+            composeRule.waitForIdle()
             composeRule.waitUntil(5_000) { indicators().isNotEmpty() }
         }
         fun pinch(factor: Float) {
@@ -156,7 +171,6 @@ class OffscreenIndicatorsTest {
             composeRule.waitForIdle()
         }
         fun nextPanAt(point: Offset) {
-            val navigation = sessions.viewportHistoryFor(1L, initial)
             var previousBounds: Rect? = null
             var previousFocus: ViewportFocus? = null
             var previousPosition: Offset? = null
@@ -310,17 +324,17 @@ class OffscreenIndicatorsTest {
 
     @Test fun nativePinchAndPanUpdateIndicatorsAcrossSemanticTiers() = withBoard {
         search()
-        outsideToLeft()
+        nativeOutsideToLeft()
         pinch(.02f)
         assertTrue(nodes("倍率を切り替える、15%").isNotEmpty())
         // Bring the current result back through its accessibility navigation action.
-        if (nodes("現在の検索結果、").isEmpty()) outsideToLeft()
+        if (nodes("現在の検索結果、").isEmpty()) nativeOutsideToLeft()
         click("現在の検索結果、")
         assertEquals(0, indicators().size)
         assertTrue(nodes(note.text).isNotEmpty())
         pinch(40f)
         assertTrue(nodes("倍率を切り替える、300%").isNotEmpty())
-        outsideToLeft()
+        nativeOutsideToLeft()
         val before = marker("現在の検索結果、").boundsInWindow.center
         pan(Offset(0f, -canvas.height * .35f), Offset(canvas.center.x, canvas.top + canvas.height * .7f))
         val after = marker("現在の検索結果、").boundsInWindow.center
