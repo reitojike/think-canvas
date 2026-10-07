@@ -7,6 +7,17 @@ read-only の作業、親・roadmap・tracking・coordination Issue、close 禁�
 
 1. PR が実際に merge されたこと、merge commit の SHA、必要なら main の CI 結果を確認します。
    PR の merge だけで Issue の完了を推定しません。
+   Android checks の main push は lint/unit/build/公開境界と unfiltered full GMD が RUN、PR smoke が
+   event condition により SKIPPED であることをjob単位で確認します。fresh XMLのactual inventoryを
+   merged source / previous inventoryと照合し、件数をhard-coded truthにしません。
+   fullにannotation/class/regex filterが混入していないこと、deviceとinventoryの完全性を確認します。
+   main full failureは related regression / unrelated single / repeated signature / suite-level moving
+   failure / infrastructure に分類し、[Issue #118 convergence policy](https://github.com/reitojike/think-canvas/issues/118#issuecomment-6030890580)
+   に従います。unrelated singleを新feature PRのcorrection scopeへ自動で取り込まず、routing proofと
+   testcase healthを分けて記録します。failureをgreenとは主張しません。
+   `android.yml` の `workflow_dispatch` はexplicit full用です。必要なconvergence / diagnosis時に使い、
+   availability証明だけのmanual full canaryを追加しません。main/manual fullとtargeted class/methodの
+   責務を維持します。
 2. Issue の**最新本文**を再取得し、Acceptance Criteria を 1 件ずつ、merge 済み成果物と
    検証結果に照らして意味上判定します。実際に達成した checkbox だけを更新します。
    未達、未確認、deferred、scope 外の条件はチェックしません。他者による本文変更があれば

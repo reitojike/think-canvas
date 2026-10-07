@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -117,6 +118,7 @@ jobs:
 
   managed-device:
     name: Android 17 Gradle Managed Device
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -215,8 +217,8 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  managed-device-smoke-shadow:
-    name: Android 17 PR smoke GMD (shadow)
+  managed-device-smoke:
+    name: Android 17 PR smoke GMD
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-26.04
     steps:
@@ -264,7 +266,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: android-17-gmd-smoke-shadow-results
+          name: android-17-gmd-smoke-results
           path: |
             app/build/reports/androidTests/managedDevice/
             app/build/outputs/androidTest-results/managedDevice/

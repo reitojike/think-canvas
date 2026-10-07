@@ -28,11 +28,32 @@ JDK、SDK、network、権限などの環境要因で検証を完走できない�
 実行します。未実行項目、理由、代替確認を PR に記録し、degraded verification を全項目の
 成功と同一視しません。再現するコードの不具合は修正し、解消できなければ `HOLD` にします。
 
-## Android PR smoke shadow（Issue #118 Slice B）
+## Android execution boundary（Issue #118 Slice C）
 
-Issue #118 の migration 中は、従来の full Pixel 9 / API 37 GMD を **変更せず** PR で実行しながら、
-73件の platform-representative smoke suite を別 job で併走します。shadow smoke は full suite の代替ではありません。
-full→smoke の required gate 切替は Slice C の別判断です。
+ordinary PR の standard device gate は、strict `@PrSmoke` GMD の exact73 です。
+lint/unit/build/公開境界と smoke を `MERGE_READY` の process authority とします。
+ordinary PR では unfiltered full GMD を要求しません。full coverage は main push で毎回実行し、
+同じ `android.yml` の `workflow_dispatch` から explicit に実行できます。
+
+| Event | lint/unit/build/公開境界 | PR smoke | unfiltered full GMD |
+| --- | --- | --- | --- |
+| pull_request | RUN | RUN | SKIP |
+| push main | RUN | SKIP | RUN |
+| workflow_dispatch | RUN | SKIP | RUN |
+
+manual full は default branch にある workflow の標準 dispatch を使います。必要な ref を指定する場合は:
+
+```bash
+gh workflow run android.yml --ref <ref>
+```
+
+high-risk / cross-cutting change の convergence / diagnosis では、必要な class / class#method を
+既存 `android-targeted.yml` で直接実行するか、manual full を追加できます。
+すべての PR に manual full を要求しません。workflow-only 変更ではローカル GMD を無理に追加しません。
+
+「required」は workflow / convergence process 上の authority です。GitHub ruleset の named required
+status checks とは別です。Slice C 時点の ruleset `24034192 / Protect main` の required_status_checks は
+空であり、今回変更しません（`SERVER_REQUIRED_STATUS_CHECKS_UNCHANGED`）。現行 settings は判定時に再確認します。
 
 smoke execution authority は、compiled test APK を発見する AndroidJUnitRunner と、method-level
 `com.thinkcanvas.test.PrSmoke` annotation です。marker は androidTest source set に置き、
@@ -52,7 +73,7 @@ runtime上の unmarked complement179とplanning FULL_ONLY170は異なります�
 python3 scripts/check-android-test-suites.py validate
 ```
 
-PR-only shadow invocation は [Android公式のannotation filtering](https://developer.android.com/training/testing/different-screens/tools#test-filtering-with-the-test-runner) を使用します。
+PR-only smoke invocation は [Android公式のannotation filtering](https://developer.android.com/training/testing/different-screens/tools#test-filtering-with-the-test-runner) を使用します。
 
 ```bash
 ./gradlew :app:pixel9Api37DebugAndroidTest --rerun \
@@ -61,19 +82,26 @@ PR-only shadow invocation は [Android公式のannotation filtering](https://dev
 ```
 
 JSONからselectorを生成せず、long regexやremote shell用quote workaround、Python Gradle launcherは使いません。
-filterはshadow invocationだけに指定し、defaultConfig/global arguments/full/targetedへ設定しません。
+filterはsmoke invocationだけに指定し、defaultConfig/global arguments/full/targetedへ設定しません。
 fresh XMLのactual Class#method CounterをS73 receiptと比較し、0件、同数の別集合、full誤実行、
 missing/extra/duplicate、stale/missing XML、malformed counters、wrong device、skippedをfail-closedにします。
 
-shadowは **strict red optional check** です。testcase failure/errorもnon-test Gradle failureもjob failureを保持し、
+smokeは **strict red の PR device gate** です。testcase failure/errorもnon-test Gradle failureもjob failureを保持し、
 continue-on-errorや独自failure classifierでgreen化しません。failure後もverificationとartifactを収集します。
-optionalはbranch required checkへ昇格していないという意味で、aggregate workflowがredでも隠しません。
 cancelledや証跡不足はsuccessとして使いません。
 
-Slice Cまでは既存lint/unit/build/公開境界とunfiltered full GMDをdelivery/convergence authorityとして保持します。
-各laneの証跡を確認し、unrelated testcase-only flakeは [Issue #118 convergence policy](https://github.com/reitojike/think-canvas/issues/118#issuecomment-6030890580) に沿って人間/agentが分類・記録します。
-selector/receipt/freshness/device/infraの不成立やcause不明のmixed failureはHOLDです。
-optional shadowのredだけを理由にtestを外したり、greenを引くまでrerunしたりしません。
+main/manual full の unfiltered invocation は変更せず維持します。
 
-このarchitecture correctionのandroidTest差分はmarker定義・import・method markerだけです。
+```bash
+./gradlew :app:pixel9Api37DebugAndroidTest \
+  -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
+```
+
+各laneの証跡を確認し、testcase failure は [Issue #118 convergence policy](https://github.com/reitojike/think-canvas/issues/118#issuecomment-6030890580) に沿って人間/agentが分類・記録します。
+selector/receipt/freshness/device/infraの不成立やcause不明のmixed failureはHOLDです。
+smokeのunrelated single failureも自動green化しません。分類後のsame-head bounded confirmationは最大1回、
+Task Contractで禁止されていれば実行しません。greenまでのrerunは禁止です。
+同signature再発はfollow-up、別のunrelated testへの移動はsuite-level flakinessとして裁定します。
+
+Slice C は event boundary と process の移行です。targeted workflow、S73/F170/J9/R0、PrSmoke marker、
 test本体、production、Gradle dependency、timeout、retry、ignoreは変更しません。

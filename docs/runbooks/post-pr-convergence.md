@@ -10,15 +10,24 @@ read-only、報告後停止、PR 作成後停止の指示を、この手順で�
    base の鮮度が不明、または branch が behind のときは `HOLD` とします。base 更新で head が
    変われば、新しい head について検証をやり直します。
 2. [Android checks](../../.github/workflows/android.yml) と repository settings で現に必須の
-   CI を確認します。現行 PR head の lint・単体テスト・build・公開境界・emulator の結果が
-   成功していることを確認します。対象 head 以外の成功結果は使いません。
-   Issue #118 Slice B の PR-only smoke shadow は strict red optional check です。aggregate runの
-   conclusionだけで判定せず、各laneの結果を確認します。shadowのtestcase failure/errorをgreenへ
-   書き換えません。unrelated testcase-only failureは、[convergence policy](https://github.com/reitojike/think-canvas/issues/118#issuecomment-6030890580)
-   に基づく個別の分類・証跡を記録した場合だけ観測として扱えます。既存fullを変更せずauthorityとして保持し、
-   同policyで裁定したfullのunrelated failureもgreenとは主張しません。selector/exact identity receipt、
+   CI を確認します。ordinary PR の standard gate は現行 head の lint・単体テスト・build・公開境界と
+   strict `Android 17 PR smoke GMD` です。smoke は fresh XML の exact73 identities、missing/extra/duplicate0、
+   failure/error/skipped0、Pixel 9 / API 37、標準annotation filter、receipt verification成功を確認します。
+   full GMD は PR event の job-level condition による expected skip を確認し、ordinary PR に full252 を
+   要求しません。aggregate conclusionだけで判定せず、各jobのevent routingと証跡を確認します。
+   対象 head 以外の成功結果は使いません。
+   smoke failureはstrict redであり、unrelated singleでも自動green化しません。
+   [convergence policy](https://github.com/reitojike/think-canvas/issues/118#issuecomment-6030890580)に従い
+   failure familyを分類し、許可されるsame-head bounded confirmationは最大1回に限ります。
+   greenまでrerunせず、同signature再発はfollow-up、別unrelated failureへの移動はsuite-level flakinessとして
+   裁定します。Task Contractがrerunを禁止する場合は実行しません。selector/exact identity receipt、
    fresh XML、device、skipped、compile、infraの不成立、cause不明のmixed failureはHOLDです。
-   cancelledやmissing evidenceは受け入れません。branch required check migrationはSlice Cの別判断です。
+   cancelledやmissing evidenceは受け入れません。high-risk / cross-cutting changeには必要に応じて
+   既存targeted class/methodまたはmanual unfiltered fullをexplicit convergence evidenceとして追加できます。
+   全PRでmanual fullを必須にしません。main full failureは変更責務との関連を分類し、新feature PRへ
+   自動でcorrection scopeを逆流させません。
+   process上のrequired smokeとGitHub server-side named required checkを区別します。Slice Cではruleset
+   `24034192 / Protect main` のrequired_status_checks空を維持し、settingsの変更は別explicit taskです。
 3. **GitHub の PR 上**に top-level の `@codex review` を依頼し、現行 head に対する結果を
    canonical review evidence とします。GitHub の `APPROVED` 表示自体は必須ではありません。
    finding のない結果、または指摘の解決が確認できる結果を使います。同じ head で再度レビューを
@@ -33,9 +42,9 @@ read-only、報告後停止、PR 作成後停止の指示を、この手順で�
    理由を判断して GitHub 上で resolve し、未解決を 0 件にします。レビュー後に head が
    変われば、古い CI とレビュー結果を再利用せず、現行 head で再依頼します。
 
-必須CI（上記Slice B policyで個別に裁定した観測を除く）、review、base、thread の証跡が
+必須CI、review、base、thread の証跡が
 missing、pending、unknown、stale、failed のいずれか、または API で取得できない場合は `HOLD` です。
-現行 head の必須 CI が green（Slice Bの裁定済み観測は別記）、現行 head で
+現行 head の必須 CI が green、現行 head で
 最後の依頼より新しい canonical review evidence があり、base が最新、未解決 thread が 0 件の
 場合に限り `MERGE_READY` と報告します。
 
