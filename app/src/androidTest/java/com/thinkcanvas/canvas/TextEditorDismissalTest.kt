@@ -69,6 +69,18 @@ class TextEditorDismissalTest {
         private val composeTouch: Boolean,
     ) {
         val board get() = sessions.stateFor(1L, BoardSnapshot())
+        fun cameraObservation(): ImeViewportObservation {
+            val field = composeRule.onAllNodesWithContentDescription(newEditor).fetchSemanticsNodes().singleOrNull()
+            val bounds = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().boundsInWindow
+            val reference = composeRule.onNodeWithContentDescription(original.text).fetchSemanticsNode().positionInWindow
+            return observeImeViewport(scenario, sessions.viewportHistoryFor(1L, BoardSnapshot()), editor,
+                bounds, reference, field != null, field?.config?.getOrNull(SemanticsProperties.Focused) == true)
+        }
+        fun settledCamera(shown: Boolean): ImeViewportObservation {
+            val settlement = ImeViewportSettlement(shown, Offset(original.x, original.y))
+            composeRule.waitUntil(5_000) { settlement.accept(cameraObservation()) }
+            return checkNotNull(settlement.latest)
+        }
         fun rows() = runBlocking { database.canvasDao().elements(1L) }
         fun point(x: Float, y: Float): Offset {
             val origin = IntArray(2)
@@ -705,6 +717,9 @@ class TextEditorDismissalTest {
     }
 
     @Test fun outsideDoubleTapSlopConfirmsBothSinglesInOrder() = withBoard {
+        val saves = trackSaves()
+        // 選択paddingの表示変化を固定referenceのcamera比較に混ぜない。
+        val baseline = settledCamera(shown = false)
         composeRule.onNodeWithContentDescription(original.text).performClick()
         val first = point(.1f, .23f)
         val slop = ViewConfiguration.get(InstrumentationRegistry.getInstrumentation().targetContext)
@@ -713,6 +728,7 @@ class TextEditorDismissalTest {
         val origin = point(0f, 0f)
         val history = sessions.viewportHistoryFor(1L, BoardSnapshot())
         val before = history.viewportState.value
+        assertEquals(baseline.viewport, before)
         val expected = before.screenToWorld(second.x - origin.x, second.y - origin.y)
         nativeBlankTapPair(first, second)
         awaitEditor(newEditor)
@@ -720,8 +736,21 @@ class TextEditorDismissalTest {
         assertEquals(expected.first, confirmed.x, .01f)
         assertEquals(expected.second, confirmed.y, .01f)
         assertFalse(history.canBack)
-        assertEquals(before, history.viewportState.value)
+        val shown = settledCamera(shown = true)
+        assertWorldFocusAndHistoryUnchanged(baseline, shown)
+        assertEquals(confirmed.sessionId, shown.draftSession)
+        assertEquals(Offset(confirmed.x, confirmed.y), shown.draftWorld)
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val originalNode = composeRule.onNodeWithContentDescription(original.text).fetchSemanticsNode()
+        assertEquals(context.getString(R.string.unselected), originalNode.config.getOrNull(SemanticsProperties.StateDescription))
         assertUnchanged()
+        assertEquals(0, saves.get())
+        composeRule.onNodeWithText("やめる").performClick()
+        val returned = settledCamera(shown = false)
+        assertSameSizeCameraReturned(baseline, returned)
+        assertEquals(null, editor.draft.value)
+        assertUnchanged()
+        assertEquals(0, saves.get())
     }
 
     @Test fun pendingBlankSingleRejectsReplacementEditorAndStopDispose() {
@@ -949,25 +978,30 @@ class TextEditorDismissalTest {
         val configuration = composeRule.onNodeWithContentDescription("キャンバス")
             .fetchSemanticsNode().layoutInfo.viewConfiguration
         val minimum = configuration.doubleTapMinTimeMillis
-        fun send(action: Int, point: Offset, down: Long): Long {
-            val time = SystemClock.uptimeMillis()
+        assertTrue(minimum > 0 && minimum < configuration.longPressTimeoutMillis)
+        fun send(action: Int, point: Offset, down: Long, time: Long) {
+            assertTrue("MotionEvent must not be in the future", time <= SystemClock.uptimeMillis())
+            assertTrue(down <= time)
             val event = MotionEvent.obtain(down, time, action, point.x, point.y, 0).apply {
                 source = InputDevice.SOURCE_TOUCHSCREEN
             }
             try { assertTrue(automation.injectInputEvent(event, true)) } finally { event.recycle() }
-            return time
         }
+        // sync注入やcallbackの所要時間を、模擬するtap pairのeventTimeに混ぜない。
+        // 既存の3つの待機はappの進行とfuture timestampの防止に使う。
         val firstDown = SystemClock.uptimeMillis()
-        send(MotionEvent.ACTION_DOWN, first, firstDown)
-        Thread.sleep(40)
-        val firstUp = send(MotionEvent.ACTION_UP, first, firstDown)
+        val firstUp = firstDown + minimum
+        val secondDown = firstUp + minimum
+        val secondUp = secondDown + minimum
+        send(MotionEvent.ACTION_DOWN, first, firstDown, firstDown)
+        Thread.sleep(minimum)
+        send(MotionEvent.ACTION_UP, first, firstDown, firstUp)
         afterFirst()
         Thread.sleep(minimum)
-        val secondDown = SystemClock.uptimeMillis()
         assertTrue(secondDown - firstUp in minimum..configuration.doubleTapTimeoutMillis)
-        send(MotionEvent.ACTION_DOWN, second, secondDown)
-        Thread.sleep(40)
-        send(MotionEvent.ACTION_UP, second, secondDown)
+        send(MotionEvent.ACTION_DOWN, second, secondDown, secondDown)
+        Thread.sleep(minimum)
+        send(MotionEvent.ACTION_UP, second, secondDown, secondUp)
         composeRule.waitForIdle()
     }
 

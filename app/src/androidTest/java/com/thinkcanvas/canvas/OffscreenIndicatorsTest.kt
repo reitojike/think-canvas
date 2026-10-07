@@ -67,6 +67,16 @@ class OffscreenIndicatorsTest {
         val board get() = sessions.stateFor(1L, initial)
         val editor get() = sessions.textEditorFor(1L, initial)
         val saves = AtomicInteger()
+        fun cameraObservation(): ImeViewportObservation {
+            val field = nodes("新しいテキスト").singleOrNull()
+            return observeImeViewport(scenario, navigation, editor, canvas, position(reference.text),
+                field != null, field?.config?.getOrNull(SemanticsProperties.Focused) == true)
+        }
+        fun settledCamera(shown: Boolean): ImeViewportObservation {
+            val settlement = ImeViewportSettlement(shown, Offset(reference.x, reference.y))
+            composeRule.waitUntil(5_000) { settlement.accept(cameraObservation()) }
+            return checkNotNull(settlement.latest)
+        }
         val canvas get() = composeRule.onNodeWithContentDescription("キャンバス")
             .fetchSemanticsNode().boundsInWindow
         fun position(label: String) = composeRule.onAllNodesWithContentDescription(label)
@@ -358,17 +368,30 @@ class OffscreenIndicatorsTest {
         click(note.text)
         outsideToLeft()
         val oldAction = marker("選択対象、").config[SemanticsActions.OnClick].action!!
-        val camera = position(reference.text)
+        val before = settledCamera(shown = false)
+        val selection = composeRule.onNodeWithContentDescription(note.text).fetchSemanticsNode()
+            .config.getOrNull(SemanticsProperties.StateDescription)
         composeRule.runOnUiThread {
             editor.draft.value = Draft(null, 800f, 1600f, "Uncommitted draft")
             oldAction.invoke()
+            assertEquals(before.focus, navigation.focus())
         }
         composeRule.waitForIdle()
         assertEquals(0, indicators().size)
-        assertEquals(camera, position(reference.text))
-        composeRule.runOnUiThread { editor.draft.value = null }
-        closeSoftKeyboard()
-        composeRule.waitForIdle()
+        val session = checkNotNull(editor.draft.value).sessionId
+        val shown = settledCamera(shown = true)
+        // FR008は異なるcanvas size間のraw screen位置ではなくworld focusを保持する。
+        assertWorldFocusAndHistoryUnchanged(before, shown)
+        assertEquals(session, shown.draftSession)
+        assertEquals(Offset(800f, 1600f), shown.draftWorld)
+        assertEquals(0, indicators().size)
+        assertEquals(selection, composeRule.onNodeWithContentDescription(note.text).fetchSemanticsNode()
+            .config.getOrNull(SemanticsProperties.StateDescription))
+        unchanged()
+        click("やめる")
+        val returned = settledCamera(shown = false)
+        assertSameSizeCameraReturned(before, returned)
+        assertNull(editor.draft.value)
         assertEquals(1, indicators().size)
         click("図形ツールを開く")
         assertEquals(0, indicators().size)
