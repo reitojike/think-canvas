@@ -45,7 +45,7 @@ python3 scripts/check-android-test-suites.py validate
 ```
 
 PR smoke job は manifest から固定 regex を生成し、ユーザー入力の regex や shell fragment は受け取りません。
-Gradle は argv list で起動し、`tests_regex` は child environment の project property としてのみ渡します。
+Gradle は Python の argv list（`shell=False`）で起動し、`tests_regex` は remote shell 用の literal single quote を値に含めた **1つの `-P...tests_regex=...` argv** として渡します。host shell へ文字列展開せず、ユーザー入力regexも受け取りません。
 fresh XML が manifest の73 identityと完全一致しない場合（0件、full誤実行、stale XML、missing/extra/duplicateを含む）は失敗です。
 
 このSliceでは test本体、production、Gradle dependency、timeout、retry、ignore は変更しません。

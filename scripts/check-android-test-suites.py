@@ -150,17 +150,26 @@ def command_run_smoke(args: argparse.Namespace) -> None:
         fail("ANDROID_TEST_SUITE_EXISTING_RESULTS")
     env = os.environ.copy()
     env.pop("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.class", None)
-    env["ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.tests_regex"] = (
-        "'" + selection["regex"] + "'"
-    )
+    env.pop("ORG_GRADLE_PROJECT_android.testInstrumentationRunnerArguments.tests_regex", None)
+    # The Android test engine ultimately rebuilds an adb shell command. Keep literal
+    # single quotes in the property value so the device shell receives the regex as
+    # one token. Pass the property as one subprocess argv item; never interpolate it
+    # into a host shell command.
+    transport = "'" + selection["regex"] + "'"
     command = [
         args.gradle,
         args.task,
         "--rerun",
+        f"-Pandroid.testInstrumentationRunnerArguments.tests_regex={transport}",
         "-Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect",
         "--no-daemon",
     ]
-    print(json.dumps({"argv": command, "expected_tests": len(selection["expected"]),
+    print(json.dumps({"argv_without_selector": [
+                          args.gradle, args.task, "--rerun",
+                          "-Pandroid.testInstrumentationRunnerArguments.tests_regex=<quoted fixed manifest regex>",
+                          "-Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect",
+                          "--no-daemon"],
+                      "expected_tests": len(selection["expected"]),
                       "regex_length": len(selection["regex"])}, indent=2))
     subprocess.run(command, cwd=ROOT, env=env, check=True)
 
