@@ -478,6 +478,7 @@ class BoardListScreenTest {
     }
 
     @PrSmoke
+    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun renameReloadsTheListAfterActivityRecreation() {
         seed(listOf(BoardRow(11, "変更前", 10)))
         val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))

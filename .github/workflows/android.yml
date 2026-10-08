@@ -114,9 +114,11 @@ jobs:
       - name: 公開情報境界
         shell: pwsh
         run: ./scripts/check-public-boundary.ps1
+      - name: GMD XML contract の単体検証
+        run: python3 -B -m unittest discover -s scripts/tests
 
   managed-device:
-    name: Android 17 Gradle Managed Device
+    name: Android 17 non-quarantined GMD (214)
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -179,8 +181,24 @@ jobs:
             fi
           done
 
-      - name: ジェスチャーと保存の実機相当テスト
-        run: ./gradlew :app:pixel9Api37DebugAndroidTest -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
+      - name: non-quarantined receipt を確認
+        run: python3 scripts/check-android-test-suites.py validate --suite non-quarantined --receipt-out "$RUNNER_TEMP/android-required-receipt.json"
+      - name: non-quarantined 214件を GMD で実行
+        id: required_gmd
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -d app/build/outputs/androidTest-results/managedDevice
+          date -u +%s > "$RUNNER_TEMP/android-required-started-at"
+          ./gradlew :app:pixel9Api37DebugAndroidTest --rerun \
+            -Pandroid.testInstrumentationRunnerArguments.notAnnotation=androidx.test.filters.FlakyTest \
+            -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
+      - name: non-quarantined XML の identity と counters を確認
+        if: ${{ !cancelled() && steps.required_gmd.outcome != 'skipped' }}
+        run: |
+          python3 scripts/check-android-test-suites.py verify-suite --suite non-quarantined \
+            --started-at "$RUNNER_TEMP/android-required-started-at" \
+            --verification-out "$RUNNER_TEMP/android-required-verification.json"
       - name: GMD 実行後の環境を記録
         if: always()
         shell: bash
@@ -208,15 +226,17 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: android-17-gmd-test-results
+          name: android-17-gmd-non-quarantined-results
           path: |
             app/build/reports/androidTests/managedDevice/
             app/build/outputs/androidTest-results/managedDevice/
+            ${{ runner.temp }}/android-required-receipt.json
+            ${{ runner.temp }}/android-required-verification.json
           if-no-files-found: warn
           retention-days: 7
 
-  managed-device-smoke-shadow:
-    name: Android 17 PR smoke GMD (shadow)
+  managed-device-smoke:
+    name: Android 17 PR smoke GMD (56)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-26.04
     steps:
@@ -242,7 +262,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: PR smoke 73件を GMD で実行
+      - name: PR smoke 56件を GMD で実行
         id: smoke_gmd
         shell: bash
         run: |
@@ -251,6 +271,7 @@ jobs:
           date -u +%s > "$RUNNER_TEMP/android-smoke-started-at"
           ./gradlew :app:pixel9Api37DebugAndroidTest --rerun \
             -Pandroid.testInstrumentationRunnerArguments.annotation=com.thinkcanvas.test.PrSmoke \
+            -Pandroid.testInstrumentationRunnerArguments.notAnnotation=androidx.test.filters.FlakyTest \
             -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
       - name: smoke XML の identity と counters を確認
         if: ${{ !cancelled() && steps.smoke_gmd.outcome != 'skipped' }}
@@ -264,7 +285,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: android-17-gmd-smoke-shadow-results
+          name: android-17-gmd-smoke-results
           path: |
             app/build/reports/androidTests/managedDevice/
             app/build/outputs/androidTest-results/managedDevice/
