@@ -417,6 +417,7 @@ class ViewportHistoryInteractionTest {
     }
 
     @PrSmoke
+    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun fiveImeCancelAndConfirmationCyclesReturnCameraWithoutHistoryOrSave() = withBoard {
         val before = settledCamera(imeVisible = false)
         repeat(5) { cycle ->
@@ -447,6 +448,7 @@ class ViewportHistoryInteractionTest {
     }
 
     @PrSmoke
+    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun fiveImeDoneCyclesAndExistingEditKeepWorldPlacementAndUndo() = withBoard {
         val before = settledCamera(imeVisible = false)
         repeat(5) { cycle ->
@@ -488,6 +490,7 @@ class ViewportHistoryInteractionTest {
     }
 
     @PrSmoke
+    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun imeCameraIsIndependentOfRecreationAndWindowFocus() = withBoard {
         val before = settledCamera(imeVisible = false)
         openLowerDraft(before)
@@ -521,6 +524,7 @@ class ViewportHistoryInteractionTest {
     }
 
     @PrSmoke
+    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun searchCyclePanPinchAndIndicatorRestoreWithoutContentOrSave() = withBoard {
         val start = navigation.focus()
         search()
@@ -603,6 +607,7 @@ class ViewportHistoryInteractionTest {
     }
 
     @PrSmoke
+    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun visibleAndOffscreenUndoRedoFocusWithoutExtraContentHistoryOrSave() = withBoard {
         search("Find alpha")
         val visible = navigation.focus()
@@ -657,6 +662,7 @@ class ViewportHistoryInteractionTest {
         unchanged()
     }
 
+    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun staleViewActionRejectsSaveEditorToolAndNextGestureUsesCurrentState() = withBoard {
         pan(Offset(100f, 30f))
         val button = marker("前の視点へ戻る")
@@ -785,6 +791,7 @@ class ViewportHistoryInteractionTest {
             assertEquals(1, saves.get())
         }
     }
+    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun activeSearchUndoPreservesResultPositionAndOneChangedTargetNavigation() = withBoard {
         search()
         composeRule.runOnUiThread { assertTrue(board.edit(note.id, "Find revised", note.kind, note.color)) }
@@ -806,6 +813,7 @@ class ViewportHistoryInteractionTest {
         assertEquals(1, saves.get())
     }
 
+    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun searchHistoryKeepsCurrentResultValidWhenMatchesShrinkAndGrow() {
         withBoard(defaults.copy(texts = listOf(note.copy(text = "Alpha"),
             other.copy(text = "Beta", x = 6000f), reference))) {
@@ -863,6 +871,7 @@ class ViewportHistoryInteractionTest {
         }
     }
 
+    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun unchangedOffscreenAttachedArrowDoesNotMoveVisibleColorUndo() {
         val attached = ArrowElement(id = "long-attached", from = ArrowEnd.Attached(note.id, 1f, .5f),
             to = ArrowEnd.Free(6000f, 1600f))

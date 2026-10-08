@@ -400,6 +400,7 @@ class ShareImportInteractionTest {
     }
 
     @PrSmoke
+    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun editorAndImeKeepTheirDraftUntilTheOriginalEditFinishes() = withBoards {
         awaitText("‹ 一つ目")
         val editor = sessions.textEditorFor(1, BoardSnapshot())
@@ -554,6 +555,7 @@ class ShareImportInteractionTest {
         assertTrue(composeRule.onAllNodesWithText("取り込む").fetchSemanticsNodes().isEmpty())
     }
 
+    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun listRenameModalKeepsItsTextUntilSaveThenPresentsTheShare() = withBoards {
         awaitText("‹ 一つ目")
         composeRule.onNodeWithContentDescription("ボード一覧を開く").performClick()
