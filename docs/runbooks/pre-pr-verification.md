@@ -28,80 +28,40 @@ JDK、SDK、network、権限などの環境要因で検証を完走できない�
 実行します。未実行項目、理由、代替確認を PR に記録し、degraded verification を全項目の
 成功と同一視しません。再現するコードの不具合は修正し、解消できなければ `HOLD` にします。
 
-## Android execution boundary（Issue #118 Slice C）
+## Android required GMD と temporary quarantine
 
-ordinary PR の standard device gate は、strict `@PrSmoke` GMD の exact73 です。
-lint/unit/build/公開境界と smoke を `MERGE_READY` の process authority とします。
-ordinary PR では unfiltered full GMD を要求しません。full coverage は main push で毎回実行し、
-同じ `android.yml` の `workflow_dispatch` から explicit に実行できます。
+PR は PrSmoke AND not FlakyTest の exact56を required process gate として実行し、
+not FlakyTest の exact214は job-level condition により SKIPPED となります。
+main push は exact214を required process gate とし、smoke56は SKIPPED です。
+filterなしfull252は [android-full.yml](../../.github/workflows/android-full.yml) の manual dispatch、
+FlakyTest38はdefault branch schedule/manualで保持します。android.yml に manual dispatch はありません。
+詳細、38件の裁定、strict failure、sample判定、2026-10-23 review gateは
+[IME quarantine手順](ime-quarantine.md)を参照します。targeted契約は変更しません。
 
-| Event | lint/unit/build/公開境界 | PR smoke | unfiltered full GMD |
-| --- | --- | --- | --- |
-| pull_request | RUN | RUN | SKIP |
-| push main | RUN | SKIP | RUN |
-| workflow_dispatch | RUN | SKIP | RUN |
+| Event | Basic | Smoke56 | non-quarantined214 | Quarantine38 | Full252 |
+| --- | --- | --- | --- | --- | --- |
+| PR | RUN | RUN | SKIP | - | - |
+| main push | RUN | SKIP | RUN | schedule/manual（別event） | - |
+| android-full manual | - | - | - | - | RUN |
+| quarantine schedule/manual | - | - | - | RUN | - |
+| targeted manual | 既存契約 | 既存契約 | 既存契約 | 既存契約 | 既存契約 |
 
-manual full は default branch にある workflow の標準 dispatch を使います。必要な ref を指定する場合は:
+quarantine38とfull252はmain pushでは起動しません。214または38のgreenをfull252のgreenとは扱いません。
+manual fullの起動は `gh workflow run android-full.yml --ref <ref>` を使い、availability証明だけの
+追加canaryは実行しません。workflow/process requiredとserver enforced requiredを区別し、rulesetは変更しません。
 
-```bash
-gh workflow run android.yml --ref <ref>
-```
-
-high-risk / cross-cutting change の convergence / diagnosis では、必要な class / class#method を
-既存 `android-targeted.yml` で直接実行するか、manual full を追加できます。
-すべての PR に manual full を要求しません。workflow-only 変更ではローカル GMD を無理に追加しません。
-
-「required」は workflow / convergence process 上の authority です。GitHub ruleset の named required
-status checks とは別です。Slice C 時点の ruleset `24034192 / Protect main` の required_status_checks は
-空であり、今回変更しません（`SERVER_REQUIRED_STATUS_CHECKS_UNCHANGED`）。現行 settings は判定時に再確認します。
-
-smoke execution authority は、compiled test APK を発見する AndroidJUnitRunner と、method-level
-`com.thinkcanvas.test.PrSmoke` annotation です。marker は androidTest source set に置き、
-`AnnotationTarget.FUNCTION` / `AnnotationRetention.RUNTIME` を指定します。class-level smoke は使いません。
-既存 targeted workflow の direct `@Test` → `fun` preflight を保つため、`@PrSmoke` は `@Test` の前に置きます。
-
-`scripts/android-test-suites.json` の `smoke` は移行時の exact73 identity receipt です。
-`full_only`170 / `jvm_candidate`9 / `review_required`0 は dated planning metadata であり、
-Kotlin source から actual inventory や4-way partitionを独自に再構築する runtime gate にはしません。
-migration中のsnapshot countsとJSONのidentity形式・sort・duplicateは検証します。
-actual discovery は runner に委ねます。markerがないtestも unfiltered full に残り、J9も移管まで保持します。
-runtime上の unmarked complement179とplanning FULL_ONLY170は異なります。
-
-ローカルで receipt / planning snapshot の self-consistency を確認する場合:
+ローカルのreceipt検証:
 
 ```bash
-python3 scripts/check-android-test-suites.py validate
+python3 scripts/check-android-test-suites.py validate --suite smoke
+python3 scripts/check-android-test-suites.py validate --suite non-quarantined
+python3 scripts/check-android-test-suites.py validate --suite quarantine
+python3 scripts/check-android-test-suites.py validate --suite full
+python3 -m unittest discover -s scripts/tests
 ```
 
-PR-only smoke invocation は [Android公式のannotation filtering](https://developer.android.com/training/testing/different-screens/tools#test-filtering-with-the-test-runner) を使用します。
-
-```bash
-./gradlew :app:pixel9Api37DebugAndroidTest --rerun \
-  -Pandroid.testInstrumentationRunnerArguments.annotation=com.thinkcanvas.test.PrSmoke \
-  -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
-```
-
-JSONからselectorを生成せず、long regexやremote shell用quote workaround、Python Gradle launcherは使いません。
-filterはsmoke invocationだけに指定し、defaultConfig/global arguments/full/targetedへ設定しません。
-fresh XMLのactual Class#method CounterをS73 receiptと比較し、0件、同数の別集合、full誤実行、
-missing/extra/duplicate、stale/missing XML、malformed counters、wrong device、skippedをfail-closedにします。
-
-smokeは **strict red の PR device gate** です。testcase failure/errorもnon-test Gradle failureもjob failureを保持し、
-continue-on-errorや独自failure classifierでgreen化しません。failure後もverificationとartifactを収集します。
-cancelledや証跡不足はsuccessとして使いません。
-
-main/manual full の unfiltered invocation は変更せず維持します。
-
-```bash
-./gradlew :app:pixel9Api37DebugAndroidTest \
-  -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
-```
-
-各laneの証跡を確認し、testcase failure は [Issue #118 convergence policy](https://github.com/reitojike/think-canvas/issues/118#issuecomment-6030890580) に沿って人間/agentが分類・記録します。
-selector/receipt/freshness/device/infraの不成立やcause不明のmixed failureはHOLDです。
-smokeのunrelated single failureも自動green化しません。分類後のsame-head bounded confirmationは最大1回、
-Task Contractで禁止されていれば実行しません。greenまでのrerunは禁止です。
-同signature再発はfollow-up、別のunrelated testへの移動はsuite-level flakinessとして裁定します。
-
-Slice C は event boundary と process の移行です。targeted workflow、S73/F170/J9/R0、PrSmoke marker、
-test本体、production、Gradle dependency、timeout、retry、ignoreは変更しません。
+receiptはrunner XMLのexact identity照合にだけ使います。独自classifier/parserやselector生成を追加しません。
+test body、production、timeout、assertion、retryの差分がないことを確認します。
+PrSmoke/FlakyTestは `@Test` の前に置き、targeted preflightのdirect declarationを保持します。
+test failure / Gradle failure / XML不足をgreen化せず、各laneのartifactと現行headを照合します。
+filter intersectionがactual56を選べない場合はSTOPし、独自filterへ逃げません。

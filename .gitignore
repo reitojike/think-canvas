@@ -41,6 +41,7 @@ PRD.*
 **/*mock*.htm
 *.log
 *.log.*
+__pycache__/
 
 # Share only the generated Spec Kit skills in the agent folder
 .agents/*

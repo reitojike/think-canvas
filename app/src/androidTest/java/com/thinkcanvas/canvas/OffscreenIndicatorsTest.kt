@@ -368,6 +368,7 @@ class OffscreenIndicatorsTest {
     }
 
     @PrSmoke
+    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun editorAndCreationToolSuppressIndicatorsAndRestoreOnlyCurrentTargets() = withBoard {
         click(note.text)
         outsideToLeft()
