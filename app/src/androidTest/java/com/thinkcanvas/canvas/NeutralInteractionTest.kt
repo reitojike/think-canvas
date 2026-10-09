@@ -559,6 +559,49 @@ class NeutralInteractionTest {
             composeRule.onNodeWithContentDescription("図形ツールを開く").assertExists()
         }
 
+        // #115: native lasso取消は元の選択と内容を保持する。ツールは残り、次の正常UPだけが選択を確定する。
+        fun noteSelected() = composeRule.onNodeWithContentDescription(note.text).fetchSemanticsNode()
+            .config.getOrNull(SemanticsProperties.StateDescription) == "選択中"
+        fun nativeLasso(terminal: Int) {
+            val bounds = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().boundsInWindow
+            val origin = IntArray(2)
+            scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
+            val start = Offset(origin[0] + bounds.left + 160f, origin[1] + bounds.top + 180f)
+            val downTime = SystemClock.uptimeMillis()
+            var ended = false
+            fun send(action: Int, point: Offset) {
+                val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, point.x, point.y, 0)
+                event.source = InputDevice.SOURCE_TOUCHSCREEN
+                try { assertTrue(InstrumentationRegistry.getInstrumentation().uiAutomation.injectInputEvent(event, true)) }
+                finally { event.recycle() }
+            }
+            send(MotionEvent.ACTION_DOWN, start)
+            try {
+                listOf(Offset(100f, 0f), Offset(100f, 100f), Offset(0f, 100f)).forEach {
+                    send(MotionEvent.ACTION_MOVE, start + it)
+                    SystemClock.sleep(25)
+                }
+                send(terminal, start + Offset(0f, 100f))
+                ended = true
+            } finally { if (!ended) send(MotionEvent.ACTION_CANCEL, start) }
+            composeRule.waitForIdle()
+        }
+        composeRule.onNodeWithContentDescription(note.text).performClick()
+        composeRule.waitUntil(5_000) { noteSelected() }
+        composeRule.onNodeWithContentDescription("図形ツールを開く").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("まとめて選ぶ").performClick()
+        composeRule.waitForIdle()
+        val beforeLasso = board.snapshot()
+        nativeLasso(MotionEvent.ACTION_CANCEL)
+        assertTrue("取消前の選択を保持", noteSelected())
+        assertEquals(beforeLasso, board.snapshot())
+        assertFalse(board.canUndo)
+        nativeLasso(MotionEvent.ACTION_UP)
+        composeRule.waitUntil(5_000) { !noteSelected() }
+        composeRule.onNodeWithContentDescription("図形ツールを開く").assertExists()
+        assertEquals(beforeLasso, board.snapshot())
+
         runAction("四角", "中央に四角を作成")
         assertEquals(2, board.shapes.size)
         runAction("丸", "中央に丸を作成")

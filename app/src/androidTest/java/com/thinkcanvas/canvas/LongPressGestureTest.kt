@@ -34,6 +34,7 @@ import com.thinkcanvas.MainActivity
 import com.thinkcanvas.R
 import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.CanvasDatabase
+import com.thinkcanvas.data.CanvasStore
 import com.thinkcanvas.data.TextElementRow
 import com.thinkcanvas.data.SpatialElementRow
 import com.thinkcanvas.data.ImageElementRow
@@ -66,6 +67,7 @@ class LongPressGestureTest {
         val sessions: BoardSessionViewModel,
         val feedback: MutableList<HapticFeedbackType>,
         val openListCalls: AtomicInteger,
+        val saveRequests: AtomicInteger,
     )
 
     private fun withBoard(shapes: List<ShapeElement> = emptyList(), image: Boolean = false,
@@ -97,6 +99,7 @@ class LongPressGestureTest {
             lateinit var sessions: BoardSessionViewModel
             val feedback = CopyOnWriteArrayList<HapticFeedbackType>()
             val openListCalls = AtomicInteger()
+            val saveRequests = AtomicInteger()
             val recorder = object : HapticFeedback {
                 override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
                     feedback.add(hapticFeedbackType)
@@ -110,7 +113,8 @@ class LongPressGestureTest {
                             val initial = BoardSnapshot()
                             CanvasScreen(sessions.stateFor(1L, initial), "Haptic regression",
                                 sessions.textEditorFor(1L, initial), sessions.saveStateFor(1L, initial),
-                                { sessions.requestSave(1L, it) }, { sessions.retrySave(1L) },
+                                { saveRequests.incrementAndGet(); sessions.requestSave(1L, it) },
+                                { sessions.retrySave(1L) },
                                 { openListCalls.incrementAndGet() }, {},
                                 viewportHistory = sessions.viewportHistoryFor(1L, initial))
                         }
@@ -118,7 +122,7 @@ class LongPressGestureTest {
                 }
             }
             composeRule.waitForIdle()
-            Harness(context, scenario, database, sessions, feedback, openListCalls).block()
+            Harness(context, scenario, database, sessions, feedback, openListCalls, saveRequests).block()
         } finally {
             database.close()
             scenario.close()
@@ -235,6 +239,27 @@ class LongPressGestureTest {
         composeRule.waitUntil(10_000) { predicate(rows()) }
     }
 
+    private fun Harness.storedSnapshot() = runBlocking {
+        checkNotNull(CanvasStore.get(context).savedBoard(1L)).snapshot
+    }
+
+    /** #115: native取消は内容・保存要求・Room・成功feedbackを残さない。 */
+    private fun Harness.assertCanceledWithoutCommit(gesture: () -> Unit) {
+        val board = sessions.stateFor(1L, BoardSnapshot())
+        val before = board.snapshot()
+        val stored = storedSnapshot()
+        val requests = saveRequests.get()
+        gesture()
+        Thread.sleep(300)
+        composeRule.waitForIdle()
+        assertEquals(before, board.snapshot())
+        assertEquals(requests, saveRequests.get())
+        assertEquals(stored, storedSnapshot())
+        assertTrue(feedback.none { it == HapticFeedbackType.Confirm })
+        assertNoTextDraft()
+        assertEquals(null, sessions.textEditorFor(1L, BoardSnapshot()).regionNameDraft.value)
+    }
+
     private fun assertPickup(message: String) {
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithText(message).fetchSemanticsNodes().isNotEmpty()
@@ -346,6 +371,16 @@ class LongPressGestureTest {
         val scale = scale()
         val point = blankPoint()
         val distance = slop() * 5f
+        // #115: gap preview後のnative取消は余白を作らない。
+        assertCanceledWithoutCommit {
+            longPress(point, dragSteps(point, distance), whileHeld = {
+                assertPickup("ドラッグして余白を作る")
+            }, afterMoves = { assertPickup("横に余白を作る") }, canceled = true)
+            // 取消したpreviewの方向案内も残さない。
+            assertEquals(0, composeRule.onAllNodesWithText("横に余白を作る").fetchSemanticsNodes().size)
+        }
+        assertNoPickup()
+        assertEquals(listOf(HapticFeedbackType.LongPress), feedback.toList())
         longPress(point, dragSteps(point, distance), whileHeld = {
             assertPickup("ドラッグして余白を作る")
         }, afterMoves = { assertNoPickup() })
@@ -358,6 +393,9 @@ class LongPressGestureTest {
         assertEquals(300f, after.first { it.id == "right" }.y, 1f)
         click(context.getString(R.string.undo))
         awaitRows { it == before }
+        // Redoがある状態の取消もUndo/Redoを変えない。
+        val redoPoint = blankPoint()
+        assertCanceledWithoutCommit { longPress(redoPoint, dragSteps(redoPoint, distance), canceled = true) }
         click(context.getString(R.string.redo))
         awaitRows { it == after }
     }
@@ -490,6 +528,10 @@ class LongPressGestureTest {
         click("ペン")
         val point = blankPoint()
         listOf(MotionEvent.TOOL_TYPE_FINGER, MotionEvent.TOOL_TYPE_STYLUS).forEachIndexed { index, input ->
+            // #115: wet inkのnative取消は保存せず、同じツールの次のstrokeは一回だけ確定する。
+            assertCanceledWithoutCommit {
+                longPress(point, dragSteps(point, slop() * 5f), held = false, toolType = input, canceled = true)
+            }
             longPress(point, dragSteps(point, slop() * 5f), held = false, toolType = input)
             composeRule.waitUntil(10_000) {
                 runBlocking { database.canvasDao().inkStrokes(1L).size } == index + 1
@@ -515,6 +557,10 @@ class LongPressGestureTest {
         click(context.getString(R.string.tool_open))
         click(context.getString(R.string.tool_rectangle))
         val point = blankPoint()
+        // #115: 既定サイズへ進む短い取消とdrag preview後の取消は作成しない。ツールは選択中のまま残る。
+        assertCanceledWithoutCommit { longPress(point, emptyList(), held = false, canceled = true) }
+        assertCanceledWithoutCommit { longPress(point, dragSteps(point, slop() * 5f), held = false, canceled = true) }
+        assertEquals(emptyList<HapticFeedbackType>(), feedback.toList())
         longPress(point, dragSteps(point, slop() * 5f), held = false)
         composeRule.waitUntil(10_000) { runBlocking { database.canvasDao().spatialElements(1L).size } == 1 }
         assertEquals(listOf(HapticFeedbackType.Confirm), feedback.toList())
@@ -522,6 +568,10 @@ class LongPressGestureTest {
         assertEquals(ShapeKind.RECTANGLE, after.shapes.single().kind)
         click(context.getString(R.string.undo))
         composeRule.waitUntil(10_000) { board.snapshot() == before }
+        // Redoがある状態の作成取消もUndo/Redoを変えない。
+        click(context.getString(R.string.tool_open))
+        click(context.getString(R.string.tool_rectangle))
+        assertCanceledWithoutCommit { longPress(point, dragSteps(point, slop() * 5f), held = false, canceled = true) }
         click(context.getString(R.string.redo))
         composeRule.waitUntil(10_000) { board.snapshot() == after }
     }
@@ -538,11 +588,17 @@ class LongPressGestureTest {
         assertEquals(before, board.snapshot())
         click(context.getString(R.string.tool_open))
         click(context.getString(R.string.tool_arrow))
-        longPress(point, dragSteps(point, slop() * 5f), held = false, canceled = true)
+        // #115: 有効距離のnative取消は矢印を作らない。
+        assertCanceledWithoutCommit {
+            longPress(point, dragSteps(point, slop() * 5f), held = false, canceled = true)
+        }
         assertEquals(emptyList<HapticFeedbackType>(), feedback.toList())
-        // #115: current mainでもnative create取消は確定する。#101はfeedbackだけを変更する。
-        assertEquals(before.texts, board.snapshot().texts)
+        assertEquals(before, board.snapshot())
+        // 取消後も矢印ツールは選択中のまま、次の正常releaseで一回だけ作成する。
+        longPress(point, dragSteps(point, slop() * 5f), held = false)
+        composeRule.waitUntil(10_000) { runBlocking { database.canvasDao().arrows(1L).size } == 1 }
         assertEquals(1, board.arrows.size)
+        assertEquals(listOf(HapticFeedbackType.Confirm), feedback.toList())
     }
 
     @Test
@@ -567,10 +623,15 @@ class LongPressGestureTest {
         assertEquals(listOf(HapticFeedbackType.Confirm), feedback.toList())
         val changed = board.snapshot()
         composeRule.waitUntil(10_000) { sessions.saveStateFor(1L, BoardSnapshot()).value == BoardSaveState.Idle }
-        val canceledEndpoint = centerOf("終点を接続・付け替え")
-        longPress(canceledEndpoint, emptyList(), held = false, canceled = true)
-        assertEquals(changed, board.snapshot())
-        assertEquals(emptyList<HapticFeedbackType>(), feedback.toList())
+        // #115: 端点と曲げのpreview後のnative取消は変更・保存・Confirmを残さない。
+        listOf("始点を接続・付け替え", "終点を接続・付け替え", "曲がりを変更").forEach { handle ->
+            val canceled = centerOf(handle)
+            assertCanceledWithoutCommit {
+                longPress(canceled, dragSteps(canceled, slop() * 5f), held = false, canceled = true)
+            }
+            assertEquals(changed, board.snapshot())
+            assertEquals(emptyList<HapticFeedbackType>(), feedback.toList())
+        }
         click(context.getString(R.string.undo))
         composeRule.waitUntil(10_000) { board.snapshot() == created }
         click(context.getString(R.string.redo))
@@ -600,6 +661,9 @@ class LongPressGestureTest {
         click(context.getString(R.string.tool_open))
         click(context.getString(tool))
         val point = blankPoint()
+        // #115: drag preview後のnative取消は作成も囲み名editorも残さない。
+        assertCanceledWithoutCommit { longPress(point, dragSteps(point, slop() * 5f), held = false, canceled = true) }
+        assertEquals(emptyList<HapticFeedbackType>(), feedback.toList())
         longPress(point, dragSteps(point, slop() * 5f), held = false)
         composeRule.waitUntil(10_000) { runBlocking { database.canvasDao().spatialElements(1L).size } == 1 }
         assertEquals(kind, board.shapes.single().kind)

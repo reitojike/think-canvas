@@ -95,12 +95,13 @@ class EdgeAutoPanTest {
             var point = Offset.Zero
             var ended = false
             fun event(action: Int, positions: List<Offset>, stylus: Boolean = false,
-                      activity: MainActivity? = null) {
+                      activity: MainActivity? = null, flags: Int = 0,
+                      ids: List<Int> = positions.indices.toList()) {
                 point = positions.first()
                 val origin = IntArray(2)
                 if (activity == null) scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
                 val properties = Array(positions.size) { index -> MotionEvent.PointerProperties().apply {
-                    id = index
+                    id = ids[index]
                     toolType = if (stylus && index == positions.lastIndex) MotionEvent.TOOL_TYPE_STYLUS
                         else MotionEvent.TOOL_TYPE_FINGER
                 } }
@@ -112,7 +113,7 @@ class EdgeAutoPanTest {
                     positions.size, properties, coords, 0, 0, 1f, 1f, 0, 0,
                     // This gesture begins with a finger DOWN; keep its native stream source stable.
                     // The added pointer's toolType carries the stylus takeover to Compose.
-                    InputDevice.SOURCE_TOUCHSCREEN, 0)
+                    InputDevice.SOURCE_TOUCHSCREEN, flags)
                 try {
                     if (activity == null) {
                         assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
@@ -429,6 +430,19 @@ class EdgeAutoPanTest {
     @Test fun stylusTakeoverCancelsMoveAndCommitsOnlyTheStroke() = withBoard {
         val before = board.snapshot()
         val (start, edge) = startAndEdge()
+        // #115: 所有するstylusのFLAG_CANCELED付きPOINTER_UPはstrokeを確定しない。残った指のUPも内容を確定しない。
+        drag(start, edge) { gesture ->
+            val pen = canvas.center
+            gesture.event(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                listOf(edge, pen), stylus = true)
+            frames(3)
+            gesture.event(MotionEvent.ACTION_MOVE, listOf(edge, pen + Offset(80f, 40f)), stylus = true)
+            gesture.event(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                listOf(edge, pen + Offset(80f, 40f)), stylus = true, flags = MotionEvent.FLAG_CANCELED)
+            gesture.send(MotionEvent.ACTION_UP)
+            frames(3)
+        }
+        assertUnchanged(before)
         drag(start, edge) { gesture ->
             val pen = canvas.center
             gesture.event(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
@@ -472,6 +486,25 @@ class EdgeAutoPanTest {
         composeRule.runOnUiThread { assertTrue(board.undo()) }
         assertEquals(before, board.snapshot())
         assertFalse(board.canUndo)
+        // 別pointerのFLAG_CANCELEDは継続中のstylus strokeを破棄せず、stylusの正常UPで一回だけ確定する。
+        val area = canvas
+        val finger = Offset(area.left + area.width * .22f, area.top + area.height * .72f)
+        val pen = area.center
+        val gesture = Gesture()
+        try {
+            gesture.send(MotionEvent.ACTION_DOWN, finger)
+            gesture.event(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                listOf(finger, pen), stylus = true)
+            gesture.event(MotionEvent.ACTION_MOVE, listOf(finger, pen + Offset(60f, 30f)), stylus = true)
+            gesture.event(MotionEvent.ACTION_POINTER_UP, listOf(finger, pen + Offset(60f, 30f)), stylus = true,
+                flags = MotionEvent.FLAG_CANCELED)
+            gesture.event(MotionEvent.ACTION_MOVE, listOf(pen + Offset(120f, 60f)), stylus = true, ids = listOf(1))
+            gesture.event(MotionEvent.ACTION_UP, listOf(pen + Offset(120f, 60f)), stylus = true, ids = listOf(1))
+        } finally { if (!gesture.ended) gesture.send(MotionEvent.ACTION_CANCEL) }
+        composeRule.waitUntil(10_000) { saves.get() == 2 && savedSnapshot().ink.isNotEmpty() }
+        assertEquals(before, board.snapshot().copy(ink = emptyList()))
+        assertEquals(InkInputType.STYLUS, board.ink.single().strokes.single().inputType)
+        assertEquals(board.snapshot(), savedSnapshot())
     }
 
     @Test fun saveBlockCancelsMoveAndRejectsOldUpEvenBeforeRecomposition() {
@@ -957,6 +990,31 @@ class EdgeAutoPanTest {
                     frames(3)
                 }
                 assertUnchanged(before)
+                // #115: Backを伴わないnative取消もpreviewを破棄し、次の正常UPだけが一回確定する。
+                val target = Offset(start.x + 120f, start.y + 60f)
+                fun handleDrag(terminal: Int) = drag(bounds(handle).center, target) { gesture ->
+                    frames(3)
+                    assertEquals(before, board.snapshot())
+                    gesture.send(terminal)
+                    frames(3)
+                }
+                handleDrag(MotionEvent.ACTION_CANCEL)
+                assertUnchanged(before)
+                handleDrag(MotionEvent.ACTION_UP)
+                waitSaved()
+                val after = board.snapshot()
+                assertNotEquals(before, after)
+                composeRule.runOnUiThread { assertTrue(board.undo()) }
+                composeRule.waitForIdle()
+                // Redoがある状態の取消は内容・保存・Redoを変えない。
+                if (composeRule.onAllNodesWithContentDescription(handle).fetchSemanticsNodes().isEmpty())
+                    select(if (handle == "サイズ変更") "四角: Movable" else "矢印")
+                handleDrag(MotionEvent.ACTION_CANCEL)
+                assertEquals(before, board.snapshot())
+                assertEquals(1, saves.get())
+                assertFalse(board.canUndo)
+                composeRule.runOnUiThread { assertTrue(board.redo()) }
+                assertEquals(after, board.snapshot())
             }
         }
     }
