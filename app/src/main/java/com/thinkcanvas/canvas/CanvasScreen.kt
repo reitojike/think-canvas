@@ -1494,7 +1494,11 @@ fun CanvasScreen(
                                 (native.actionMasked == MotionEvent.ACTION_UP ||
                                     mode == "ink" && native.actionMasked == MotionEvent.ACTION_POINTER_UP) &&
                                 event.changes.any { it.id == drawingPointer && it.previousPressed && !it.pressed }
-                            if (!normalRelease) break
+                            if (!normalRelease) {
+                                // The gap direction banner belongs to the discarded preview.
+                                if (mode == "gap") guidance = null
+                                break
+                            }
                         }
                         end = event.changes.firstOrNull { it.id == drawingPointer }?.position
                             ?: event.changes.firstOrNull()?.position ?: end

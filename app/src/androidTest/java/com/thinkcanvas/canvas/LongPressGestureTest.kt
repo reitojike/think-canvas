@@ -375,7 +375,9 @@ class LongPressGestureTest {
         assertCanceledWithoutCommit {
             longPress(point, dragSteps(point, distance), whileHeld = {
                 assertPickup("ドラッグして余白を作る")
-            }, canceled = true)
+            }, afterMoves = { assertPickup("横に余白を作る") }, canceled = true)
+            // 取消したpreviewの方向案内も残さない。
+            assertEquals(0, composeRule.onAllNodesWithText("横に余白を作る").fetchSemanticsNodes().size)
         }
         assertNoPickup()
         assertEquals(listOf(HapticFeedbackType.LongPress), feedback.toList())
