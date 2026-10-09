@@ -1485,6 +1485,17 @@ fun CanvasScreen(
                             if (exitBlocked() || native == null || native.actionMasked == MotionEvent.ACTION_CANCEL ||
                                 native.flags and MotionEvent.FLAG_CANCELED != 0) break
                         }
+                        if (mode == "ink" || mode == "create" || mode == "lasso" || mode == "gap" ||
+                            mode == "handle" && handle != HandleKind.MOVE) {
+                            // Only the owned pointer's normal native release commits. CANCEL, FLAG_CANCELED and
+                            // Compose's release without a native event discard the preview (Spec002).
+                            val native = event.motionEvent
+                            val normalRelease = native != null && native.flags and MotionEvent.FLAG_CANCELED == 0 &&
+                                (native.actionMasked == MotionEvent.ACTION_UP ||
+                                    mode == "ink" && native.actionMasked == MotionEvent.ACTION_POINTER_UP) &&
+                                event.changes.any { it.id == drawingPointer && it.previousPressed && !it.pressed }
+                            if (!normalRelease) break
+                        }
                         end = event.changes.firstOrNull { it.id == drawingPointer }?.position
                             ?: event.changes.firstOrNull()?.position ?: end
                         when (mode) {
