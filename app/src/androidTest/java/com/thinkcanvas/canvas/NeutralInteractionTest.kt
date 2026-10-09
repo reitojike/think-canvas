@@ -68,6 +68,9 @@ class NeutralInteractionTest {
         val database: CanvasDatabase,
         val sessions: BoardSessionViewModel,
     ) {
+        val ime = ImeTestReadiness(scenario) { timeout, condition ->
+            composeRule.waitUntil(timeout, condition)
+        }
         val board get() = sessions.stateFor(1L, BoardSnapshot())
         val editor get() = sessions.textEditorFor(1L, BoardSnapshot())
         fun rows() = runBlocking { database.canvasDao().elements(1L) }
@@ -135,36 +138,17 @@ class NeutralInteractionTest {
         }
         fun waitEditorReady(label: String = editor.draft.value?.let {
                 if (it.id == null) "新しいテキスト" else "テキストを編集"
-            } ?: "囲みの名前") {
-            try { composeRule.waitUntil(10_000) {
-                val nodes = composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes()
-                val focused = nodes.singleOrNull()?.config?.getOrNull(SemanticsProperties.Focused) == true
-                var ready = false
-                scenario.onActivity { activity ->
-                    val root = activity.window.decorView
-                    val input = activity.getSystemService(InputMethodManager::class.java)
-                    val view = root.findFocus()
-                    val insets = root.rootWindowInsets
-                    ready = focused && root.hasWindowFocus() && view != null &&
-                        insets?.isVisible(WindowInsets.Type.ime()) == true &&
-                        insets.getInsets(WindowInsets.Type.ime()).bottom > 0 &&
-                        input.isActive(view) && input.isAcceptingText
+            } ?: "囲みの名前", actualVisible: Boolean = true) {
+            try {
+                val focused = {
+                    val nodes = composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes()
+                    nodes.singleOrNull()?.config?.getOrNull(SemanticsProperties.Focused) == true
                 }
-                focused && ready
-            } } catch (timeout: ComposeTimeoutException) {
+                if (actualVisible) ime.awaitActualVisible(focused) else ime.awaitInputReady(focused)
+            } catch (timeout: ComposeTimeoutException) {
                 val nodes = composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes()
                 val focused = nodes.singleOrNull()?.config?.getOrNull(SemanticsProperties.Focused)
-                var native = ""
-                scenario.onActivity { activity ->
-                    val root = activity.window.decorView
-                    val input = activity.getSystemService(InputMethodManager::class.java)
-                    val view = root.findFocus()
-                    val insets = root.rootWindowInsets
-                    native = "windowFocus=${root.hasWindowFocus()}, view=${view?.javaClass?.simpleName}, " +
-                        "active=${view?.let { input.isActive(it) }}, accepting=${input.isAcceptingText}, " +
-                        "imeVisible=${insets?.isVisible(WindowInsets.Type.ime())}, " +
-                        "imeBottom=${insets?.getInsets(WindowInsets.Type.ime())?.bottom}"
-                }
+                val native = ime.observe().diagnostics
                 throw AssertionError("Editor readiness: nodes=${nodes.size}, focused=$focused, $native", timeout)
             }
             composeRule.waitForIdle()
@@ -176,22 +160,14 @@ class NeutralInteractionTest {
         fun hideImeIfVisible() {
             composeRule.waitForIdle()
             Espresso.closeSoftKeyboard()
-            composeRule.waitUntil(5_000) {
-                var hidden = false
-                scenario.onActivity {
-                    val insets = checkNotNull(it.window.decorView.rootWindowInsets)
-                    hidden = !insets.isVisible(WindowInsets.Type.ime()) &&
-                        insets.getInsets(WindowInsets.Type.ime()).bottom == 0
-                }
-                hidden
-            }
+            ime.awaitHidden()
             composeRule.waitForIdle()
         }
-        fun waitEditor(label: String) {
+        fun waitEditor(label: String, actualVisible: Boolean = true) {
             composeRule.waitUntil(10_000) {
                 composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes().isNotEmpty()
             }
-            waitEditorReady()
+            waitEditorReady(actualVisible = actualVisible)
         }
         fun tapCanvas(xFraction: Float = .15f, yFraction: Float = .35f) {
             val canvas = composeRule.onNodeWithContentDescription("キャンバス")
@@ -642,7 +618,7 @@ class NeutralInteractionTest {
         back()
         assertCanvasStillOpen()
         tapCanvas()
-        waitEditor("新しいテキスト")
+        waitEditor("新しいテキスト", actualVisible = false)
     }
 
     @androidx.test.filters.FlakyTest(bugId = 106)

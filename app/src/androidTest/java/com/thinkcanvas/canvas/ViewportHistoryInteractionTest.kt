@@ -6,7 +6,6 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.WindowInsets
-import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
@@ -76,6 +75,9 @@ class ViewportHistoryInteractionTest {
 
     private inner class Harness(val scenario: ActivityScenario<MainActivity>,
                                 val sessions: BoardSessionViewModel, val initial: BoardSnapshot) {
+        val ime = ImeTestReadiness(scenario) { timeout, condition ->
+            composeRule.waitUntil(timeout, condition)
+        }
         val board get() = sessions.stateFor(1L, initial)
         val editor get() = sessions.textEditorFor(1L, initial)
         val saves = AtomicInteger()
@@ -196,34 +198,12 @@ class ViewportHistoryInteractionTest {
         }
         fun waitSearchReady() = waitEditableImeReady("ボード内を探す")
         fun waitEditableImeReady(label: String) {
-            try { composeRule.waitUntil(10_000) {
-                val focused = nodes(label).singleOrNull()?.config
+            try { ime.awaitActualVisible {
+                nodes(label).singleOrNull()?.config
                     ?.getOrNull(SemanticsProperties.Focused) == true
-                var ready = false
-                scenario.onActivity { activity ->
-                    val root = activity.window.decorView
-                    val view = root.findFocus()
-                    val input = activity.getSystemService(InputMethodManager::class.java)
-                    val insets = root.rootWindowInsets
-                    ready = focused && root.hasWindowFocus() && view != null &&
-                        input.isActive(view) && input.isAcceptingText &&
-                        insets?.isVisible(WindowInsets.Type.ime()) == true &&
-                        insets.getInsets(WindowInsets.Type.ime()).bottom > 0
-                }
-                ready
             } } catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
                 val field = nodes(label).singleOrNull()
-                var native = ""
-                scenario.onActivity {
-                    val root = it.window.decorView
-                    val view = root.findFocus()
-                    val input = it.getSystemService(InputMethodManager::class.java)
-                    val insets = root.rootWindowInsets
-                    native = "windowFocus=${root.hasWindowFocus()}, view=${view?.javaClass?.simpleName}, " +
-                        "active=${view?.let { input.isActive(it) }}, accepting=${input.isAcceptingText}, " +
-                        "imeVisible=${insets?.isVisible(WindowInsets.Type.ime())}, " +
-                        "imeBottom=${insets?.getInsets(WindowInsets.Type.ime())?.bottom}"
-                }
+                val native = ime.observe().diagnostics
                 throw AssertionError("Editable readiness: field=${field?.boundsInWindow}, " +
                     "focused=${field?.config?.getOrNull(SemanticsProperties.Focused)}, $native", timeout)
             }
@@ -234,15 +214,7 @@ class ViewportHistoryInteractionTest {
             // 検索を保つfixtureのkeyboard cleanup。実際のBackはhideTextImeで別に検証する。
             closeSoftKeyboard()
             composeRule.waitForIdle()
-            composeRule.waitUntil(5_000) {
-                var hidden = false
-                scenario.onActivity {
-                    val insets = checkNotNull(it.window.decorView.rootWindowInsets)
-                    hidden = !insets.isVisible(WindowInsets.Type.ime()) &&
-                        insets.getInsets(WindowInsets.Type.ime()).bottom == 0
-                }
-                hidden
-            }
+            ime.awaitHidden()
             composeRule.waitForIdle()
             assertEquals(query, nodes("ボード内を探す").single().config[SemanticsProperties.EditableText])
         }
@@ -711,15 +683,7 @@ class ViewportHistoryInteractionTest {
         val draftSession = checkNotNull(editor.draft.value).sessionId
         assertTrue(instrumentation.uiAutomation.performGlobalAction(
             android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK))
-        composeRule.waitUntil(5_000) {
-            var hidden = false
-            scenario.onActivity {
-                val insets = checkNotNull(it.window.decorView.rootWindowInsets)
-                hidden = !insets.isVisible(WindowInsets.Type.ime()) &&
-                    insets.getInsets(WindowInsets.Type.ime()).bottom == 0
-            }
-            hidden
-        }
+        ime.awaitHidden()
         assertEquals(draftSession, checkNotNull(editor.draft.value).sessionId)
         composeRule.runOnUiThread { editor.draft.value = null }
         composeRule.waitForIdle()
