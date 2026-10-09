@@ -36,14 +36,11 @@ internal class ImeTestReadiness(
         return snapshot
     }
 
-    fun awaitInputReady(focused: () -> Boolean) = awaitReady(focused, actualVisible = false)
-    fun awaitActualVisible(focused: () -> Boolean) = awaitReady(focused, actualVisible = true)
-
-    private fun awaitReady(focused: () -> Boolean, actualVisible: Boolean) {
+    fun awaitActualVisible(focused: () -> Boolean) {
         waitUntil(10_000) {
             val editorFocused = focused()
             val snapshot = observe()
-            editorFocused && snapshot.inputReady && (!actualVisible || snapshot.actualVisible)
+            editorFocused && snapshot.inputReady && snapshot.actualVisible
         }
     }
 

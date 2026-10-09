@@ -138,13 +138,13 @@ class NeutralInteractionTest {
         }
         fun waitEditorReady(label: String = editor.draft.value?.let {
                 if (it.id == null) "新しいテキスト" else "テキストを編集"
-            } ?: "囲みの名前", actualVisible: Boolean = true) {
+            } ?: "囲みの名前") {
             try {
                 val focused = {
                     val nodes = composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes()
                     nodes.singleOrNull()?.config?.getOrNull(SemanticsProperties.Focused) == true
                 }
-                if (actualVisible) ime.awaitActualVisible(focused) else ime.awaitInputReady(focused)
+                ime.awaitActualVisible(focused)
             } catch (timeout: ComposeTimeoutException) {
                 val nodes = composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes()
                 val focused = nodes.singleOrNull()?.config?.getOrNull(SemanticsProperties.Focused)
@@ -163,11 +163,11 @@ class NeutralInteractionTest {
             ime.awaitHidden()
             composeRule.waitForIdle()
         }
-        fun waitEditor(label: String, actualVisible: Boolean = true) {
+        fun waitEditor(label: String) {
             composeRule.waitUntil(10_000) {
                 composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes().isNotEmpty()
             }
-            waitEditorReady(actualVisible = actualVisible)
+            waitEditorReady()
         }
         fun tapCanvas(xFraction: Float = .15f, yFraction: Float = .35f) {
             val canvas = composeRule.onNodeWithContentDescription("キャンバス")
@@ -618,7 +618,7 @@ class NeutralInteractionTest {
         back()
         assertCanvasStillOpen()
         tapCanvas()
-        waitEditor("新しいテキスト", actualVisible = false)
+        waitEditor("新しいテキスト")
     }
 
     @androidx.test.filters.FlakyTest(bugId = 106)
