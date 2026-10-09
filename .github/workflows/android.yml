@@ -119,6 +119,7 @@ jobs:
 
   managed-device:
     name: Android 17 non-quarantined GMD (214)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7

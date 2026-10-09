@@ -12,9 +12,12 @@ read-only、報告後停止、PR 作成後停止の指示を、この手順で�
 2. [Android checks](../../.github/workflows/android.yml) と repository settings で現に必須の
    CI を確認します。現行 PR head の lint・単体テスト・build・公開境界・emulator の結果が
    成功していることを確認します。対象 head 以外の成功結果は使いません。
-   [IME temporary quarantine](ime-quarantine.md)の期間は、required PR smoke exact56と
-   non-quarantined exact214を現行headでgreenにします。filterなしfull252はこのPR required laneで
-   実行しません。quarantine38のvalid redは観測として保持し、成功とは主張しません。
+   [IME temporary quarantine](ime-quarantine.md)の期間は、required PR smoke exact56を
+   現行headでgreenにします。non-quarantined exact214はmain push専用であり、PRでは
+   job-level expected SKIPPEDを確認します。[event matrix](pre-pr-verification.md#android-required-gmd-と-temporary-quarantine)
+   とjob単位で照合し、quarantine38/full252が起動していないことも確認します。
+   filterなしfull252は [android-full.yml](../../.github/workflows/android-full.yml) のmanual専用です。
+   quarantine38のvalid redは観測として保持し、成功とは主張しません。
    selector/identity、fresh XML、counter、device、skipped、compile、infraの不成立はHOLDです。
    cancelledやmissing evidenceは受け入れません。workflow/process requiredとrepository settingsの
    server enforced requiredを区別し、settings evidenceを記録します。

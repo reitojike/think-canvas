@@ -30,11 +30,25 @@ JDK、SDK、network、権限などの環境要因で検証を完走できない�
 
 ## Android required GMD と temporary quarantine
 
-PR は PrSmoke AND not FlakyTest の exact56、および not FlakyTest の exact214を
-required process gate として実行します。main push も exact214です。
-filterなしfull252はmanual workflow、FlakyTest38はdefault branch schedule/manualで保持します。
+PR は PrSmoke AND not FlakyTest の exact56を required process gate として実行し、
+not FlakyTest の exact214は job-level condition により SKIPPED となります。
+main push は exact214を required process gate とし、smoke56は SKIPPED です。
+filterなしfull252は [android-full.yml](../../.github/workflows/android-full.yml) の manual dispatch、
+FlakyTest38はdefault branch schedule/manualで保持します。android.yml に manual dispatch はありません。
 詳細、38件の裁定、strict failure、sample判定、2026-10-23 review gateは
 [IME quarantine手順](ime-quarantine.md)を参照します。targeted契約は変更しません。
+
+| Event | Basic | Smoke56 | non-quarantined214 | Quarantine38 | Full252 |
+| --- | --- | --- | --- | --- | --- |
+| PR | RUN | RUN | SKIP | - | - |
+| main push | RUN | SKIP | RUN | schedule/manual（別event） | - |
+| android-full manual | - | - | - | - | RUN |
+| quarantine schedule/manual | - | - | - | RUN | - |
+| targeted manual | 既存契約 | 既存契約 | 既存契約 | 既存契約 | 既存契約 |
+
+quarantine38とfull252はmain pushでは起動しません。214または38のgreenをfull252のgreenとは扱いません。
+manual fullの起動は `gh workflow run android-full.yml --ref <ref>` を使い、availability証明だけの
+追加canaryは実行しません。workflow/process requiredとserver enforced requiredを区別し、rulesetは変更しません。
 
 ローカルのreceipt検証:
 

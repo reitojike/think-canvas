@@ -3,7 +3,7 @@
 owner は [#106](https://github.com/reitojike/think-canvas/issues/106)、CI architecture は
 [#118](https://github.com/reitojike/think-canvas/issues/118)です。
 [#125](https://github.com/reitojike/think-canvas/issues/125)は test-only helper commonization を扱い、
-root-cause investigation は #106 に戻します。PR #131 は freeze のままです。
+root-cause investigation は #106 に戻します。PR #131 の Slice C は実行eventとrunbookの最小同期だけを扱います。
 
 ## Fresh adjudication（2026-10-09）
 
@@ -41,12 +41,14 @@ test body、production、timeout、assertion、retry は変更しません。
 | Lane | 起動境界 | Runner arguments | Exact XML inventory |
 | --- | --- | --- | ---: |
 | PR smoke | pull_request、required process gate | annotation=PrSmoke、notAnnotation=FlakyTest | 56 |
-| non-quarantined | pull_request / main push、required process gate | notAnnotation=FlakyTest | 214 |
+| non-quarantined | main push、required process gate（PRはjob-level SKIPPED） | notAnnotation=FlakyTest | 214 |
 | quarantine | default branch schedule / workflow_dispatch | annotation=FlakyTest | 38 |
-| full | workflow_dispatch のみ | filterなし | 252 |
+| full | android-full.yml の workflow_dispatch のみ | filterなし | 252 |
 
 完全修飾名は `com.thinkcanvas.test.PrSmoke` / `androidx.test.filters.FlakyTest` です。
 「full」は unfiltered252 にだけ使います。PR required lane は full を起動しません。
+[event matrix](pre-pr-verification.md#android-required-gmd-と-temporary-quarantine)に従い、main pushは
+smoke56をSKIPし、quarantine38/full252を起動しません。214/38のgreenはfull252のgreenではありません。
 targeted workflow の class / class#method grammar、source preflight、device、artifact、strictness は不変です。
 annotation は `@Test` より前に置き、既存 targeted preflight の direct `@Test` → `fun` を保持します。
 
@@ -84,5 +86,7 @@ run URL、head、counter、valid/infra-invalidを #106 のreview commentに記�
 **continue / narrow / remove quarantine** のいずれかを明示判断し、対象identitiesと理由を記録します。
 範囲やfilterを変える場合は別の承認済み変更で、current sourceとexact inventoryを再検証します。
 
-merge後はquarantineを1回manual dispatchし、exact38 / strict red / artifact / failure通知を確認します。
-manual full252はselection契約を示すだけの追加GMDを起動する必要はありません。
+quarantine導入時のPR #133ではmerge後に1回manual dispatchし、exact38 / strict red / artifact /
+failure通知を確認済みです。Slice Cのrouting確認ではquarantineを追加dispatchしません。
+manual full252はdefault branchの定義とActions registrationでavailabilityを確認し、
+selection契約を示すだけの追加GMDを起動する必要はありません。
