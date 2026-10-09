@@ -110,7 +110,7 @@ class ImageCanvasInteractionTest {
     @PrSmoke
     @Test fun nativeLongPressMoveAndResizeKeepAspectWhileOrdinaryDragPans() = withBoard {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        fun drag(start: Offset, end: Offset, hold: Long) {
+        fun drag(start: Offset, end: Offset, hold: Long, cancel: Boolean = false) {
             val down = SystemClock.uptimeMillis()
             var ended = false
             val origin = IntArray(2)
@@ -129,7 +129,7 @@ class ImageCanvasInteractionTest {
                     send(MotionEvent.ACTION_MOVE, start + (end - start) * ((step + 1) / 4f))
                     SystemClock.sleep(25)
                 }
-                send(MotionEvent.ACTION_UP, end)
+                send(if (cancel) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP, end)
                 ended = true
             } finally { if (!ended) send(MotionEvent.ACTION_CANCEL, end) }
             compose.waitForIdle()
@@ -143,6 +143,17 @@ class ImageCanvasInteractionTest {
         val movedCenter = compose.onNodeWithContentDescription("テスト画像").fetchSemanticsNode().boundsInWindow.center
         drag(movedCenter, movedCenter, 30)
         val handle = compose.onNodeWithContentDescription("画像のサイズ変更").fetchSemanticsNode().boundsInWindow.center
+        // #115: resize preview後のnative取消はサイズ・原点・保存・履歴を変えない。
+        val beforeCancel = board.snapshot()
+        val couldUndo = board.canUndo
+        val couldRedo = board.canRedo
+        drag(handle, handle + Offset(70f, 35f), 30, cancel = true)
+        Thread.sleep(300)
+        compose.waitForIdle()
+        assertEquals(beforeCancel, board.snapshot())
+        assertEquals(moved, rows().single())
+        assertEquals(couldUndo, board.canUndo)
+        assertEquals(couldRedo, board.canRedo)
         drag(handle, handle + Offset(70f, 35f), 30)
         saved()
         val resized = rows().single()
