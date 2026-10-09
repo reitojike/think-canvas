@@ -34,6 +34,7 @@ import com.thinkcanvas.MainActivity
 import com.thinkcanvas.R
 import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.CanvasDatabase
+import com.thinkcanvas.data.CanvasStore
 import com.thinkcanvas.data.TextElementRow
 import com.thinkcanvas.data.SpatialElementRow
 import com.thinkcanvas.data.ImageElementRow
@@ -239,10 +240,7 @@ class LongPressGestureTest {
     }
 
     private fun Harness.storedSnapshot() = runBlocking {
-        BoardSnapshot(texts = database.canvasDao().elements(1L).map { it.toModel() },
-            shapes = database.canvasDao().spatialElements(1L).map { it.toModel() },
-            arrows = database.canvasDao().arrows(1L).map { it.toModel() },
-            images = database.canvasDao().images(1L).map { it.toModel() })
+        checkNotNull(CanvasStore.get(context).savedBoard(1L)).snapshot
     }
 
     /** #115: native取消は内容・保存要求・Room・成功feedbackを残さない。 */
@@ -250,7 +248,6 @@ class LongPressGestureTest {
         val board = sessions.stateFor(1L, BoardSnapshot())
         val before = board.snapshot()
         val stored = storedSnapshot()
-        val ink = runBlocking { database.canvasDao().inkStrokes(1L) }
         val requests = saveRequests.get()
         gesture()
         Thread.sleep(300)
@@ -258,7 +255,6 @@ class LongPressGestureTest {
         assertEquals(before, board.snapshot())
         assertEquals(requests, saveRequests.get())
         assertEquals(stored, storedSnapshot())
-        assertEquals(ink, runBlocking { database.canvasDao().inkStrokes(1L) })
         assertTrue(feedback.none { it == HapticFeedbackType.Confirm })
         assertNoTextDraft()
         assertEquals(null, sessions.textEditorFor(1L, BoardSnapshot()).regionNameDraft.value)
