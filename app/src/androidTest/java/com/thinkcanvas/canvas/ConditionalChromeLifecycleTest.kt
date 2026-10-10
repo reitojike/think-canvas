@@ -297,15 +297,36 @@ class ConditionalChromeLifecycleTest {
     fun paletteNativeCanceledTouchesKeepMenuAndContent() = withPaletteBoard { instrumentation, activity, database, sessions ->
         val board = sessions.stateFor(1L, BoardSnapshot())
         val before = board.snapshot()
+        val store = com.thinkcanvas.data.CanvasStore.get(instrumentation.targetContext)
+        val savedBefore = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
         val blank = paletteCanvasPoint(instrumentation, activity)
-        nativeGesture(instrumentation, listOf(blank), terminal = MotionEvent.ACTION_CANCEL)
+        val selectionBefore = waitForRegionState(instrumentation, "未選択")
+        nativeGesture(instrumentation, listOf(blank), terminal = MotionEvent.ACTION_CANCEL,
+            flags = MotionEvent.FLAG_CANCELED)
         assertPaletteOpen(instrumentation)
         assertNull(sessions.textEditorFor(1L, BoardSnapshot()).draft.value)
         assertEquals(before, board.snapshot())
-        nativeGesture(instrumentation, listOf(blank), flags = MotionEvent.FLAG_CANCELED)
+        assertEquals(selectionBefore, waitForRegionState(instrumentation, "未選択"))
+        assertEquals(savedBefore, checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+
+        // FLAG_CANCELED belongs to POINTER_UP/CANCEL, never to a single-pointer ACTION_UP.
+        val second = (blank.first + 40f) to blank.second
+        assertPalettePath(instrumentation, activity, listOf(blank, second))
+        nativeCanceledPointer(instrumentation, blank, second)
         assertPaletteOpen(instrumentation)
         assertNull(sessions.textEditorFor(1L, BoardSnapshot()).draft.value)
         assertEquals(before, board.snapshot())
+        assertEquals(selectionBefore, waitForRegionState(instrumentation, "未選択"))
+        assertEquals(savedBefore, checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+        assertEquals(0, runBlocking { database.canvasDao().inkStrokes(1).size })
+
+        // After both streams end, a new normal gesture owns only palette dismissal.
+        nativeGesture(instrumentation, listOf(blank))
+        assertPaletteClosed(instrumentation)
+        assertNull(sessions.textEditorFor(1L, BoardSnapshot()).draft.value)
+        assertEquals(before, board.snapshot())
+        assertEquals(selectionBefore, waitForRegionState(instrumentation, "未選択"))
+        assertEquals(savedBefore, checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
         assertEquals(0, runBlocking { database.canvasDao().inkStrokes(1).size })
     }
 
@@ -539,6 +560,9 @@ class ConditionalChromeLifecycleTest {
         toolType: Int = MotionEvent.TOOL_TYPE_FINGER,
         afterDown: (() -> Unit)? = null,
     ) {
+        require(flags and MotionEvent.FLAG_CANCELED == 0 || terminal == MotionEvent.ACTION_CANCEL) {
+            "Single-pointer FLAG_CANCELED requires ACTION_CANCEL"
+        }
         val down = SystemClock.uptimeMillis()
         val samples = if (points.size == 1) points + points else points
         samples.forEachIndexed { index, (x, y) ->
@@ -558,6 +582,50 @@ class ConditionalChromeLifecycleTest {
         }
         instrumentation.waitForIdleSync()
         if (composeRule.mainClock.autoAdvance) composeRule.waitForIdle()
+    }
+
+    private fun nativeCanceledPointer(
+        instrumentation: android.app.Instrumentation,
+        first: Pair<Float, Float>, second: Pair<Float, Float>,
+    ) {
+        val downTime = SystemClock.uptimeMillis()
+        var previousTime = downTime
+        fun send(action: Int, ids: List<Int>, points: List<Pair<Float, Float>>, flags: Int = 0) {
+            assertEquals(ids.size, points.size)
+            assertEquals(ids.size, ids.toSet().size)
+            val properties = Array(ids.size) { index -> MotionEvent.PointerProperties().apply {
+                id = ids[index]; toolType = MotionEvent.TOOL_TYPE_FINGER
+            } }
+            val coordinates = Array(points.size) { index -> MotionEvent.PointerCoords().apply {
+                x = points[index].first; y = points[index].second; pressure = 1f; size = 1f
+            } }
+            val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, ids.size,
+                properties, coordinates, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, flags)
+            try {
+                assertEquals(downTime, event.downTime)
+                assertTrue(event.eventTime >= previousTime)
+                previousTime = event.eventTime
+                assertEquals(InputDevice.SOURCE_TOUCHSCREEN, event.source)
+                assertEquals(flags, event.flags)
+                assertEquals(action and MotionEvent.ACTION_MASK, event.actionMasked)
+                assertEquals((action and MotionEvent.ACTION_POINTER_INDEX_MASK) shr MotionEvent.ACTION_POINTER_INDEX_SHIFT,
+                    event.actionIndex)
+                ids.forEachIndexed { index, id ->
+                    assertEquals(id, event.getPointerId(index))
+                    assertEquals(MotionEvent.TOOL_TYPE_FINGER, event.getToolType(index))
+                }
+                assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
+            } finally { event.recycle() }
+            Thread.sleep(35)
+        }
+        send(MotionEvent.ACTION_DOWN, listOf(0), listOf(first))
+        send(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            listOf(0, 1), listOf(first, second))
+        // Cancel the original owner (id0/index0), then normally release remaining id1/index0.
+        send(MotionEvent.ACTION_POINTER_UP, listOf(0, 1), listOf(first, second), MotionEvent.FLAG_CANCELED)
+        send(MotionEvent.ACTION_UP, listOf(1), listOf(second))
+        instrumentation.waitForIdleSync()
+        composeRule.waitForIdle()
     }
 
     private fun nativePinch(instrumentation: android.app.Instrumentation, x: Float, y: Float) {
