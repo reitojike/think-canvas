@@ -34,53 +34,53 @@ enum class SpatialTool(val label: String, val icon: String, @StringRes val label
     RECTANGLE("四角", "□", R.string.tool_rectangle),
 }
 
+// Palette and launcher are measured separately so the launcher keeps its anchor
+// and only the palette viewport scrolls within the space above it (Issue #107).
 @Composable
-fun SpatialTools(tool: SpatialTool, expanded: Boolean, enabled: Boolean,
-                 onExpand: () -> Unit, onSelect: (SpatialTool) -> Unit,
-                 onAccessibleAction: (SpatialTool) -> Boolean,
-                 onInkSelect: (InkKind) -> Unit, onImageAdd: (() -> Unit)? = null) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
-        if (expanded) {
-            if (onImageAdd != null) Row(verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("画像を追加", color = Color.White, fontSize = 12.sp,
-                    modifier = Modifier.background(Color(0xFF23211E), RoundedCornerShape(5.dp))
-                        .padding(horizontal = 8.dp, vertical = 5.dp))
-                ToolButton("▧", "画像を追加", enabled, onClick = onImageAdd)
-            }
-            Row(verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("ペン", color = Color.White, fontSize = 12.sp,
-                    modifier = Modifier.background(Color(0xFF23211E), RoundedCornerShape(5.dp))
-                        .padding(horizontal = 8.dp, vertical = 5.dp))
-                ToolButton("✎", "ペン", enabled, onClick = { onInkSelect(InkKind.PEN) })
-            }
-            Row(verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("マーカー", color = Color.White, fontSize = 12.sp,
-                    modifier = Modifier.background(Color(0xFF23211E), RoundedCornerShape(5.dp))
-                        .padding(horizontal = 8.dp, vertical = 5.dp))
-                ToolButton("▰", "マーカー", enabled, onClick = { onInkSelect(InkKind.MARKER) })
-            }
-            listOf(SpatialTool.LASSO, SpatialTool.REGION, SpatialTool.ARROW,
-                SpatialTool.ELLIPSE, SpatialTool.RECTANGLE).forEach { item ->
-                val label = stringResource(item.labelRes)
-                Row(verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(label, color = Color.White, fontSize = 12.sp,
-                        modifier = Modifier.background(Color(0xFF23211E), RoundedCornerShape(5.dp))
-                            .padding(horizontal = 8.dp, vertical = 5.dp))
-                    ToolButton(item.icon, label, enabled,
-                        actionLabel = if (item == SpatialTool.LASSO) "表示範囲をまとめて選択"
-                            else "中央に${label}を作成",
-                        onAccessibleAction = { onAccessibleAction(item) }) { onSelect(item) }
-                }
+fun SpatialToolPalette(enabled: Boolean, onSelect: (SpatialTool) -> Unit,
+                       onAccessibleAction: (SpatialTool) -> Boolean,
+                       onInkSelect: (InkKind) -> Unit, onImageAdd: (() -> Unit)?,
+                       modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
+        if (onImageAdd != null) ToolRow("画像を追加") {
+            ToolButton("▧", "画像を追加", enabled, onClick = onImageAdd)
+        }
+        ToolRow("ペン") { ToolButton("✎", "ペン", enabled, onClick = { onInkSelect(InkKind.PEN) }) }
+        ToolRow("マーカー") { ToolButton("▰", "マーカー", enabled, onClick = { onInkSelect(InkKind.MARKER) }) }
+        listOf(SpatialTool.LASSO, SpatialTool.REGION, SpatialTool.ARROW,
+            SpatialTool.ELLIPSE, SpatialTool.RECTANGLE).forEach { item ->
+            val label = stringResource(item.labelRes)
+            ToolRow(label) {
+                ToolButton(item.icon, label, enabled,
+                    actionLabel = if (item == SpatialTool.LASSO) "表示範囲をまとめて選択"
+                        else "中央に${label}を作成",
+                    onAccessibleAction = { onAccessibleAction(item) }) { onSelect(item) }
             }
         }
+    }
+}
+
+@Composable
+fun SpatialToolLauncher(tool: SpatialTool, enabled: Boolean, onExpand: () -> Unit,
+                        modifier: Modifier = Modifier) {
+    Box(modifier) {
         ToolButton(if (tool == SpatialTool.NONE) "+" else tool.icon,
             if (tool == SpatialTool.NONE) stringResource(R.string.tool_open)
             else "${stringResource(tool.labelRes)}${stringResource(R.string.tool_close)}", enabled,
             dark = true, onClick = onExpand)
+    }
+}
+
+// The 48dp button is measured before the label, so large fonts wrap the label instead.
+@Composable
+private fun ToolRow(label: String, button: @Composable () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, color = Color.White, fontSize = 12.sp,
+            modifier = Modifier.weight(1f, fill = false)
+                .background(Color(0xFF23211E), RoundedCornerShape(5.dp))
+                .padding(horizontal = 8.dp, vertical = 5.dp))
+        button()
     }
 }
 

@@ -691,7 +691,13 @@ class ViewportHistoryInteractionTest {
         val toolStale = marker("前の視点へ戻る").config[SemanticsActions.OnClick].action!!
         val expand = nodes("図形ツールを開く").first { it.config.contains(SemanticsActions.OnClick) }
             .config[SemanticsActions.OnClick].action!!
-        composeRule.runOnUiThread { expand.invoke(); toolStale.invoke() }
+        composeRule.runOnUiThread { expand.invoke() }
+        composeRule.waitForIdle()
+        // Issue #107: palette表示だけでは視点controlを抑止せず、armed toolでは同一UI turnのstale actionを拒否する。
+        assertTrue(nodes("前の視点へ戻る").isNotEmpty())
+        val arm = composeRule.onAllNodesWithContentDescription("四角").fetchSemanticsNodes()
+            .first { it.config.contains(SemanticsActions.OnClick) }.config[SemanticsActions.OnClick].action!!
+        composeRule.runOnUiThread { arm.invoke(); toolStale.invoke() }
         composeRule.waitForIdle()
         sameFocus(toolCamera, navigation.focus())
         assertTrue(nodes("前の視点へ戻る").isEmpty())
