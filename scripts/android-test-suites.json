@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "authority": {
-    "issue": 118,
-    "baseline_main": "389977dc9253148a5ed7091a86b5b0945e1d3f3e",
-    "census_total": 252,
-    "note": "Issue #118 のdated planning snapshot。smokeは移行時のexact identity receipt、F/J/Rはplanning metadata。actual test discoveryはAndroidJUnitRunnerに委ね、sourceからpartitionを再構築しない。"
+    "issue": 112,
+    "baseline_main": "71849bd94005ce986bcf3a884064e97b0df7b19b",
+    "census_total": 262,
+    "note": "Issue #118 の252件snapshotを保持し、Issue #112 test contract redesignでPrSmoke10 identityを追加。actual discoveryはAndroidJUnitRunnerに委ね、receiptはselector生成に使わない。quarantine38/filterは不変。"
   },
   "suites": {
     "smoke": [
@@ -23,6 +23,16 @@
       "com.thinkcanvas.board.BoardListScreenTest#systemBackReturnsFromBoardToList",
       "com.thinkcanvas.board.BoardThumbnailTest#fixedScreenThumbnailGeometryPreservesDpAcrossDensity",
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#collapsedAndExpandedToolFormerCentersAdmitPersistedInkAndAllowReentry",
+      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteLongPressKeepsMenuAndContent",
+      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteNativeCanceledTouchesKeepMenuAndContent",
+      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteNativeControlsAndDismissedBoundsRemainActionable",
+      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteOpeningInvalidatesAdmittedOutsidePointer",
+      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteOutsidePanKeepsMenuAndContent",
+      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteOutsidePinchKeepsMenuAndContent",
+      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteOutsideShortTapOnlyDismissesAndNextTapStartsText",
+      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteRegionNameEditorKeepsOutsidePriority",
+      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteStylusAfterEditorPanAndPinchPersistsStroke",
+      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteStylusNormalReleasePersistsStroke",
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#regionNameTransitionRemovesFormerSelectionSharePointUntilReselected",
       "com.thinkcanvas.canvas.EdgeAutoPanTest#accessibilityMoveRetainsItsOneStepAndDoesNotStartTheTicker",
       "com.thinkcanvas.canvas.EdgeAutoPanTest#backRejectsQueuedFrameAndSameTurnStaleMoveAndUp",

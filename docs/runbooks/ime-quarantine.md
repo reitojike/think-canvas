@@ -40,15 +40,15 @@ test body、production、timeout、assertion、retry は変更しません。
 
 | Lane | 起動境界 | Runner arguments | Exact XML inventory |
 | --- | --- | --- | ---: |
-| PR smoke | pull_request、required process gate | annotation=PrSmoke、notAnnotation=FlakyTest | 56 |
-| non-quarantined | main push、required process gate（PRはjob-level SKIPPED） | notAnnotation=FlakyTest | 214 |
+| PR smoke | pull_request、required process gate | annotation=PrSmoke、notAnnotation=FlakyTest | 66 |
+| non-quarantined | main push、required process gate（PRはjob-level SKIPPED） | notAnnotation=FlakyTest | 224 |
 | quarantine | default branch schedule / workflow_dispatch | annotation=FlakyTest | 38 |
-| full | android-full.yml の workflow_dispatch のみ | filterなし | 252 |
+| full | android-full.yml の workflow_dispatch のみ | filterなし | 262 |
 
 完全修飾名は `com.thinkcanvas.test.PrSmoke` / `androidx.test.filters.FlakyTest` です。
-「full」は unfiltered252 にだけ使います。PR required lane は full を起動しません。
+「full」は unfiltered262 にだけ使います。PR required lane は full を起動しません。
 [event matrix](pre-pr-verification.md#android-required-gmd-と-temporary-quarantine)に従い、main pushは
-smoke56をSKIPし、quarantine38/full252を起動しません。214/38のgreenはfull252のgreenではありません。
+smoke66をSKIPし、quarantine38/full262を起動しません。224/38のgreenはfull262のgreenではありません。
 targeted workflow の class / class#method grammar、source preflight、device、artifact、strictness は不変です。
 annotation は `@Test` より前に置き、既存 targeted preflight の direct `@Test` → `fun` を保持します。
 
@@ -88,5 +88,7 @@ run URL、head、counter、valid/infra-invalidを #106 のreview commentに記�
 
 quarantine導入時のPR #133ではmerge後に1回manual dispatchし、exact38 / strict red / artifact /
 failure通知を確認済みです。Slice Cのrouting確認ではquarantineを追加dispatchしません。
-manual full252はdefault branchの定義とActions registrationでavailabilityを確認し、
+manual full262はdefault branchの定義とActions registrationでavailabilityを確認し、
 selection契約を示すだけの追加GMDを起動する必要はありません。
+
+Issue #112のtest contract redesignは非quarantineのPrSmoke10 identityを追加した。現行inventoryは262、PrSmoke83、required smoke66/non-quarantined224。上記dated quarantine censusの252/73と38件のmembership・17 smokeの交差は当時の記録として保持する。filter・review date・strict failure裁定は変更しない。

@@ -118,7 +118,7 @@ jobs:
         run: python3 -B -m unittest discover -s scripts/tests
 
   managed-device:
-    name: Android 17 non-quarantined GMD (214)
+    name: Android 17 non-quarantined GMD (224)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
     steps:
@@ -184,7 +184,7 @@ jobs:
 
       - name: non-quarantined receipt を確認
         run: python3 scripts/check-android-test-suites.py validate --suite non-quarantined --receipt-out "$RUNNER_TEMP/android-required-receipt.json"
-      - name: non-quarantined 214件を GMD で実行
+      - name: non-quarantined 224件を GMD で実行
         id: required_gmd
         shell: bash
         run: |
@@ -237,7 +237,7 @@ jobs:
           retention-days: 7
 
   managed-device-smoke:
-    name: Android 17 PR smoke GMD (56)
+    name: Android 17 PR smoke GMD (66)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-26.04
     steps:
@@ -263,7 +263,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: PR smoke 56件を GMD で実行
+      - name: PR smoke 66件を GMD で実行
         id: smoke_gmd
         shell: bash
         run: |

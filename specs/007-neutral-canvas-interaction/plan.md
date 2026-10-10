@@ -55,6 +55,32 @@ pointer順: editor Initial-pass outside → main draft/save/chrome guard → sty
 
 Constitution違反なし。generic coordinator/callback bagは作らず、2 editorのadmission/cleanupとspatial/inkのpreview cleanupだけを共有する。
 
+## Issue #112 bounded design / read-only census
+
+開始mainは `71849bd94005ce986bcf3a884064e97b0df7b19b`。Issue #112、完了済み#107、Process #36、現行Spec006/007/009/010/015をauthorityとする。変更責務はoutside dismissal・pointer ownership・gesture admissionだけ。
+
+有限surfaceは `CanvasScreen.kt` のInitial text outside loop、main DOWN/blank arbitration/mode/Release、launcher callback、live chrome hitとpalette dispose。標準modalは別window、image editor/pickerはmain admissionで拒否、regionは従来canvas admissionを保持する。text/region/image session・Back・save・Ink・history/layoutを変更しない。
+
+標準Compose `awaitEachGesture` / `consume` と既存native release・世代guardを使う。mainのchrome判定後、editor/modal/save guardが許可したtouchだけをpalette tap候補にし、blank arbitrationより前にpendingを取消す。候補ではlong-press actionとcanvas tapを生成しない。slop超過では元のpan/move/handle modeへ、追加指/stylusでは既存分岐へ渡す。正常short UPだけでcollapseし、palette boundsを同期removeする。
+
+第1ラウンドのbounded補正では、region editorとpaletteが併存する既存outside admissionを保持するため、`BlankTap` に展開状態をcaptureし、live状態との一致を照合する。無条件の `!toolsExpanded` 拒否は採用しない。launcherの開閉では既存pointer世代も同期失効し、開く前のDOWNや再展開前の古いUPが新しいpalette/canvas actionを所有しないようにする。native回帰ではregion併存、途中DOWNから展開、panの視点変化とpinchのscale変化を確認する。
+
+標準Popupの別window/outside DOWN dismissalはshort-UP限定と展開中のviewport history操作（#107）に一致しないため採用しない。既存layout・48dp button・accessibility clickを保持する。根拠: [Compose gestureの標準APIとconsume](https://developer.android.com/develop/ui/compose/touch-input/pointer-input/understand-gestures)。新framework/dependency/CI/quarantine変更なし。Constitution I〜Vと公開境界を維持する。
+
+AC1/2/5/6はnative外側tapと次gesture、AC3/4/9はnative/semantics controlと既存Back、AC7は既存editor回帰とlive priority、AC8は非tapのnative入力で照合する。AC10は責務ごとのfocused identityを追加しinventoryを同期する。AC11は実機、AC12はfresh PR basic/smoke66とmain basic/non-quarantined224、AC13はexact-head canonical reviewで別々に証明する。
+
 ## Canonical review後の技術補正
 
 全CI成功後も、[P1 review](https://github.com/reitojike/think-canvas/pull/86#discussion_r4173360329)でrecomposition前のqueued Releaseが確定できる不足を確認した。gestureの内容・保存authorityは変えず、DOWN admissionと単一event loopの同期世代guardで全確定familyを保護する。BackとUPを同じUI turnでActivityのtouch dispatcherへ送り、frame待ちで競合を隠さない回帰にする。
+
+## Recovery: round 2 のScope Integrity Gate
+
+最初の有効Windows GMD sampleはexact1件・failure1・source unchanged。新設outside element tapのfixtureが既存の簡易MotionEvent.obtainを使用し、API37/AOSP sourceではTOOL_TYPE_UNKNOWNのまま生成されることを確認した。productionは1本指Touchだけをdismissにadmitするため、fixtureが正常fingerのoracleになっていなかった。round 2は新設native regressionのshort tap/panを既に追加済みのTOOL_TYPE_FINGER/SOURCE_TOUCHSCREEN fixtureへ限定して置換する。既存tap/pan helperや#123/#124 harness、production・authority・suite identity・quarantineは変更しない。frozen clock下では既存の明示frame advanceを保持し、追加fixtureのidle待ちだけをautoAdvance時に行う。根拠: [AOSP MotionEvent](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/java/android/view/MotionEvent.java)。補正予算はround 1消費済みから引き継ぎ、これでround 2。次のmaterial補正前はfamily checkpointを必要とする。
+
+## Family checkpoint後の追加1 round
+
+[Issue112 checkpoint](https://github.com/reitojike/think-canvas/issues/112#issuecomment-6096737676)のBOUNDED_CORRECTIONに従う。新設outside element regressionだけで、native palette button/labelの可視boundsとpaddingを含む保守的envelope、launcher/history/zoomを観測する。native region中心と既存fixtureのshape寸法/現在scaleから有限9点を計算し、canvas内かつchrome外の点だけを選ぶ。候補なしはfixture failureとして数値を出す。前提成立後もdismissしなければ数値診断とdispatch wall timeを残してHOLDし、round4へ進まない。production、既存harness、selector、authorityは変更しない。tap wall timeは正常short UPの証明として扱わない。
+
+## Issue112 Test Contract Redesign
+
+[read-only全assertion mapping / fixture / inventory checkpoint](https://github.com/reitojike/think-canvas/issues/112#issuecomment-6098743250)に従う。#107の2既存identityを保ち、paletteのopening/outside/editor/cancel/long press/pan/pinch/stylus/native controlを10の独立PrSmoke identityへ分離する。private helperはこのclassのboard起動・palette bounds・native入力だけに限定し、#123/#124のharnessを変更しない。source/type/id/pressure/size/intervalはInkGestureTestへ合わせ、normal inputはlive canvas/chromeとsystem gesture inset外をassertする。text取消→pan/pinch→stylusは独立scenarioへ保持する。旧x6%/size0/30msとcancel/長押しstrict redは未解決観測であり、新scenarioのgreenを旧FAIL解消にしない。round1/2/3は消費済み。production byte不変で、新inventoryは66/224/38/262、filterとquarantine membership不変。実機でOS端とapp strokeの競合も確認する。
