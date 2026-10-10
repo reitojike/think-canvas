@@ -15,9 +15,11 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -27,8 +29,11 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.CircleShape
@@ -84,6 +89,8 @@ import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
@@ -114,6 +121,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -225,6 +233,11 @@ fun CanvasScreen(
     val blankTapBoundary = remember(board, editorSession) { BlankTapBoundary() }
     val elementSizes = remember { mutableStateMapOf<String, IntSize>() }
     val chromeBounds = remember { mutableStateMapOf<String, Rect>() }
+    // Nested chrome reports bounds in the same canvas coordinates as top-level boundsInParent.
+    val canvasLayout = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    fun canvasBounds(coordinates: LayoutCoordinates): Rect =
+        canvasLayout[0]?.takeIf { it.isAttached }?.localBoundingBoxOf(coordinates)
+            ?: coordinates.boundsInParent()
     var textEditorBounds by remember { mutableStateOf<Rect?>(null) }
     var editorToolbarBounds by remember { mutableStateOf<Rect?>(null) }
     val uiScope = rememberCoroutineScope()
@@ -382,17 +395,21 @@ fun CanvasScreen(
     val latestDraft = rememberUpdatedState(draft)
 
 
-    fun baseNavigationAllowed(): Boolean = saveState.value == BoardSaveState.Idle &&
+    // An expanded palette alone suppresses indicators and import, not viewport history (Issue #107).
+    fun neutralNavigationAllowed(): Boolean = saveState.value == BoardSaveState.Idle &&
         editorSession.pendingDraftAcknowledgement.value == null &&
         editorSession.draft.value == null && editorSession.regionNameDraft.value == null &&
         editorSession.imageDescriptionDraft.value == null && editorSession.pendingImageAcknowledgement.value == null &&
         !imagePickerOpen &&
         discardTarget == null && menuTarget == null && attachmentEditor == null &&
-        tool == SpatialTool.NONE && inkTool == null && !toolsExpanded && moveOwner == null && movePreview == null &&
+        tool == SpatialTool.NONE && inkTool == null && moveOwner == null && movePreview == null &&
         handlePreview == null && spatialPreview == null && lassoPoints.isEmpty() &&
         gapPreview == null && inkPreview == null && imeInsets.getBottom(density) == 0
 
+    fun baseNavigationAllowed(): Boolean = neutralNavigationAllowed() && !toolsExpanded
     fun indicatorsAllowed(): Boolean = !latestExternalBlock.value() && baseNavigationAllowed()
+    fun viewHistoryAllowed(): Boolean = !latestExternalBlock.value() && neutralNavigationAllowed() &&
+        (navigation.canBack || navigation.canForward)
     fun importReady(): Boolean = baseNavigationAllowed() && !searchOpen && !manualGestureActive &&
         !viewportAnimating && navigation.focus() != null
     if (onImportReadiness != null) {
@@ -430,8 +447,8 @@ fun CanvasScreen(
     } else emptyList()
     val indicatorGap = with(density) { 8.dp.toPx() }
     val topChromeKeys = setOf("board", "search", "searchButton", "guidance", "shareSelection")
-    val viewControlsVisible = indicatorsAllowed() && (navigation.canBack || navigation.canForward)
-    val bottomChromeKeys = setOf("history", "zoom", "tools", "viewportHistory")
+    val viewControlsVisible = viewHistoryAllowed()
+    val bottomChromeKeys = setOf("history", "zoom", "tools", "toolPalette", "viewportHistory")
     val indicatorChrome = chromeBounds.filterKeys {
         !it.startsWith("indicator:") && (it != "viewportHistory" || viewControlsVisible)
     }
@@ -446,7 +463,8 @@ fun CanvasScreen(
 
     fun chromeContains(point: Offset): Boolean =
         chromeBounds.any { (key, bounds) -> !key.startsWith("indicator:") &&
-            (key != "viewportHistory" || indicatorsAllowed() && (navigation.canBack || navigation.canForward)) &&
+            (key != "viewportHistory" || viewHistoryAllowed()) &&
+            (key != "toolPalette" || toolsExpanded && inkTool == null) &&
             bounds.contains(point) } ||
             indicatorsAllowed() && latestIndicatorLayouts.value.any { it.touchBounds.contains(point) }
 
@@ -843,7 +861,7 @@ fun CanvasScreen(
     }
 
     fun restoreView(forward: Boolean) {
-        if (!animationBoundary.active || !indicatorsAllowed() ||
+        if (!animationBoundary.active || !viewHistoryAllowed() ||
             !(if (forward) navigation.canForward else navigation.canBack)) return
         stopViewportAnimation()
         pendingHistoryFocus = null
@@ -1235,7 +1253,7 @@ fun CanvasScreen(
     val pointerGeneration = gestureGeneration
     Box(
         modifier = Modifier.fillMaxSize().background(paper).safeDrawingPadding()
-            .onSizeChanged { canvasSize = it }.clipToBounds()
+            .onSizeChanged { canvasSize = it }.onPlaced { canvasLayout[0] = it }.clipToBounds()
             .semantics {
                 contentDescription = "キャンバス"
                 customActions = listOf(
@@ -2261,111 +2279,118 @@ fun CanvasScreen(
                     modifier = Modifier.size(48.dp).semantics { contentDescription = redoLabel },
                 ) { Text("↷", color = if (board.canRedo && !saveBlocked()) ink else muted.copy(alpha = 0.4f), fontSize = 25.sp) }
             }
-            if (viewControlsVisible) {
-                DisposableEffect(navigation) {
-                    onDispose { chromeBounds.remove("viewportHistory") }
-                }
-                CanvasViewHistoryControl(navigation.canBack, navigation.canForward,
-                    onBack = { restoreView(forward = false) }, onForward = { restoreView(forward = true) },
-                    onBounds = { chromeBounds["viewportHistory"] = it })
-            }
             val zoomText = "${(viewport.scale * 100).roundToInt()}%  ${when (projection.tier) {
                 SemanticTier.NEAR -> "近"
                 SemanticTier.MID -> "中"
                 SemanticTier.FAR -> "遠"
             }}"
-            CanvasZoomControl(zoomText, !saveBlocked(), onClick = {
-                if (!saveBlocked() && canvasSize != IntSize.Zero) animateViewport(viewport.cycleZoom(bodyDp,
-                    canvasSize.width.toFloat(), canvasSize.height.toFloat()))
-            }, onBounds = { chromeBounds["zoom"] = it })
-
-            if (inkTool == null) Column(
-                modifier = Modifier.align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = if (viewControlsVisible || animationBoundary.fling) 126.dp else 70.dp)
-                    .onGloballyPositioned { chromeBounds["tools"] = it.boundsInParent() },
-                horizontalAlignment = Alignment.End,
-            ) {
+            val paletteTop = with(density) {
+                ((chromeBounds.filterKeys { it in topChromeKeys }.values.maxOfOrNull { it.bottom } ?: 0f) +
+                    indicatorGap).toDp()
+            }
+            CanvasEndChrome(paletteTop, tools = if (inkTool != null) null else { {
+                if (toolsExpanded) {
+                    DisposableEffect(Unit) {
+                        onDispose { chromeBounds.remove("toolPalette") }
+                    }
+                    SpatialToolPalette(!saveBlocked(),
+                        modifier = Modifier.weight(1f, fill = false).padding(bottom = 8.dp)
+                            .onGloballyPositioned { chromeBounds["toolPalette"] = canvasBounds(it) }
+                            .verticalScroll(rememberScrollState()),
+                        onSelect = {
+                            if (!saveBlocked()) {
+                                finishToolInteraction()
+                                tool = it
+                                guidance = "${it.label}を配置"
+                            }
+                        },
+                        onAccessibleAction = { item ->
+                            if (saveBlocked() || canvasSize == IntSize.Zero) false else {
+                                val (x, y) = viewport.screenToWorld(
+                                    canvasSize.width / 2f, canvasSize.height / 2f)
+                                val created = when (item) {
+                                    SpatialTool.RECTANGLE, SpatialTool.ELLIPSE, SpatialTool.REGION -> {
+                                        val kind = when (item) {
+                                            SpatialTool.RECTANGLE -> ShapeKind.RECTANGLE
+                                            SpatialTool.ELLIPSE -> ShapeKind.ELLIPSE
+                                            else -> ShapeKind.REGION
+                                        }
+                                        val width = if (kind == ShapeKind.REGION) 200f else if (kind == ShapeKind.RECTANGLE) 120f else 110f
+                                        val height = if (kind == ShapeKind.REGION) 150f else 80f
+                                        val shape = board.addShape(kind, x - width / 2f, y - height / 2f, width, height)
+                                        selectedIds = setOf(shape.id)
+                                        selectedId = null
+                                        if (kind == ShapeKind.REGION) openRegionName(shape.id, "")
+                                        saveSnapshot()
+                                        true
+                                    }
+                                    SpatialTool.ARROW -> {
+                                        val arrow = board.addArrow(ArrowEnd.Free(x - 60f, y), ArrowEnd.Free(x + 60f, y))
+                                        if (arrow != null) {
+                                            selectedIds = setOf(arrow.id)
+                                            selectedId = null
+                                            saveSnapshot()
+                                        }
+                                        arrow != null
+                                    }
+                                    SpatialTool.LASSO -> {
+                                        val (left, top) = viewport.screenToWorld(0f, 0f)
+                                        val (right, bottom) = viewport.screenToWorld(
+                                            canvasSize.width.toFloat(), canvasSize.height.toFloat())
+                                        selectedIds = board.snapshot().visibleLassoSelection(listOf(
+                                            WorldPoint(left, top), WorldPoint(right, top),
+                                            WorldPoint(right, bottom), WorldPoint(left, bottom),
+                                        ), projection, renderedGeometry.boundsById,
+                                            DetailedRenderFacts.ARROW_ENDPOINT_OFFSET_DP * density.density /
+                                                viewport.scale)
+                                        selectedId = null
+                                        guidance = "${selectedIds.size}個を選択"
+                                        true
+                                    }
+                                    SpatialTool.NONE -> false
+                                }
+                                if (created) finishToolInteraction(clearGuidance = false)
+                                created
+                            }
+                        }, onInkSelect = { kind ->
+                            if (!saveBlocked()) {
+                                finishToolInteraction()
+                                inkTool = kind
+                                selectedIds = emptySet()
+                                selectedId = null
+                            }
+                        }, onImageAdd = if (onAddImage == null) null else {
+                            {
+                                if (!saveBlocked()) {
+                                    finishToolInteraction()
+                                    if (importReady()) imagePickerOpen = true
+                                }
+                            }
+                        })
+                }
+                SpatialToolLauncher(tool, !saveBlocked(), onExpand = {
+                    if (!saveBlocked()) {
+                        cancelBlankTap()
+                        if (tool == SpatialTool.NONE) toolsExpanded = !toolsExpanded
+                        else finishToolInteraction()
+                    }
+                }, modifier = Modifier.onGloballyPositioned { chromeBounds["tools"] = canvasBounds(it) })
                 DisposableEffect(Unit) {
                     onDispose { chromeBounds.remove("tools") }
                 }
-                SpatialTools(tool, toolsExpanded, !saveBlocked(),
-                    onExpand = {
-                        if (!saveBlocked()) {
-                            cancelBlankTap()
-                            if (tool == SpatialTool.NONE) toolsExpanded = !toolsExpanded
-                            else finishToolInteraction()
-                        }
-                    }, onSelect = {
-                        if (!saveBlocked()) {
-                            finishToolInteraction()
-                            tool = it
-                            guidance = "${it.label}を配置"
-                        }
-                    },
-                    onAccessibleAction = { item ->
-                        if (saveBlocked() || canvasSize == IntSize.Zero) false else {
-                            val (x, y) = viewport.screenToWorld(
-                                canvasSize.width / 2f, canvasSize.height / 2f)
-                            val created = when (item) {
-                                SpatialTool.RECTANGLE, SpatialTool.ELLIPSE, SpatialTool.REGION -> {
-                                    val kind = when (item) {
-                                        SpatialTool.RECTANGLE -> ShapeKind.RECTANGLE
-                                        SpatialTool.ELLIPSE -> ShapeKind.ELLIPSE
-                                        else -> ShapeKind.REGION
-                                    }
-                                    val width = if (kind == ShapeKind.REGION) 200f else if (kind == ShapeKind.RECTANGLE) 120f else 110f
-                                    val height = if (kind == ShapeKind.REGION) 150f else 80f
-                                    val shape = board.addShape(kind, x - width / 2f, y - height / 2f, width, height)
-                                    selectedIds = setOf(shape.id)
-                                    selectedId = null
-                                    if (kind == ShapeKind.REGION) openRegionName(shape.id, "")
-                                    saveSnapshot()
-                                    true
-                                }
-                                SpatialTool.ARROW -> {
-                                    val arrow = board.addArrow(ArrowEnd.Free(x - 60f, y), ArrowEnd.Free(x + 60f, y))
-                                    if (arrow != null) {
-                                        selectedIds = setOf(arrow.id)
-                                        selectedId = null
-                                        saveSnapshot()
-                                    }
-                                    arrow != null
-                                }
-                                SpatialTool.LASSO -> {
-                                    val (left, top) = viewport.screenToWorld(0f, 0f)
-                                    val (right, bottom) = viewport.screenToWorld(
-                                        canvasSize.width.toFloat(), canvasSize.height.toFloat())
-                                    selectedIds = board.snapshot().visibleLassoSelection(listOf(
-                                        WorldPoint(left, top), WorldPoint(right, top),
-                                        WorldPoint(right, bottom), WorldPoint(left, bottom),
-                                    ), projection, renderedGeometry.boundsById,
-                                        DetailedRenderFacts.ARROW_ENDPOINT_OFFSET_DP * density.density /
-                                            viewport.scale)
-                                    selectedId = null
-                                    guidance = "${selectedIds.size}個を選択"
-                                    true
-                                }
-                                SpatialTool.NONE -> false
-                            }
-                            if (created) finishToolInteraction(clearGuidance = false)
-                            created
-                        }
-                    }, onInkSelect = { kind ->
-                        if (!saveBlocked()) {
-                            finishToolInteraction()
-                            inkTool = kind
-                            selectedIds = emptySet()
-                            selectedId = null
-                        }
-                    }, onImageAdd = if (onAddImage == null) null else {
-                        {
-                            if (!saveBlocked()) {
-                                finishToolInteraction()
-                                if (importReady()) imagePickerOpen = true
-                            }
-                        }
-                    })
-            }
+            } }, history = if (!viewControlsVisible) null else { {
+                DisposableEffect(navigation) {
+                    onDispose { chromeBounds.remove("viewportHistory") }
+                }
+                CanvasViewHistoryControl(navigation.canBack, navigation.canForward,
+                    onBack = { restoreView(forward = false) }, onForward = { restoreView(forward = true) },
+                    onBounds = { chromeBounds["viewportHistory"] = canvasBounds(it) })
+            } }, zoom = {
+                CanvasZoomControl(zoomText, !saveBlocked(), onClick = {
+                    if (!saveBlocked() && canvasSize != IntSize.Zero) animateViewport(viewport.cycleZoom(bodyDp,
+                        canvasSize.width.toFloat(), canvasSize.height.toFloat()))
+                }, onBounds = { chromeBounds["zoom"] = canvasBounds(it) })
+            })
 
             val message = if (inkTool != null) "1本指で描く ・ 2本指で移動" else pickupHint ?: guidance ?: when (tool) {
                 SpatialTool.NONE -> if (selectedIds.size > 1) "${selectedIds.size}個を選択" else null
@@ -2620,18 +2645,39 @@ fun CanvasScreen(
     }
 }
 
+// Launcher, viewport-history slot and zoom stay in one measured stack so opening the
+// palette or a change in history availability never moves the launcher (Issue #107).
 @Composable
-private fun BoxScope.CanvasViewHistoryControl(
+private fun BoxScope.CanvasEndChrome(
+    paletteTop: Dp,
+    tools: (@Composable ColumnScope.() -> Unit)?,
+    history: (@Composable () -> Unit)?,
+    zoom: @Composable () -> Unit,
+) {
+    Column(
+        modifier = Modifier.align(Alignment.BottomEnd).padding(top = paletteTop, end = 16.dp, bottom = 22.dp),
+        horizontalAlignment = Alignment.End,
+    ) {
+        tools?.invoke(this)
+        Spacer(Modifier.height(8.dp))
+        // The slot keeps its space while history is unavailable, without a hidden hit target.
+        Box(Modifier.height(48.dp), contentAlignment = Alignment.CenterEnd) { history?.invoke() }
+        Spacer(Modifier.height(4.dp))
+        zoom()
+    }
+}
+
+@Composable
+private fun CanvasViewHistoryControl(
     canBack: Boolean,
     canForward: Boolean,
     onBack: () -> Unit,
     onForward: () -> Unit,
-    onBounds: (Rect) -> Unit,
+    onBounds: (LayoutCoordinates) -> Unit,
 ) {
     Row(
-        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 70.dp)
-            .background(Color.White, RoundedCornerShape(24.dp)).pillBorder(24f)
-            .onGloballyPositioned { onBounds(it.boundsInParent()) },
+        modifier = Modifier.background(Color.White, RoundedCornerShape(24.dp)).pillBorder(24f)
+            .onGloballyPositioned { onBounds(it) },
     ) {
         IconButton(onClick = onBack, enabled = canBack,
             modifier = Modifier.size(48.dp).semantics { contentDescription = "前の視点へ戻る" }) {
@@ -2645,19 +2691,20 @@ private fun BoxScope.CanvasViewHistoryControl(
 }
 
 @Composable
-private fun BoxScope.CanvasZoomControl(
+private fun CanvasZoomControl(
     zoomText: String,
     enabled: Boolean,
     onClick: () -> Unit,
-    onBounds: (Rect) -> Unit,
+    onBounds: (LayoutCoordinates) -> Unit,
 ) {
     Box(
-        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 22.dp)
+        // Bounds, hit target and semantics cover the whole 48dp control; padding only insets the text.
+        modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .onGloballyPositioned { onBounds(it) }
             .background(Color.White, RoundedCornerShape(16.dp)).pillBorder(16f)
-            .heightIn(min = 44.dp).padding(horizontal = 10.dp, vertical = 5.dp)
             .clickable(enabled = enabled, onClick = onClick)
             .semantics { contentDescription = "倍率を切り替える、$zoomText" }
-            .onGloballyPositioned { onBounds(it.boundsInParent()) },
+            .padding(horizontal = 10.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center,
     ) { Text(zoomText, color = muted, fontSize = 11.sp) }
 }

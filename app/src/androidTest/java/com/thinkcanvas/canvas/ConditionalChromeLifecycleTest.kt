@@ -1,7 +1,9 @@
 package com.thinkcanvas.canvas
 
+import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.graphics.Rect
+import android.os.Build
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -149,6 +151,7 @@ class ConditionalChromeLifecycleTest {
         val database = CanvasDatabase.open(context)
         val initialInkCount = runBlocking { database.canvasDao().inkStrokes(1).size }
         try {
+            assertStableEndChrome(instrumentation)
             val collapsedLauncher = waitForActionable(instrumentation, "図形ツールを開く")
             val collapsedCenter = center(bounds(collapsedLauncher))
             clickNode(instrumentation, collapsedLauncher, "図形ツールを開く")
@@ -187,6 +190,86 @@ class ConditionalChromeLifecycleTest {
             activity.finish()
             instrumentation.waitForIdleSync()
         }
+    }
+
+    // Issue #107: launcher anchor、展開中の視点control、48dp target の非重複と閉じた palette の hit 解放。
+    private fun assertStableEndChrome(instrumentation: android.app.Instrumentation) {
+        val launcher = "図形ツールを開く"
+        val anchor = bounds(waitForActionable(instrumentation, launcher))
+        assertNull("履歴がない間は視点controlを表示しない",
+            findExact(instrumentation.uiAutomation.rootInActiveWindow, "前の視点へ戻る"))
+        clickActionable(instrumentation, launcher)
+        val formerPen = center(bounds(waitForActionable(instrumentation, "ペン")))
+        assertEquals("展開で launcher が動かない", anchor, bounds(waitForActionable(instrumentation, launcher)))
+        assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+        waitForGone(instrumentation, "ペン")
+        assertEquals("Back で閉じた後も同じ launcher 位置", anchor,
+            bounds(waitForActionable(instrumentation, launcher)))
+
+        pan(instrumentation, formerPen.first, formerPen.second)
+        val history = bounds(waitForActionable(instrumentation, "前の視点へ戻る"))
+        assertEquals("視点履歴の成立で launcher が動かない", anchor,
+            bounds(waitForActionable(instrumentation, launcher)))
+
+        clickActionable(instrumentation, launcher)
+        val tools = listOf("画像を追加", "ペン", "マーカー", "まとめて選ぶ", "囲み", "矢印", "丸", "四角")
+            .map { bounds(waitForActionable(instrumentation, it)) }
+        assertEquals("展開中も launcher は同じ位置", anchor, bounds(waitForActionable(instrumentation, launcher)))
+        assertEquals("palette 展開だけでは視点controlを隠さない", history,
+            bounds(waitForActionable(instrumentation, "前の視点へ戻る")))
+        val targets = tools + listOf(anchor, history, zoomBounds(instrumentation))
+        val minimum = 48f * instrumentation.targetContext.resources.displayMetrics.density - 1f
+        targets.forEach { assertTrue("48dp target: $it", it.width() >= minimum && it.height() >= minimum) }
+        targets.forEachIndexed { index, rect ->
+            targets.drop(index + 1).forEach { other ->
+                assertTrue("chrome target が重ならない: $rect / $other", !Rect.intersects(rect, other))
+            }
+        }
+        clickActionable(instrumentation, "前の視点へ戻る")
+        // Issue #107: Back 前に読んだ disabled の forward ancestor が UiAutomation cache に残り得るため、
+        // 取得直前に一度だけ cache を更新し、fresh root から既存の厳密な検証を行う。
+        // clearCache() の false は cache が存在しない (読み取りは常に fresh) ことを表す。
+        if (Build.VERSION.SDK_INT >= 34) instrumentation.uiAutomation.clearCache()
+        assertNotNull("palette 展開中の視点 back を受理する",
+            waitForActionable(instrumentation, "次の視点へ進む"))
+        clickActionable(instrumentation, launcher)
+        waitForGone(instrumentation, "ペン")
+        assertEquals("launcher で閉じた後も同じ位置", anchor, bounds(waitForActionable(instrumentation, launcher)))
+    }
+
+    private fun zoomBounds(instrumentation: android.app.Instrumentation): Rect {
+        fun find(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+            if (node == null) return null
+            if (node.contentDescription?.startsWith("倍率を切り替える、") == true) return node
+            for (index in 0 until node.childCount) find(node.getChild(index))?.let { return it }
+            return null
+        }
+        repeat(40) {
+            composeRule.waitForIdle()
+            instrumentation.waitForIdleSync()
+            find(instrumentation.uiAutomation.rootInActiveWindow)?.let { return bounds(it) }
+            Thread.sleep(100)
+        }
+        error("倍率 control が見つかりません")
+    }
+
+    private fun pan(instrumentation: android.app.Instrumentation, x: Float, y: Float) {
+        val down = SystemClock.uptimeMillis()
+        val points = (0..6).map { (x - it * 50f) to y }
+        points.forEachIndexed { index, (px, py) ->
+            val action = if (index == 0) MotionEvent.ACTION_DOWN else MotionEvent.ACTION_MOVE
+            val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, px, py, 0)
+            assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
+            event.recycle()
+            Thread.sleep(16)
+        }
+        // 慣性を起こさず、視点履歴へ1回だけ記録する。
+        Thread.sleep(180)
+        val (endX, endY) = points.last()
+        val up = MotionEvent.obtain(down, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, endX, endY, 0)
+        assertTrue(instrumentation.uiAutomation.injectInputEvent(up, true))
+        up.recycle()
+        instrumentation.waitForIdleSync()
     }
 
     private fun seedBoard(context: android.content.Context) {
