@@ -583,7 +583,7 @@ function Verify-StaticChecks {
         @($gmdArgs | Where-Object { $_ -like '*emulator.gpu*' }).Count -eq 1) 'GPU_PROPERTY_ONCE'
     $allNames = Get-ExpectedTestNames; Check ($allNames.Count -eq 66) 'SOURCE_CENSUS_66'
     $dist = Get-DistributionSelection ([IO.File]::ReadAllBytes((Join-Path $worktree 'gradle/wrapper/gradle-wrapper.properties')))
-    Check ($dist.cacheDirectory.EndsWith('3m7h6ceboy5k31n8kzwzuxssm')) 'WRAPPER_CACHE_KEY'
+    Check ($dist.cacheDirectory.EndsWith('a2l6ltp3k1vth6lwipzm5p2jp')) 'WRAPPER_CACHE_KEY'
     Check (Test-WrapperCache $dist) 'REAL_CACHE_PRESENT'
     $fixture = Join-Path $diagnostics 'fixtures'; [void][IO.Directory]::CreateDirectory($fixture)
     # Synthetic wrapper-cache readiness fixtures: never the real cache; no Gradle/wrapper child is started.
