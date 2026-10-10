@@ -489,7 +489,7 @@ fun CanvasScreen(
         editorSession.imageDescriptionDraft.value == null && !imagePickerOpen &&
         editorSession.pendingImageAcknowledgement.value == null &&
         editorSession.pendingDraftAcknowledgement.value == null && !saveBlocked() &&
-        tool == SpatialTool.NONE && inkTool == null && discardTarget == null &&
+        tool == SpatialTool.NONE && inkTool == null && toolsExpanded == pending.toolsExpanded && discardTarget == null &&
         menuTarget == null && attachmentEditor == null && moveOwner == null &&
         board.snapshot() == pending.content && selectedId == pending.selectedId &&
         selectedIds == pending.selectedIds && searchOpen == pending.searchOpen
@@ -514,7 +514,7 @@ fun CanvasScreen(
             // Observe authority changes independently of the confirmation job's final check.
             listOf(draft, regionDraft, imageDraft, imagePickerOpen, pendingImageAcknowledgement,
                 pendingDraftAcknowledgement, currentSaveState, tool, inkTool,
-                discardTarget, menuTarget, attachmentEditor, moveOwner, gestureGeneration,
+                discardTarget, menuTarget, attachmentEditor, moveOwner, gestureGeneration, toolsExpanded,
                 board.snapshot(), selectedId, selectedIds, searchOpen, latestExternalBlock.value())
         }.collect {
             blankTapBoundary.pending?.let { if (!blankTapIsLive(it)) cancelBlankTap() }
@@ -1043,7 +1043,8 @@ fun CanvasScreen(
             cancelBlankTap()
             val (x, y) = latestViewport.value.screenToWorld(point.x, point.y)
             val pending = BlankTap(eventUptimeMillis, point, WorldPoint(x, y), gestureGeneration,
-                board.snapshot(), selectedId, selectedIds.toSet(), searchOpen, editorSession.regionNameDraft.value)
+                board.snapshot(), selectedId, selectedIds.toSet(), searchOpen, editorSession.regionNameDraft.value,
+                toolsExpanded)
             blankTapBoundary.pending = pending
             blankTapBoundary.confirmation = uiScope.launch {
                 delay(doubleTapTimeoutMillis)
@@ -1330,6 +1331,16 @@ fun CanvasScreen(
                 if (editorSession.draft.value != null) return@awaitEachGesture
                 val requestedInk = down.type == PointerType.Stylus || latestInkTool.value != null
                 if (chromeContains(down.position)) { cancelBlankTap(); return@awaitEachGesture }
+                // Only a neutral, single-touch short release belongs to palette dismissal.
+                // Editor/modal owners and every chrome control keep their existing admission.
+                val paletteTap = toolsExpanded && down.type == PointerType.Touch && !requestedInk &&
+                    latestTool.value == SpatialTool.NONE && !exitBlocked() &&
+                    editorSession.regionNameDraft.value == null && discardTarget == null &&
+                    menuTarget == null && attachmentEditor == null
+                if (paletteTap) {
+                    cancelBlankTap()
+                    down.consume()
+                }
                 stopViewportAnimation()
                 pendingHistoryFocus = null
                 val previousBlankTap = blankTapBoundary.pending
@@ -1418,7 +1429,7 @@ fun CanvasScreen(
                 val gestureSnapshot = latestSnapshot.value
                 val moveIds = if (activeId in latestSelectedIds.value) latestSelectedIds.value.toSet()
                     else activeId?.let { setOf(it) }.orEmpty()
-                var mode = when {
+                val canvasMode = when {
                     drawingKind != null -> "ink"
                     activeTool == SpatialTool.LASSO -> "lasso"
                     activeTool != SpatialTool.NONE -> "create"
@@ -1426,6 +1437,7 @@ fun CanvasScreen(
                     selectedGrip -> "move"
                     else -> "tap"
                 }
+                var mode = if (paletteTap) "paletteTap" else canvasMode
                 var manualViewportOrigin: ViewportFocus? = null
                 val panVelocity = VelocityTracker().also { it.addPointerInputChange(down) }
                 val startWorld = viewport.screenToWorld(start.x, start.y).let { WorldPoint(it.first, it.second) }
@@ -1521,6 +1533,28 @@ fun CanvasScreen(
                         end = event.changes.firstOrNull { it.id == drawingPointer }?.position
                             ?: event.changes.firstOrNull()?.position ?: end
                         when (mode) {
+                            "paletteTap" -> {
+                                val native = event.motionEvent
+                                val release = event.changes.firstOrNull {
+                                    it.id == down.id && it.previousPressed && !it.pressed
+                                }
+                                event.changes.forEach { it.consume() }
+                                if (native?.actionMasked == MotionEvent.ACTION_UP &&
+                                    native.flags and MotionEvent.FLAG_CANCELED == 0 && release != null &&
+                                    release.uptimeMillis - down.uptimeMillis < longPressMillis &&
+                                    (release.position - start).getDistance() <= touchSlop &&
+                                    release.position.x in 0f..size.width.toFloat() &&
+                                    release.position.y in 0f..size.height.toFloat() &&
+                                    !chromeContains(release.position) && toolsExpanded && !exitBlocked() &&
+                                    editorSession.draft.value == null && editorSession.regionNameDraft.value == null &&
+                                    editorSession.imageDescriptionDraft.value == null && !imagePickerOpen &&
+                                    discardTarget == null && menuTarget == null && attachmentEditor == null &&
+                                    !latestExternalBlock.value()) {
+                                    cancelBlankTap()
+                                    toolsExpanded = false
+                                    chromeBounds.remove("toolPalette")
+                                }
+                            }
                             "ink" -> if (drawingKind != null && drawingPoints.isNotEmpty()) {
                                 val endTime = SystemClock.uptimeMillis()
                                 val (x, y) = latestViewport.value.screenToWorld(end.x, end.y)
@@ -1725,7 +1759,10 @@ fun CanvasScreen(
                             ?: pressed.first() else pressed.first()
                         end = change.position
                         val delta = change.position - change.previousPosition
-                        if (mode == "tap" || mode == "pan") panVelocity.addPointerInputChange(change)
+                        if (mode == "tap" || mode == "paletteTap" || mode == "pan")
+                            panVelocity.addPointerInputChange(change)
+                        if (mode == "paletteTap" && (change.position - start).getDistance() > touchSlop)
+                            mode = if (canvasMode == "tap") "pan" else canvasMode
                         if (mode == "tap" && (change.position - start).getDistance() > touchSlop) mode = "pan"
                         if (mode == "move" && !dragAdmitted && (change.position - start).getDistance() > touchSlop) {
                             dragAdmitted = true
@@ -2371,8 +2408,10 @@ fun CanvasScreen(
                 SpatialToolLauncher(tool, !saveBlocked(), onExpand = {
                     if (!saveBlocked()) {
                         cancelBlankTap()
-                        if (tool == SpatialTool.NONE) toolsExpanded = !toolsExpanded
-                        else finishToolInteraction()
+                        if (tool == SpatialTool.NONE) {
+                            invalidatePointerContinuation()
+                            toolsExpanded = !toolsExpanded
+                        } else finishToolInteraction()
                     }
                 }, modifier = Modifier.onGloballyPositioned { chromeBounds["tools"] = canvasBounds(it) })
                 DisposableEffect(Unit) {

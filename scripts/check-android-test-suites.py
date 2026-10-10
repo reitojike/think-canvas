@@ -13,10 +13,10 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "scripts/android-test-suites.json"
 CATEGORIES = ("smoke", "full_only", "jvm_candidate", "review_required")
-MIGRATION_COUNTS = dict(smoke=73, full_only=170, jvm_candidate=9, review_required=0)
+MIGRATION_COUNTS = dict(smoke=83, full_only=170, jvm_candidate=9, review_required=0)
 SMOKE_ANNOTATION = "com.thinkcanvas.test.PrSmoke"
 FLAKY_ANNOTATION = "androidx.test.filters.FlakyTest"
-LANE_COUNTS = {"smoke": 56, "non-quarantined": 214, "quarantine": 38, "full": 252}
+LANE_COUNTS = {"smoke": 66, "non-quarantined": 224, "quarantine": 38, "full": 262}
 IDENTIFIER = r"[A-Za-z_][A-Za-z0-9_]*"
 IDENTITY_RE = re.compile(rf"^(?:{IDENTIFIER}\.)+{IDENTIFIER}#{IDENTIFIER}$")
 
@@ -48,7 +48,7 @@ def validate_manifest(path: Path) -> dict:
         partition.extend(values)
     if len(partition) != len(set(partition)):
         fail("ANDROID_TEST_SUITE_MANIFEST_DUPLICATE")
-    # These counts freeze the migration snapshot, not actual runner discovery.
+    # These counts freeze the current inventory revision, not actual runner discovery.
     if {category: len(suites[category]) for category in CATEGORIES} != MIGRATION_COUNTS:
         fail("ANDROID_TEST_SUITE_MIGRATION_SNAPSHOT_DRIFT")
     quarantine = manifest.get("quarantine", {})

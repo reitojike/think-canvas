@@ -6,6 +6,7 @@ import android.graphics.Rect
 import android.os.Build
 import android.os.SystemClock
 import android.view.MotionEvent
+import android.view.InputDevice
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasClickAction
@@ -17,6 +18,8 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.lifecycle.ViewModelProvider
+import com.thinkcanvas.BoardSessionViewModel
 import com.thinkcanvas.MainActivity
 import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.CanvasDatabase
@@ -90,6 +93,7 @@ class ConditionalChromeLifecycleTest {
                 waitForRegionState(instrumentation, "選択中"))
             assertNotNull("再選択後に共有 Button が再表示される",
                 waitForActionable(instrumentation, "選択範囲を画像で共有"))
+
         } finally {
             activity.finish()
             instrumentation.waitForIdleSync()
@@ -149,9 +153,9 @@ class ConditionalChromeLifecycleTest {
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
         val database = CanvasDatabase.open(context)
-        val initialInkCount = runBlocking { database.canvasDao().inkStrokes(1).size }
         try {
             assertStableEndChrome(instrumentation)
+            val initialInkCount = runBlocking { database.canvasDao().inkStrokes(1).size }
             val collapsedLauncher = waitForActionable(instrumentation, "図形ツールを開く")
             val collapsedCenter = center(bounds(collapsedLauncher))
             clickNode(instrumentation, collapsedLauncher, "図形ツールを開く")
@@ -190,6 +194,393 @@ class ConditionalChromeLifecycleTest {
             activity.finish()
             instrumentation.waitForIdleSync()
         }
+    }
+
+    // #112: each responsibility starts from a fresh board/activity.
+    @PrSmoke
+    @Test
+    fun paletteOpeningInvalidatesAdmittedOutsidePointer() = withPaletteBoard(expanded = false) { instrumentation, activity, _, sessions ->
+        val blank = paletteCanvasPoint(instrumentation, activity)
+        nativeGesture(instrumentation, listOf(blank), afterDown = {
+            clickActionable(instrumentation, "図形ツールを開く")
+        })
+        val configuration = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().layoutInfo.viewConfiguration
+        composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+        assertPaletteOpen(instrumentation)
+        assertNull("old UP after opening cannot create text", sessions.textEditorFor(1L, BoardSnapshot()).draft.value)
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteOutsideShortTapOnlyDismissesAndNextTapStartsText() = withPaletteBoard { instrumentation, activity, _, sessions ->
+        val board = sessions.stateFor(1L, BoardSnapshot())
+        val editor = sessions.textEditorFor(1L, BoardSnapshot())
+        val navigation = sessions.viewportHistoryFor(1L, BoardSnapshot())
+        val before = board.snapshot()
+        val viewBefore = navigation.viewportState.value
+        val launcher = "図形ツールを開く"
+        val anchor = bounds(waitForActionable(instrumentation, launcher))
+        val blank = paletteCanvasPoint(instrumentation, activity)
+        val configuration = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().layoutInfo.viewConfiguration
+        val region = center(bounds(waitForActionable(instrumentation, "囲み: Cluster")))
+        val shape = board.shapes.single { it.id == "chrome-lifecycle-region" }
+        val scale = navigation.viewportState.value.scale
+        val safe = paletteSafeCanvas(instrumentation, activity)
+        val chrome = paletteChromeBounds(instrumentation)
+        val points = listOf(.5f, .1f, .9f).flatMap { fx -> listOf(.5f, .1f, .9f).map { fy ->
+            (region.first + (fx - .5f) * shape.width * scale) to (region.second + (fy - .5f) * shape.height * scale)
+        } }
+        val point = checkNotNull(points.firstOrNull { (x, y) -> safe.contains(x.toInt(), y.toInt()) && chrome.none { it.contains(x.toInt(), y.toInt()) } }) {
+            "No outside region point: points=$points safe=$safe chrome=$chrome"
+        }
+        nativeGesture(instrumentation, listOf(point))
+        assertPaletteClosed(instrumentation)
+        assertEquals("outside element tap does not select", "未選択", waitForRegionState(instrumentation, "未選択"))
+        assertNull(editor.draft.value)
+        assertEquals(before, board.snapshot())
+        assertEquals("dismissal does not pan or zoom", viewBefore, navigation.viewportState.value)
+        assertEquals(anchor, bounds(waitForActionable(instrumentation, launcher)))
+
+        clickActionable(instrumentation, "囲み: Cluster")
+        clickActionable(instrumentation, launcher)
+        nativeGesture(instrumentation, listOf(blank))
+        assertPaletteClosed(instrumentation)
+        composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+        assertEquals("dismissal keeps selection", "選択中", waitForRegionState(instrumentation, "選択中"))
+        assertNull("dismissal never creates an editor", editor.draft.value)
+        assertEquals(before, board.snapshot())
+        assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+        composeRule.waitForIdle()
+        assertEquals("Back clears only selection", "未選択", waitForRegionState(instrumentation, "未選択"))
+        clickActionable(instrumentation, launcher)
+        composeRule.mainClock.autoAdvance = false
+        try {
+            nativeGesture(instrumentation, listOf(blank))
+            repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
+            assertNull(editor.draft.value)
+            nativeGesture(instrumentation, listOf(blank))
+            composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+        } finally { composeRule.mainClock.autoAdvance = true }
+        composeRule.waitUntil(5_000) { editor.draft.value != null }
+        assertEquals("next tap creates new text", null, editor.draft.value?.id)
+        assertEquals("next tap is not double-tap zoom", viewBefore.scale, navigation.viewportState.value.scale)
+        composeRule.onNodeWithContentDescription("キャンバス").assertExists()
+        composeRule.onNodeWithContentDescription("やめる").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertNull(editor.draft.value)
+        assertEquals(before, board.snapshot())
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteRegionNameEditorKeepsOutsidePriority() = withPaletteBoard(expanded = false) { instrumentation, _, _, _ ->
+        clickActionable(instrumentation, "囲み: Cluster")
+        val formerShare = center(bounds(waitForActionable(instrumentation, "選択範囲を画像で共有")))
+        val (region, rename) = waitForRegionRenameAction(instrumentation)
+        assertTrue(region.performAction(rename.id))
+        waitForGone(instrumentation, "選択範囲を画像で共有")
+        clickActionable(instrumentation, "図形ツールを開く")
+        assertPaletteOpen(instrumentation)
+        nativeGesture(instrumentation, listOf(formerShare))
+        val configuration = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().layoutInfo.viewConfiguration
+        composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
+        assertEquals("palette中もregion outsideの選択解除を保持する", "未選択", waitForRegionState(instrumentation, "未選択"))
+        composeRule.onNodeWithContentDescription("囲みの名前").assertExists()
+        assertPaletteOpen(instrumentation)
+        clickActionable(instrumentation, "完了")
+        clickActionable(instrumentation, "図形ツールを開く")
+        assertPaletteClosed(instrumentation)
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteNativeCanceledTouchesKeepMenuAndContent() = withPaletteBoard { instrumentation, activity, database, sessions ->
+        val board = sessions.stateFor(1L, BoardSnapshot())
+        val before = board.snapshot()
+        val blank = paletteCanvasPoint(instrumentation, activity)
+        nativeGesture(instrumentation, listOf(blank), terminal = MotionEvent.ACTION_CANCEL)
+        assertPaletteOpen(instrumentation)
+        assertNull(sessions.textEditorFor(1L, BoardSnapshot()).draft.value)
+        assertEquals(before, board.snapshot())
+        nativeGesture(instrumentation, listOf(blank), flags = MotionEvent.FLAG_CANCELED)
+        assertPaletteOpen(instrumentation)
+        assertNull(sessions.textEditorFor(1L, BoardSnapshot()).draft.value)
+        assertEquals(before, board.snapshot())
+        assertEquals(0, runBlocking { database.canvasDao().inkStrokes(1).size })
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteLongPressKeepsMenuAndContent() = withPaletteBoard { instrumentation, activity, database, sessions ->
+        val before = sessions.stateFor(1L, BoardSnapshot()).snapshot()
+        val blank = paletteCanvasPoint(instrumentation, activity)
+        val configuration = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().layoutInfo.viewConfiguration
+        nativeGesture(instrumentation, listOf(blank), holdMillis = configuration.longPressTimeoutMillis + 50)
+        assertPaletteOpen(instrumentation)
+        assertNull(sessions.textEditorFor(1L, BoardSnapshot()).draft.value)
+        assertEquals(before, sessions.stateFor(1L, BoardSnapshot()).snapshot())
+        assertEquals(0, runBlocking { database.canvasDao().inkStrokes(1).size })
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteOutsidePanKeepsMenuAndContent() = withPaletteBoard { instrumentation, activity, _, sessions ->
+        val board = sessions.stateFor(1L, BoardSnapshot())
+        val navigation = sessions.viewportHistoryFor(1L, BoardSnapshot())
+        val before = board.snapshot()
+        val viewBefore = navigation.viewportState.value
+        val blank = paletteCanvasPoint(instrumentation, activity)
+        val path = (0..6).map { (blank.first + 100f - it * 20f) to blank.second }
+        assertPalettePath(instrumentation, activity, path)
+        nativeGesture(instrumentation, path, holdMillis = 180)
+        assertPaletteOpen(instrumentation)
+        assertTrue("outside drag pans", viewBefore != navigation.viewportState.value)
+        assertEquals("pan does not change zoom", viewBefore.scale, navigation.viewportState.value.scale)
+        assertEquals(before, board.snapshot())
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteOutsidePinchKeepsMenuAndContent() = withPaletteBoard { instrumentation, activity, _, sessions ->
+        val board = sessions.stateFor(1L, BoardSnapshot())
+        val navigation = sessions.viewportHistoryFor(1L, BoardSnapshot())
+        val before = board.snapshot()
+        val scale = navigation.viewportState.value.scale
+        val blank = paletteCanvasPoint(instrumentation, activity)
+        val x = blank.first + 160f
+        assertPalettePath(instrumentation, activity, listOf((x - 70f) to blank.second, (x + 70f) to blank.second))
+        nativePinch(instrumentation, x, blank.second)
+        assertPaletteOpen(instrumentation)
+        assertTrue("outside pinch zooms", navigation.viewportState.value.scale > scale)
+        assertEquals(before, board.snapshot())
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteStylusNormalReleasePersistsStroke() = withPaletteBoard { instrumentation, activity, database, sessions ->
+        assertPaletteStylusStroke(instrumentation, activity, database, sessions)
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteStylusAfterEditorPanAndPinchPersistsStroke() = withPaletteBoard(expanded = false) { instrumentation, activity, database, sessions ->
+        val editor = sessions.textEditorFor(1L, BoardSnapshot())
+        nativeGesture(instrumentation, listOf(paletteCanvasPoint(instrumentation, activity)))
+        composeRule.waitUntil(5_000) { editor.draft.value != null }
+        composeRule.onNodeWithContentDescription("やめる").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertNull(editor.draft.value)
+        clickActionable(instrumentation, "図形ツールを開く")
+        assertPaletteOpen(instrumentation)
+        val blank = paletteCanvasPoint(instrumentation, activity)
+        val path = (0..6).map { (blank.first + 100f - it * 20f) to blank.second }
+        assertPalettePath(instrumentation, activity, path)
+        nativeGesture(instrumentation, path, holdMillis = 180)
+        val pinch = paletteCanvasPoint(instrumentation, activity)
+        assertPalettePath(instrumentation, activity, listOf((pinch.first + 90f) to pinch.second, (pinch.first + 230f) to pinch.second))
+        nativePinch(instrumentation, pinch.first + 160f, pinch.second)
+        assertPaletteOpen(instrumentation)
+        assertPaletteStylusStroke(instrumentation, activity, database, sessions)
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteNativeControlsAndDismissedBoundsRemainActionable() = withPaletteBoard { instrumentation, _, _, sessions ->
+        val launcher = "図形ツールを開く"
+        val anchor = bounds(waitForActionable(instrumentation, launcher))
+        val formerPen = center(bounds(waitForActionable(instrumentation, "ペン")))
+        nativeGesture(instrumentation, listOf(center(anchor)))
+        assertPaletteClosed(instrumentation)
+        val navigation = sessions.viewportHistoryFor(1L, BoardSnapshot())
+        val before = navigation.viewportState.value
+        nativeGesture(instrumentation, (0..6).map { (formerPen.first - it * 20f) to formerPen.second }, holdMillis = 180)
+        assertTrue("former palette hit admits pan", before != navigation.viewportState.value)
+        nativeGesture(instrumentation, listOf(center(anchor)))
+        assertPaletteOpen(instrumentation)
+        nativeGesture(instrumentation, listOf(center(bounds(waitForActionable(instrumentation, "ペン")))))
+        waitForGone(instrumentation, launcher)
+        clickActionable(instrumentation, "やめる")
+        assertEquals(anchor, bounds(waitForActionable(instrumentation, launcher)))
+    }
+
+    private fun withPaletteBoard(
+        expanded: Boolean = true,
+        block: (android.app.Instrumentation, MainActivity, CanvasDatabase, BoardSessionViewModel) -> Unit,
+    ) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        seedBoard(context)
+        showBoardOneAtStartup(context)
+        val activity = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        val database = CanvasDatabase.open(context)
+        try {
+            waitForActionable(instrumentation, "図形ツールを開く")
+            lateinit var sessions: BoardSessionViewModel
+            instrumentation.runOnMainSync { sessions = ViewModelProvider(activity)[BoardSessionViewModel::class.java] }
+            if (expanded) {
+                clickActionable(instrumentation, "図形ツールを開く")
+                assertPaletteOpen(instrumentation)
+            }
+            block(instrumentation, activity, database, sessions)
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+            database.close()
+            activity.finish()
+            instrumentation.waitForIdleSync()
+        }
+    }
+
+    private fun assertPaletteOpen(instrumentation: android.app.Instrumentation) {
+        composeRule.onNodeWithContentDescription("ペン").assertExists()
+        if (Build.VERSION.SDK_INT >= 34) instrumentation.uiAutomation.clearCache()
+        assertNotNull(waitForActionable(instrumentation, "ペン"))
+    }
+
+    private fun assertPaletteClosed(instrumentation: android.app.Instrumentation) {
+        composeRule.onNodeWithContentDescription("ペン").assertDoesNotExist()
+        if (Build.VERSION.SDK_INT >= 34) instrumentation.uiAutomation.clearCache()
+        waitForGone(instrumentation, "ペン")
+    }
+
+    private fun paletteSafeCanvas(instrumentation: android.app.Instrumentation, activity: MainActivity): Rect {
+        composeRule.waitForIdle()
+        instrumentation.waitForIdleSync()
+        if (Build.VERSION.SDK_INT >= 34) instrumentation.uiAutomation.clearCache()
+        val canvas = bounds(checkNotNull(findExact(instrumentation.uiAutomation.rootInActiveWindow, "キャンバス")))
+        val display = Rect()
+        instrumentation.runOnMainSync {
+            val decor = activity.window.decorView
+            val origin = IntArray(2).also(decor::getLocationOnScreen)
+            display.set(origin[0], origin[1], origin[0] + decor.width, origin[1] + decor.height)
+            if (Build.VERSION.SDK_INT >= 30) {
+                val insets = checkNotNull(decor.rootWindowInsets).getInsets(android.view.WindowInsets.Type.systemGestures())
+                display.left += insets.left; display.top += insets.top
+                display.right -= insets.right; display.bottom -= insets.bottom
+            }
+        }
+        assertTrue("live canvas intersects app-owned screen: $canvas / $display", canvas.intersect(display))
+        val margin = (8f * instrumentation.targetContext.resources.displayMetrics.density).toInt()
+        canvas.inset(margin, margin)
+        assertTrue("app-owned canvas is not empty", !canvas.isEmpty)
+        return canvas
+    }
+
+    private fun paletteChromeBounds(instrumentation: android.app.Instrumentation): List<Rect> {
+        val root = instrumentation.uiAutomation.rootInActiveWindow
+        val labels = setOf("画像を追加", "ペン", "マーカー", "まとめて選ぶ", "囲み", "矢印", "丸", "四角")
+        val rectangles = mutableListOf<Rect>()
+        if (findExact(root, "ペン") != null) {
+            val buttons = labels.map { bounds(waitForActionable(instrumentation, it)) }
+            val seen = mutableSetOf<String>()
+            fun collect(node: AccessibilityNodeInfo?) {
+                if (node == null) return
+                val text = node.text?.toString()
+                if (node.isVisibleToUser && text in labels) { seen += requireNotNull(text); rectangles += bounds(node) }
+                for (index in 0 until node.childCount) collect(node.getChild(index))
+            }
+            collect(root)
+            assertEquals("native palette label geometry is complete", labels, seen)
+            rectangles += buttons
+            val envelope = Rect(rectangles.first()).apply { rectangles.drop(1).forEach(::union) }
+            val padding = (8f * instrumentation.targetContext.resources.displayMetrics.density).toInt()
+            envelope.inset(-padding, -padding)
+            rectangles.clear(); rectangles += envelope
+        }
+        rectangles += bounds(waitForActionable(instrumentation, "図形ツールを開く"))
+        rectangles += zoomBounds(instrumentation)
+        for (label in listOf("前の視点へ戻る", "次の視点へ進む")) findExact(root, label)?.let { rectangles += bounds(it) }
+        return rectangles
+    }
+
+    private fun paletteCanvasPoint(instrumentation: android.app.Instrumentation, activity: MainActivity): Pair<Float, Float> {
+        val safe = paletteSafeCanvas(instrumentation, activity)
+        val canvas = bounds(checkNotNull(findExact(instrumentation.uiAutomation.rootInActiveWindow, "キャンバス")))
+        val point = (canvas.left + canvas.width() * .20f) to (canvas.top + canvas.height() * .55f)
+        assertTrue("normal fixture point excludes system gestures: $point / $safe", safe.contains(point.first.toInt(), point.second.toInt()))
+        assertPalettePath(instrumentation, activity, listOf(point))
+        return point
+    }
+
+    private fun assertPalettePath(instrumentation: android.app.Instrumentation, activity: MainActivity, path: List<Pair<Float, Float>>) {
+        val safe = paletteSafeCanvas(instrumentation, activity)
+        val chrome = paletteChromeBounds(instrumentation)
+        path.forEach { (x, y) ->
+            assertTrue("normal input must be in live app-owned canvas: ($x,$y) / $safe", safe.contains(x.toInt(), y.toInt()))
+            assertTrue("normal input must not hit chrome: ($x,$y) / $chrome", chrome.none { it.contains(x.toInt(), y.toInt()) })
+        }
+    }
+
+    private fun assertPaletteStylusStroke(instrumentation: android.app.Instrumentation, activity: MainActivity, database: CanvasDatabase, sessions: BoardSessionViewModel) {
+        val board = sessions.stateFor(1L, BoardSnapshot())
+        val before = runBlocking { database.canvasDao().inkStrokes(1).size }
+        val modelBefore = board.snapshot().ink.sumOf { it.strokes.size }
+        val blank = paletteCanvasPoint(instrumentation, activity)
+        val path = listOf(blank, (blank.first + 30f) to blank.second, (blank.first + 60f) to blank.second)
+        assertPalettePath(instrumentation, activity, path)
+        nativeGesture(instrumentation, path, toolType = MotionEvent.TOOL_TYPE_STYLUS)
+        awaitInkCount(database, before + 1)
+        assertEquals("normal native stylus UP commits exactly one model stroke", modelBefore + 1, board.snapshot().ink.sumOf { it.strokes.size })
+        val stroke = board.snapshot().ink.flatMap { it.strokes }.last()
+        assertEquals(InkInputType.STYLUS, stroke.inputType)
+        assertTrue("stroke retains movement", stroke.points.size >= 2)
+        assertTrue(stroke.points.zipWithNext().all { (a, b) -> a.elapsedMillis <= b.elapsedMillis })
+        assertEquals("STYLUS", runBlocking { database.canvasDao().inkStrokes(1).last().inputType })
+        assertPaletteOpen(instrumentation)
+        assertNull(sessions.textEditorFor(1L, BoardSnapshot()).draft.value)
+    }
+
+    private fun nativeGesture(
+        instrumentation: android.app.Instrumentation,
+        points: List<Pair<Float, Float>>,
+        terminal: Int = MotionEvent.ACTION_UP,
+        flags: Int = 0,
+        holdMillis: Long = 0,
+        toolType: Int = MotionEvent.TOOL_TYPE_FINGER,
+        afterDown: (() -> Unit)? = null,
+    ) {
+        val down = SystemClock.uptimeMillis()
+        val samples = if (points.size == 1) points + points else points
+        samples.forEachIndexed { index, (x, y) ->
+            if (index == samples.lastIndex && holdMillis > 0) Thread.sleep(holdMillis)
+            val properties = arrayOf(MotionEvent.PointerProperties().apply { id = 0; this.toolType = toolType })
+            val coordinates = arrayOf(MotionEvent.PointerCoords().apply { this.x = x; this.y = y; pressure = 1f; size = 1f })
+            val action = when (index) { 0 -> MotionEvent.ACTION_DOWN; samples.lastIndex -> terminal
+                else -> MotionEvent.ACTION_MOVE }
+            val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, 1, properties, coordinates,
+                0, 0, 1f, 1f, 0, 0,
+                if (toolType == MotionEvent.TOOL_TYPE_STYLUS) InputDevice.SOURCE_STYLUS else InputDevice.SOURCE_TOUCHSCREEN,
+                if (index == samples.lastIndex) flags else 0)
+            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
+            finally { event.recycle() }
+            if (index == 0) afterDown?.invoke()
+            Thread.sleep(35)
+        }
+        instrumentation.waitForIdleSync()
+        if (composeRule.mainClock.autoAdvance) composeRule.waitForIdle()
+    }
+
+    private fun nativePinch(instrumentation: android.app.Instrumentation, x: Float, y: Float) {
+        val down = SystemClock.uptimeMillis()
+        fun send(action: Int, spread: Float, count: Int) {
+            val properties = Array(count) { MotionEvent.PointerProperties().apply {
+                id = it; toolType = MotionEvent.TOOL_TYPE_FINGER
+            } }
+            val coordinates = Array(count) { MotionEvent.PointerCoords().apply {
+                this.x = x + if (it == 0) -spread else spread; this.y = y; pressure = 1f
+            } }
+            val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, count, properties,
+                coordinates, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
+            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
+            finally { event.recycle() }
+            Thread.sleep(35)
+        }
+        send(MotionEvent.ACTION_DOWN, 40f, 1)
+        send(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 40f, 2)
+        send(MotionEvent.ACTION_MOVE, 70f, 2)
+        send(MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 70f, 2)
+        send(MotionEvent.ACTION_UP, 70f, 1)
+        composeRule.waitForIdle()
     }
 
     // Issue #107: launcher anchor、展開中の視点control、48dp target の非重複と閉じた palette の hit 解放。

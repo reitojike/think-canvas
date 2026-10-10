@@ -30,15 +30,15 @@ JDK、SDK、network、権限などの環境要因で検証を完走できない�
 
 ## Android required GMD と temporary quarantine
 
-PR は PrSmoke AND not FlakyTest の exact56を required process gate として実行し、
-not FlakyTest の exact214は job-level condition により SKIPPED となります。
-main push は exact214を required process gate とし、smoke56は SKIPPED です。
-filterなしfull252は [android-full.yml](../../.github/workflows/android-full.yml) の manual dispatch、
+PR は PrSmoke AND not FlakyTest の exact66を required process gate として実行し、
+not FlakyTest の exact224は job-level condition により SKIPPED となります。
+main push は exact224を required process gate とし、smoke66は SKIPPED です。
+filterなしfull262は [android-full.yml](../../.github/workflows/android-full.yml) の manual dispatch、
 FlakyTest38はdefault branch schedule/manualで保持します。android.yml に manual dispatch はありません。
 詳細、38件の裁定、strict failure、sample判定、2026-10-23 review gateは
 [IME quarantine手順](ime-quarantine.md)を参照します。targeted契約は変更しません。
 
-| Event | Basic | Smoke56 | non-quarantined214 | Quarantine38 | Full252 |
+| Event | Basic | Smoke66 | non-quarantined224 | Quarantine38 | Full262 |
 | --- | --- | --- | --- | --- | --- |
 | PR | RUN | RUN | SKIP | - | - |
 | main push | RUN | SKIP | RUN | schedule/manual（別event） | - |
@@ -46,7 +46,7 @@ FlakyTest38はdefault branch schedule/manualで保持します。android.yml に
 | quarantine schedule/manual | - | - | - | RUN | - |
 | targeted manual | 既存契約 | 既存契約 | 既存契約 | 既存契約 | 既存契約 |
 
-quarantine38とfull252はmain pushでは起動しません。214または38のgreenをfull252のgreenとは扱いません。
+quarantine38とfull262はmain pushでは起動しません。224または38のgreenをfull262のgreenとは扱いません。
 manual fullの起動は `gh workflow run android-full.yml --ref <ref>` を使い、availability証明だけの
 追加canaryは実行しません。workflow/process requiredとserver enforced requiredを区別し、rulesetは変更しません。
 
@@ -64,4 +64,4 @@ receiptはrunner XMLのexact identity照合にだけ使います。独自classif
 test body、production、timeout、assertion、retryの差分がないことを確認します。
 PrSmoke/FlakyTestは `@Test` の前に置き、targeted preflightのdirect declarationを保持します。
 test failure / Gradle failure / XML不足をgreen化せず、各laneのartifactと現行headを照合します。
-filter intersectionがactual56を選べない場合はSTOPし、独自filterへ逃げません。
+filter intersectionがactual66を選べない場合はSTOPし、独自filterへ逃げません。

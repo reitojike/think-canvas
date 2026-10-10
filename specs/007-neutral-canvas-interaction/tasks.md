@@ -70,3 +70,44 @@ T001→T002→T003/T004→US1→US2→検証・converge。US1はeditorからの�
 - [x] T023 HIGH: `CanvasScreen.kt` とapp固有の `EditorImeWindow.kt` で、未完了IME要求がcontrol/frame中にnative window focusを失っても現在ownerのまま取消可能に復帰を待つ。focus要求・IME showは各一回、readonly/save/ack/live sessionとpending Job取消を維持し、IME-control通知と実際の所有を分離する。`EditorImeWindowTest.kt` のlegacy/modern段階・終了/取消で補正前RED/後GREENを確認し、`NeutralInteractionTest.kt` で三ownerのlate window往復と既存hide取消を検証する。Spec007 FR-003/007/009、Issue91 AC1–5（partial）。deliveryは既存T017で確定し、API26〜29のnative未実行を明記する。
 
 T017/T020〜T022は[Issue91の最新7AC closure](https://github.com/reitojike/think-canvas/issues/91#issuecomment-5977858342)で完了。PR92 merge a116374bのtreeは最終検証head bfdbad45と一致し、両CI37183797445成功・fresh144/0/0/0・最後の依頼より新しいcanonical clean・thread0を確認した。過去のpending記述は当時の状態として保持する。
+
+## Issue #112 bounded implementation
+
+- [ ] T024 `CanvasScreen.kt` にshort outside tapのdismiss専用ownerを追加し、既存editor/modal/chrome優先・drag/pinch/stylus・世代guard・blank arbitrationを維持する。
+- [ ] T025 `ConditionalChromeLifecycleTest.kt` の既存native testを拡張し、outside blank/element、取消/長押し、drag/pinch/stylus、control、次gestureと旧palette hitを検証する。suite identity・quarantineは変更しない。
+- [ ] T026 local compile/lint/unit/build/androidTest compile/receipt/public boundaryとfocused GMD、PR natural CI、exact-head review/thread/baseを確認し、Task Contractのmerge gateを満たす場合だけmergeする。
+- [ ] T027 main natural CIのexact214と最新Issue ACを個別reconcileする。実機証拠がない条件をチェックせず、具体的なチェックリストとともにHOLDする。
+
+2026-10-10 pilotは `ISSUE_112_SCOPE_OR_EVIDENCE_HOLD`。T024/T025の候補コードとnative回帰は追加したが、GMDは既存 `local.properties` に対する `WINDOWS_GMD_PREFLIGHT_BLOCKED / LOCAL_OR_UNSUPPORTED_CONFIG_PRESENT` でtest開始前に停止した。設定の削除・launcherの緩和・blind rerunは行わない。Claude Codeのread-only second opinionでregion併存の退行とtest証拠の不足を確認し、同一責務内で第1ラウンドの補正を実施した。補正中のlint解析は `FirExpressionStub` の `ClassCastException` で失敗し、source更新も重なったため最終候補の成功証拠にしない。最終lint・focused GMD・PR/main natural CI・canonical review・実機確認は未証明であり、T024〜T027とIssue ACは未完了のまま保持する。
+
+## Issue #112 Recovery の到達点（2026-10-10）
+
+- 元checkoutの6ファイルをhash/patch/byte backupで保全し、専用clean worktreeへbyte一致で移行した。元の未commit変更、local.properties、build outputsは変更/コピーしていない。
+- 移行したfrozen sourceのlintDebugは成功し、FIR例外のHOLDを解消した。round2後はlint/unit/debug build/androidTest compile成功、checkpoint追加round後もlint/androidTest compile成功。receipt/public boundary/schema/workflow/suite集合の不変を確認した。
+- round1を消費済みとして引き継ぎ、round2を新設fixtureのfinger入力へ限定した。outside element tap後のnative palette非表示assertは同じ箇所で再現したため、Unknown metadataを単独原因とは扱わない。
+- [family checkpoint](https://github.com/reitojike/think-canvas/issues/112#issuecomment-6096737676)をread-onlyで実施し、Claude Codeと生成bytecodeの独立確認を行った。追加1 roundは新設fixtureのoutside座標前提と数値診断だけに限定した。
+- region priorityの標準Windows GMDはfresh owned exact1/0/0/0、child exit0、source unchangedでPASS。checkpoint追加roundのoutside sampleはdismissal・二重発火防止・次tap・CANCEL/FLAG_CANCELED/長押し・pan/pinchのassertを通過したが、stylus stroke保存で期待1/実際0のfailure。fresh owned exact1/1/0/0、child exit1、source unchangedであり、suite全体はstrict red。
+- 最終分類は `ISSUE_112_SCOPE_OR_EVIDENCE_HOLD`。stylus failureのproduct/fixture起因は未確定。追加roundを使い切ったため、追加checkpointなしにround4へ進まない。productionのInk/saveや#123/#124のharnessを推測で補正しない。
+- PR/push/merge/required PR-main CI/canonical review/実機確認は未実施。IssueはOPEN、ACは未チェック。T024〜T027は全体の未証明を保持して未完了とする。quarantine38/manual full252は起動していない。
+## Stylus family recovery checkpoint（2026-10-10）
+
+[Phase A checkpoint](https://github.com/reitojike/think-canvas/issues/112#issuecomment-6097182988)で元/recovery両checkoutの6ファイルを保全し、既存stylus strict redとnative metadata・bounds・Initial/main/generation・ink mode/release/preview/BoardState/save/Roomの有限surfaceをread-only照合した。sourceではstylusはpaletteTapから除外されるが、旧artifactに実観測がなく原因を直接分類できなかった。
+
+Phase Bの一時診断をstylus区間でだけ有効化する形で追加し、元assertion・timeout・selectorを保持してfocused GMDを1回実行した。`20261010T115511Z-d18670f181724cfeb8495785c363f468` はPixel7/API37、fresh owned exact1/1/0/0、child exit1、source unchanged。stylus区間の手前、長押し後のnative「ペン」control存在assert（probe source L328）で停止し、stylus診断tagは0件。XML SHA-256は `344FD0EC397823CA4C35D569B231FCE53396523760D00CF4341E4F7A1D5D258E`。
+
+**責務分類: DIAGNOSTIC_INCONCLUSIVE / 最終分類: ISSUE_112_SCOPE_OR_EVIDENCE_HOLD。** stylus failureは解消済みとしない。Phase CでFIXTURE_CORRECTION/PRODUCT_OUTSIDE_ADMISSION_CORRECTIONを支持する直接証拠がなく、追加1 correction roundは開始しない。round1/2/3は消費済みのまま、probeは1回上限を消費。別findingへ分割してbudgetをリセットせず、再実行・長押し/Ink/save/harnessの推測補正をしない。
+
+GMDのterminal照合後、一時診断を除去し、両checkoutの6ファイルが開始時の保全bytesと一致することを確認した。この記録の追記以外、既存候補は維持。public boundary/diffと禁止対象への差分なしを確認。delivery gateは未成立で、push/PR/canonical review/merge/post-merge reconciliationは未実施。Issue OPEN・AC未チェックを維持する。
+## Testability recovery（2026-10-10）
+
+[独立診断checkpoint](https://github.com/reitojike/think-canvas/issues/112#issuecomment-6097753000)に従い、元/recovery両checkoutの6ファイルを保全した。既存methodのassertion/timeoutを保持し、一時method A/Bを各1回だけ標準Windows GMDで実行した。正式suiteへ追加せず、terminal照合後にtest/診断codeをbyte復元して除去した。
+
+- A: `20261010T130911Z-3b0b975a65b54a5991aae13b5fc669c2`、Pixel7/API37、fresh exact1/0/0/0、child0、source unchanged。native長押し851ms/threshold400ms、generation1、palette expanded維持、Compose/cached/fresh platformのPen存在を観測した。元のeditor/取消/pan/pinch等を省いたsetupなので、元long-press failureの解消証拠にはしない。
+- B: `20261010T131719Z-97d2d1cfaf604706817624c3ebd23523`、Pixel7/API37、fresh exact1/1/0/0、child1、source unchanged、Room期待1/実際0を独立再現。STYLUS/source16386/flags0/id0/pressure1のDOWN/MOVE/UP（elapsed0/69/139ms）を記録し、3点すべてcanvas内・観測chrome外と照合した。DOWNはCompose Stylus/consume false/chromeHit false、generation1でink modeへadmit、preview1点。MOVE注入直後、native=nullのsynthetic Releaseが同じgenerationで届き、normalRelease=false。boardAdded/saveRequest/saveAcceptedは0件、BoardState/Roomとも0、save Idle。
+
+Bは「正常release後の保存失敗」ではなく、注入側の正常UPより前に受信側がsynthetic cancelされたことを証明した。#115のnative正常release contractに従ったpreview破棄を変更しない。取消producer（native取消、pointer node lifetime、system gesture等）は現artifactでは未確定。Aも元failureを同じsetupでは再現していない。
+
+責務分類は `DIAGNOSTIC_INCONCLUSIVE`、最終分類は `ISSUE_112_SCOPE_OR_EVIDENCE_HOLD`。#112に閉じるfixture/product defectの直接証拠がなく、追加1 correctionは開始しない。round1/2/3を消費済みとして維持し、diagnostic PASSをcandidate PASSへ読み替えない。suite receipt/public boundary/diffと禁止対象差分なしを確認。Issue OPEN、AC未チェック、PR/push/review/merge/main CI未実施を維持する。
+## Issue112 Test Contract Redesign（2026-10-10）
+
+[全assertion mapping](https://github.com/reitojike/think-canvas/issues/112#issuecomment-6098743250)と[旧strict-red / differential INCONCLUSIVE](https://github.com/reitojike/think-canvas/issues/112#issuecomment-6098556259)を保全。補正round1/2/3をリセットせず、production2ファイルbytesは維持した。#107既存regressionとassertionはそのまま、新設10identityを独立初期状態へ分離し、66/224/38/262のinventory/期待件数/CI表示を同期した。旧cancel producerと元setup依存のlong press failureは未解決履歴。新fixtureのbounds/metadata変更は正常入力前提の明示であり、旧FAILのPASS化ではない。T024〜T027は最終検証・delivery/実機証拠が成立するまで未完了。

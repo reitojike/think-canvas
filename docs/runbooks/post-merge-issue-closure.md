@@ -7,13 +7,13 @@ read-only の作業、親・roadmap・tracking・coordination Issue、close 禁�
 
 1. PR が実際に merge されたこと、merge commit の SHA、必要なら main の CI 結果を確認します。
    PR の merge だけで Issue の完了を推定しません。
-   Android checksのnatural main pushでbasic checksがRUN/success、smoke56がjob-level SKIPPED、
-   non-quarantined214がRUN/successであることを確認します。merged SHAのfresh XMLでexact214、
-   missing/extra/duplicate0、214/0/0/0、receipt/identity/counter/device/freshness一致を照合します。
-   quarantine38とunfiltered full252はmain pushで起動しません。
+   Android checksのnatural main pushでbasic checksがRUN/success、smoke66がjob-level SKIPPED、
+   non-quarantined224がRUN/successであることを確認します。merged SHAのfresh XMLでexact224、
+   missing/extra/duplicate0、224/0/0/0、receipt/identity/counter/device/freshness一致を照合します。
+   quarantine38とunfiltered full262はmain pushで起動しません。
    [android-full.yml](../../.github/workflows/android-full.yml)がdefault branch上にあり、Actionsに
    activeとして登録され、workflow_dispatch可能であることをfresh確認します。availability証明だけの
-   full252 canaryは追加しません。214/38のgreenをfull252のgreenと主張してはいけません。
+   full262 canaryは追加しません。224/38のgreenをfull262のgreenと主張してはいけません。
    routingとtest healthは証跡を分け、failureをgreenへ変換しません。必要なdiagnosisは既存targeted
    またはexplicit manual fullを使い、[event matrix](pre-pr-verification.md#android-required-gmd-と-temporary-quarantine)
    に従います。tracking Issueの報告・checkbox更新だけが許可された場合はcloseしません。
