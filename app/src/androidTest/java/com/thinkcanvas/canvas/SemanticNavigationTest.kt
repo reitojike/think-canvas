@@ -254,16 +254,22 @@ class SemanticNavigationTest {
 
     private fun awaitA11y(
         prefix: String, clickable: Boolean = false,
-        attempts: Int = 40, pollMillis: Long = 100,
+        attempts: Int = 40,
     ): AccessibilityNodeInfo {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        repeat(attempts) {
-            instrumentation.waitForIdleSync()
-            findA11y(instrumentation.uiAutomation.rootInActiveWindow, prefix, clickable)
-                ?.let { return it }
-            Thread.sleep(pollMillis)
+        var matchedNode: AccessibilityNodeInfo? = null
+        try {
+            composeRule.waitUntil(timeoutMillis = attempts * 100L) {
+                instrumentation.waitForIdleSync()
+                matchedNode = findA11y(instrumentation.uiAutomation.rootInActiveWindow, prefix, clickable)
+                matchedNode != null
+            }
+        } catch (cause: ComposeTimeoutException) {
+            throw IllegalStateException(
+                "Accessibility node が見つかりません: $prefix; 現在の倍率=${currentOpeningZoom()}", cause,
+            )
         }
-        error("Accessibility node が見つかりません: $prefix; 現在の倍率=${currentOpeningZoom()}")
+        return checkNotNull(matchedNode)
     }
 
     private fun awaitCanvasAfterSearchIme(scenario: ActivityScenario<MainActivity>) {
