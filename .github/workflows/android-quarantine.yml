@@ -72,7 +72,7 @@ jobs:
           retention-days: 21
       - name: failure を #106 に同一 run で一度だけ通知
         if: failure() && !cancelled()
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
