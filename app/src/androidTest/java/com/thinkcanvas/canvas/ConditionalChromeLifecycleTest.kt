@@ -765,6 +765,25 @@ class ConditionalChromeLifecycleTest {
         instrumentation: android.app.Instrumentation,
         label: String,
     ): AccessibilityNodeInfo {
+        if (label == "図形ツールを開く" || label == "ペン") {
+            // Geometry is asserted only after bounded platform idle and a fresh tree.
+            val deadline = SystemClock.uptimeMillis() + 4_000L
+            val automation = instrumentation.uiAutomation
+            while (SystemClock.uptimeMillis() < deadline) {
+                composeRule.waitForIdle()
+                instrumentation.waitForIdleSync()
+                val remaining = deadline - SystemClock.uptimeMillis()
+                if (remaining <= 0L) break
+                automation.waitForIdle(minOf(100L, remaining), remaining)
+                if (Build.VERSION.SDK_INT >= 34) automation.clearCache()
+                val root = automation.rootInActiveWindow
+                if (root?.refresh() == true) {
+                    // A geometry assertion failure is never caught or retried.
+                    findActionable(root, label)?.let { return it }
+                }
+            }
+            error("操作可能なアクセシビリティ要素が見つかりません: $label")
+        }
         repeat(40) {
             composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
