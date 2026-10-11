@@ -7,6 +7,9 @@ import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ViewConfiguration
+import android.view.Window
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
@@ -71,6 +74,7 @@ class LongPressGestureTest {
     )
 
     private fun withBoard(shapes: List<ShapeElement> = emptyList(), image: Boolean = false,
+                          paletteExpanded: Boolean = false,
                           block: Harness.() -> Unit) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -122,6 +126,10 @@ class LongPressGestureTest {
                 }
             }
             composeRule.waitForIdle()
+            if (paletteExpanded) {
+                composeRule.onNodeWithContentDescription("図形ツールを開く").performClick()
+                composeRule.onNodeWithContentDescription("ペン").assertExists()
+            }
             Harness(context, scenario, database, sessions, feedback, openListCalls, saveRequests).block()
         } finally {
             database.close()
@@ -243,6 +251,139 @@ class LongPressGestureTest {
         checkNotNull(CanvasStore.get(context).savedBoard(1L)).snapshot
     }
 
+    @PrSmoke
+    @Test
+    fun paletteImageResizeWithinSlopCommitsOnce() = withBoard(image = true) {
+        val board = sessions.stateFor(1L, BoardSnapshot())
+        click("テスト画像")
+        click(context.getString(R.string.tool_open))
+        composeRule.onNodeWithContentDescription("ペン").assertExists()
+        composeRule.onNodeWithContentDescription("テスト画像").assert(SemanticsMatcher.expectValue(
+            SemanticsProperties.StateDescription, context.getString(R.string.selection_state_selected)))
+        val before = board.snapshot()
+        val image = before.images.single()
+        val viewport = sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value
+        val canvas = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().boundsInWindow
+        val handleBounds = composeRule.onNodeWithContentDescription("画像のサイズ変更")
+            .fetchSemanticsNode().boundsInWindow
+        val (cornerX, cornerY) = viewport.worldToScreen(image.x + image.width, image.y + image.height)
+        val corner = Offset(canvas.left + cornerX, canvas.top + cornerY)
+        val radius = 24f * context.resources.displayMetrics.density
+        val distance = slop() / 2f
+        val end = corner + Offset(distance, 0f)
+        assertTrue("INPUT: handle geometry agrees with canvas origin",
+            (handleBounds.center - corner).getDistance() <= 1f && handleBounds.contains(corner))
+        assertTrue("INPUT: image is away from resize clamps",
+            maxOf(image.width, image.height) > 40f + slop() / viewport.scale &&
+                maxOf(image.width, image.height) < 8192f - slop() / viewport.scale)
+        // withBoard omits onAddImage: the seven rendered rows still require complete geometry,
+        // plus the existing envelope padding and every other native actionable chrome control.
+        val labels = setOf("ペン", "マーカー", "まとめて選ぶ", "囲み", "矢印", "丸", "四角")
+        val content = setOf("キャンバス", "テスト画像", "画像のサイズ変更", leftText, rightText)
+        val origin = IntArray(2)
+        scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
+        val chrome = mutableListOf<Rect>()
+        val palette = mutableListOf<Rect>()
+        val seen = mutableSetOf<String>()
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        automation.waitForIdle(100, 4_000)
+        automation.clearCache()
+        fun collect(node: android.view.accessibility.AccessibilityNodeInfo?) {
+            if (node == null) return
+            val description = node.contentDescription?.toString()
+            val text = node.text?.toString()
+            val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
+            val rect = Rect((bounds.left - origin[0]).toFloat(), (bounds.top - origin[1]).toFloat(),
+                (bounds.right - origin[0]).toFloat(), (bounds.bottom - origin[1]).toFloat())
+            if (node.isVisibleToUser) {
+                if (description in labels || text in labels) {
+                    seen += checkNotNull(if (description in labels) description else text)
+                    palette += rect
+                }
+                if (node.isClickable && description !in content && text !in content) chrome += rect
+            }
+            for (index in 0 until node.childCount) collect(node.getChild(index))
+        }
+        collect(automation.rootInActiveWindow)
+        assertEquals("INPUT: complete palette geometry", labels, seen)
+        val padding = 8f * context.resources.displayMetrics.density
+        chrome += Rect(palette.minOf { it.left } - padding, palette.minOf { it.top } - padding,
+            palette.maxOf { it.right } + padding, palette.maxOf { it.bottom } + padding)
+        assertTrue("INPUT: resize path is in canvas and outside chrome",
+            listOf(corner, end).all { canvas.contains(it) && chrome.none { bounds -> bounds.contains(it) } })
+        val requests = saveRequests.get()
+        data class Sample(val action: Int, val downTime: Long, val time: Long, val x: Float, val y: Float,
+                          val pointers: Int, val source: Int, val tool: Int, val flags: Int, val history: Boolean)
+        val delivered = CopyOnWriteArrayList<Sample>()
+        lateinit var window: Window
+        lateinit var original: Window.Callback
+        lateinit var observer: Window.Callback
+        scenario.onActivity { activity ->
+            window = activity.window
+            original = window.callback
+            observer = object : Window.Callback by original {
+                override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                    // Copy scalars before delegation; never retain or replace the MotionEvent.
+                    for (index in 0 until event.historySize) delivered += Sample(event.actionMasked,
+                        event.downTime, event.getHistoricalEventTime(index), event.getHistoricalX(0, index),
+                        event.getHistoricalY(0, index), event.pointerCount, event.source,
+                        event.getToolType(0), event.flags, true)
+                    delivered += Sample(event.actionMasked, event.downTime, event.eventTime,
+                        event.x, event.y, event.pointerCount, event.source, event.getToolType(0), event.flags, false)
+                    return original.dispatchTouchEvent(event)
+                }
+            }
+            window.callback = observer
+        }
+        try {
+            longPress((origin[0] + corner.x) to (origin[1] + corner.y),
+                listOf((origin[0] + end.x) to (origin[1] + end.y)), held = false,
+                toolType = MotionEvent.TOOL_TYPE_FINGER)
+        } finally {
+            scenario.onActivity { if (window.callback === observer) window.callback = original }
+        }
+        val events = delivered.filter { !it.history }
+        assertTrue("INPUT: one DOWN, delivered MOVE, one normal UP", events.size >= 3 &&
+            events.first().action == MotionEvent.ACTION_DOWN && events.last().action == MotionEvent.ACTION_UP &&
+            events.drop(1).dropLast(1).all { it.action == MotionEvent.ACTION_MOVE })
+        val down = events.first()
+        val up = events.last()
+        val downPoint = Offset(down.x, down.y)
+        assertTrue("INPUT: at least one delivered MOVE has positive resize displacement",
+            events.any { it.action == MotionEvent.ACTION_MOVE && it.x > down.x })
+        assertTrue("INPUT: delivered DOWN owns resize hit",
+            (downPoint - corner).getDistance() <= 1f && (downPoint - corner).getDistance() <= radius &&
+                handleBounds.contains(downPoint))
+        assertTrue("INPUT: one finger, touchscreen, normal release, one downTime",
+            delivered.all { it.pointers == 1 && it.source == InputDevice.SOURCE_TOUCHSCREEN &&
+                it.tool == MotionEvent.TOOL_TYPE_FINGER && it.flags and MotionEvent.FLAG_CANCELED == 0 &&
+                it.downTime == down.downTime })
+        assertTrue("INPUT: every delivered point and history remains within slop and outside chrome",
+            delivered.all { val point = Offset(it.x, it.y)
+                (point - downPoint).getDistance() <= slop() && canvas.contains(point) &&
+                    chrome.none { bounds -> bounds.contains(point) } })
+        assertTrue("INPUT: positive horizontal subslop release at requested window coordinates",
+            up.x > down.x && (Offset(up.x, up.y) - end).getDistance() <= 1f)
+        android.util.Log.i("PaletteResizeProof", "valid input duration=${up.time - down.time}ms " +
+            "origin=${origin.toList()} canvas=$canvas handle=$handleBounds corner=$corner " +
+            "slop=${slop()} chrome=$chrome delivered=$delivered width=${image.width}->${board.images.single().width}")
+        val after = board.snapshot()
+        val resized = after.images.single()
+        assertTrue("image width must increase after owned normal UP", resized.width > image.width)
+        assertEquals(image.id, resized.id)
+        assertEquals(image.assetId, resized.assetId)
+        assertEquals(image.altText, resized.altText)
+        assertEquals(image.x, resized.x, 0f)
+        assertEquals(image.y, resized.y, 0f)
+        assertEquals(image.width / image.height, resized.width / resized.height, .0001f)
+        assertEquals(before.copy(images = listOf(image.copy(width = resized.width, height = resized.height))), after)
+        assertEquals(viewport, sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value)
+        composeRule.onNodeWithContentDescription("ペン").assertExists()
+        assertEquals(requests + 1, saveRequests.get())
+        composeRule.waitUntil(10_000) { sessions.saveStateFor(1L, BoardSnapshot()).value == BoardSaveState.Idle }
+        assertEquals(after, storedSnapshot())
+    }
+
     /** #115: native取消は内容・保存要求・Room・成功feedbackを残さない。 */
     private fun Harness.assertCanceledWithoutCommit(gesture: () -> Unit) {
         val board = sessions.stateFor(1L, BoardSnapshot())
@@ -290,6 +431,19 @@ class LongPressGestureTest {
     @PrSmoke
     @Test
     fun elementLongPressReleaseOpensMenuAndDeleteIsReachable() = withBoard {
+        assertElementLongPressRelease()
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteElementLongPressReleaseOpensMenuAndDeleteIsReachable() = withBoard(paletteExpanded = true) {
+        val viewportBefore = sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value
+        assertElementLongPressRelease()
+        composeRule.onNodeWithContentDescription("ペン").assertExists()
+        assertEquals(viewportBefore, sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value)
+    }
+
+    private fun Harness.assertElementLongPressRelease() {
         val before = rows()
         val target = centerOf(leftText)
         val leftBefore = screenLeftTop(leftText)
@@ -313,6 +467,19 @@ class LongPressGestureTest {
     @PrSmoke
     @Test
     fun elementLongPressDragMovesAndUndoRedoApply() = withBoard {
+        assertElementLongPressDrag()
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteElementLongPressDragMovesAndUndoRedoApply() = withBoard(paletteExpanded = true) {
+        val viewportBefore = sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value
+        assertElementLongPressDrag()
+        composeRule.onNodeWithContentDescription("ペン").assertExists()
+        assertEquals(viewportBefore, sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value)
+    }
+
+    private fun Harness.assertElementLongPressDrag() {
         val before = rows()
         val scale = scale()
         val target = centerOf(leftText)
@@ -367,6 +534,19 @@ class LongPressGestureTest {
     @PrSmoke
     @Test
     fun blankLongPressDragInsertsGapAsOneUndoableOperation() = withBoard {
+        assertBlankLongPressDrag()
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteBlankLongPressDragInsertsGapAsOneUndoableOperation() = withBoard(paletteExpanded = true) {
+        val viewportBefore = sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value
+        assertBlankLongPressDrag()
+        composeRule.onNodeWithContentDescription("ペン").assertExists()
+        assertEquals(viewportBefore, sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value)
+    }
+
+    private fun Harness.assertBlankLongPressDrag() {
         val before = rows()
         val scale = scale()
         val point = blankPoint()

@@ -13,6 +13,7 @@ internal data class BlankTap(
     val selectedIds: Set<String>,
     val searchOpen: Boolean,
     val regionDraft: RegionNameDraft? = null,
+    val toolsExpanded: Boolean = false,
 ) {
     fun matchesSecondDown(time: Long, point: Offset, minimum: Long, timeout: Long, slop: Float): Boolean =
         time - upMillis in minimum..timeout && (point - screen).getDistance() < slop

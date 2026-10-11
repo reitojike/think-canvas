@@ -70,3 +70,22 @@ T001→T002→T003/T004→US1→US2→検証・converge。US1はeditorからの�
 - [x] T023 HIGH: `CanvasScreen.kt` とapp固有の `EditorImeWindow.kt` で、未完了IME要求がcontrol/frame中にnative window focusを失っても現在ownerのまま取消可能に復帰を待つ。focus要求・IME showは各一回、readonly/save/ack/live sessionとpending Job取消を維持し、IME-control通知と実際の所有を分離する。`EditorImeWindowTest.kt` のlegacy/modern段階・終了/取消で補正前RED/後GREENを確認し、`NeutralInteractionTest.kt` で三ownerのlate window往復と既存hide取消を検証する。Spec007 FR-003/007/009、Issue91 AC1–5（partial）。deliveryは既存T017で確定し、API26〜29のnative未実行を明記する。
 
 T017/T020〜T022は[Issue91の最新7AC closure](https://github.com/reitojike/think-canvas/issues/91#issuecomment-5977858342)で完了。PR92 merge a116374bのtreeは最終検証head bfdbad45と一致し、両CI37183797445成功・fresh144/0/0/0・最後の依頼より新しいcanonical clean・thread0を確認した。過去のpending記述は当時の状態として保持する。
+
+## Issue #112 implementation / verification
+
+- [x] T024 `CanvasScreen.kt` にshort outside tap専用ownerを追加し、editor/modal/chrome優先・drag/pinch/stylus・世代guard・blank arbitrationを維持する。
+- [x] T025 `ConditionalChromeLifecycleTest.kt` に独立したpalette回帰を追加する。PR代表とmain詳細を責務から選び、#107とregion priority、正常release/保存/取消のassertを保持する。inventoryをrunner annotationと整合させる。
+- [ ] T026 local lint/unit/build/androidTest compile/receipt/public boundary、必要なfocused native、自然PR CI、exact-head canonical review/thread/baseを成立させ、Task Contractのgateを満たす場合だけmergeする。
+- [ ] T027 main自然CIと最新Issue ACを個別reconcileする。実機未証明のACをチェックせず、IssueをOPENに保持する。
+
+診断証拠・strict-red・補正round履歴は[Issue #112](https://github.com/reitojike/think-canvas/issues/112)を参照する。未証明gateを個別testのPASSへ読み替えない。
+
+## Issue #112: bounded long-press handoff correction
+
+- [x] T028 `CanvasScreen.kt`の通常tap相当のpalette候補を既存timeout/handoffへ渡す最小補正を一回行い、`LongPressGestureTest.kt`の既存native fixture/assertを共有する展開中の要素release/move・blank gap回帰を追加する。旧productionと補正後の同一identity・固定test bytes・fresh owned XMLを対応付け、local検証とinventory同期を確認する。新状態機械・待機追加・別detector・共通harness変更はしない。
+- [ ] T029 補正headの自然PR CIと最後の依頼より新しいcanonical review、base/threadを確認する。別familyのfailureまたは新findingが出たら追加補正・blind rerunせずHOLDする。今回の許可にmerge・Issue close・AC完了変更は含めず、T026/T027の残存gateと過去補正履歴を保持する。
+
+## Issue #112: 明示handle ownershipの最小補正
+
+- [x] T030 初期modeのpalette上書きを通常tap候補へ限定し、既存handle/grip ownerを維持する。画像resize一件を既存fixtureで追加し、七行の実geometry・全配送のhit/chrome/slop/正常UPを確認した同一test bytesの旧幅RED・補正全GREEN、palette/viewport/他content不変・matching保存一回を対応付ける。不備のあった広範囲候補・前提失敗の証拠は保持し、採用候補へ含めない。
+- [ ] T031 最小候補のlocal gate・inventory/public境界と自然PR CIの実体、最後の依頼より新しい現行head canonical review・base/threadを確認する。範囲内fixture補正は担当協議と具体的証拠による利用者承認に従い、別familyや複雑性増加はHOLDする。merge・Issue close・AC完了は行わず、T026/T027の未証明gateを保持する。
