@@ -104,7 +104,7 @@ internal class PanFlingController(
         boundary.origin = origin
         boundary.fling = true
         boundary.animatingState.value = true
-        boundary.job = scope.launch(context = PanFlingDurationScale) {
+        boundary.job = scope.launch {
             try {
                 AnimationState(typeConverter = Offset.VectorConverter, initialValue = Offset.Zero,
                     initialVelocity = boundedVelocity).animateDecay(decay) {
