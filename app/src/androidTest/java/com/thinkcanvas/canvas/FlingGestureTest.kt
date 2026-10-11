@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -161,7 +162,24 @@ class FlingGestureTest {
     @PrSmoke
     @Test fun fastPanContinuesAndUsesOneHistoryBoundary() = withBoard {
         val before = camera()
-        val release = pan()
+        val canvas = composeRule.onNodeWithContentDescription("キャンバス")
+        var from = Offset.Zero
+        var delta = Offset.Zero
+        val gestureStart = composeRule.mainClock.currentTime
+        canvas.performTouchInput {
+            from = Offset(width * .2f, height * .65f)
+            delta = Offset(width * .35f, 0f)
+            down(from)
+        }
+        // block間で再Composeを許す。入力の16msがclockも進めるため追加frameは不要。
+        for (step in 1..5) canvas.performTouchInput {
+            moveTo(from + delta * (step / 5f), delayMillis = 16L)
+        }
+        canvas.performTouchInput { up() }
+        val release = camera() // UP処理後、継続用のclockを進める前に採取する。
+        assertEquals(gestureStart + 80L, composeRule.mainClock.currentTime)
+        assertEquals("release must include the full pan", before.panX + delta.x, release.panX, 1f)
+        assertEquals(before.panY, release.panY, 1f)
         advance(120L)
         assertTrue("release=$release later=${camera()}", camera().panX > release.panX + 3f)
         advance(2_000L)
