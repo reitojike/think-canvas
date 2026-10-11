@@ -85,7 +85,7 @@
 ## Issue #112: 展開paletteの外側tap
 
 - palette/launcherと他のchrome controlは既存actionを保持する。canvas上の外側で始まる1本指のstationary short tapはpaletteだけ閉じ、同じtapからtext作成・選択・要素action・panを発火しない。
-- short tapは標準touchSlop以内、longPressTimeout未満の正常native UPとする。長押し・CANCEL・FLAG_CANCELED・領域外releaseはdismissしない。dragは既存pan/move/handle、追加指は既存pinch、stylusは既存inkへ渡し、paletteをdismissしない。
+- short tapは標準touchSlop以内、longPressTimeout未満の正常native UPとする。長押し・CANCEL・FLAG_CANCELED・領域外releaseはdismissしない。通常tap相当の候補は展開中も既存の長押し成立・pickup・一回の振動を維持し、要素のreleaseはmenu/選択追加、要素dragはmove、空白dragはgapへ渡す。timeout前のdragは既存pan、明示grip/handleは既存admission、追加指は既存pinch、stylusは既存inkへ渡し、paletteをdismissしない。
 - text outsideのfinalize-only、regionの既存outside admission、image editor・picker・標準modal、保存/ack guardを優先する。これらがactiveならpalette dismissalをadmitしない。Backの終了順は変更しない。
 - 展開開始とdismissalではpending blank singleを取消し、dismissalをdouble-tapの第一tapに数えない。次の独立gestureとlauncherのaccessibility open/closeを維持する。閉じたpaletteのboundsは即時解放し、launcher/history/boundsのIssue #107 contractを保持する。
 - native instrumentationに外側blank/要素tap、長押し/取消、drag/pinch/stylus、次のtap、旧palette位置、native launcher/buttonとaccessibility操作の回帰を追加する。representative real-deviceの証拠が揃うまではIssue #112を完了にしない。

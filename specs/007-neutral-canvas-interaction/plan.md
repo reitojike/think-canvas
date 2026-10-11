@@ -63,6 +63,8 @@ Constitution違反なし。generic coordinator/callback bagは作らず、2 edit
 
 標準Popupの別window/outside DOWN dismissalはshort-UP限定と展開中のviewport history操作に一致しないため採用しない。既存layout・button・accessibility clickを保持する。根拠: [Compose標準gesture API](https://developer.android.com/develop/ui/compose/touch-input/pointer-input/understand-gestures)。generic frameworkは追加しない。
 
+長押しhandoff補正は、`canvasMode == "tap"` のpalette候補だけを既存tapと同じtimeout待機へ入れる。timeout後の`longPressPending`、pickup/haptic、menu/選択追加、move/gap、native release・世代・取消・第二指/stylus・cleanupを再利用する。明示grip/handleのtimeout admissionは変えない。新状態機械・別detector・待機時間を追加しない。既存`LongPressGestureTest`のnative fixtureとassert本文を通常/展開状態で共有し、要素hold→UP、要素hold→drag、blank hold→dragをPR回帰にする。palette保持・viewport不変と既存の取消・保存・Undo/Redo・振動assertを維持する。
+
 PR smokeはoutside短tap/次tap、palette展開時の世代、region editor priority、native control/旧boundsの代表回帰。main regressionは取消・長押し・pan・pinch・stylusを独立初期状態で検証する。#107の既存回帰を維持し、text/image/Backは既存回帰とadmission guardで照合する。native fixtureはlive canvas/chrome/system gesture inset、tool/source/ID/time、正常releaseと保存をassertする。FLAG_CANCELEDはACTION_POINTER_UP/ACTION_CANCELの正式contractで扱う。
 
 検証はcurrent-sourceの期待identity集合、receipt、fresh XML/counter/device、現行headのCI/reviewと実機証拠を分ける。過去の診断と補正履歴は[Issue #112](https://github.com/reitojike/think-canvas/issues/112)で保持する。

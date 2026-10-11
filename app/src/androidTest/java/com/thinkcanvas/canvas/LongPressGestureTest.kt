@@ -71,6 +71,7 @@ class LongPressGestureTest {
     )
 
     private fun withBoard(shapes: List<ShapeElement> = emptyList(), image: Boolean = false,
+                          paletteExpanded: Boolean = false,
                           block: Harness.() -> Unit) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -122,6 +123,10 @@ class LongPressGestureTest {
                 }
             }
             composeRule.waitForIdle()
+            if (paletteExpanded) {
+                composeRule.onNodeWithContentDescription("図形ツールを開く").performClick()
+                composeRule.onNodeWithContentDescription("ペン").assertExists()
+            }
             Harness(context, scenario, database, sessions, feedback, openListCalls, saveRequests).block()
         } finally {
             database.close()
@@ -290,6 +295,19 @@ class LongPressGestureTest {
     @PrSmoke
     @Test
     fun elementLongPressReleaseOpensMenuAndDeleteIsReachable() = withBoard {
+        assertElementLongPressRelease()
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteElementLongPressReleaseOpensMenuAndDeleteIsReachable() = withBoard(paletteExpanded = true) {
+        val viewportBefore = sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value
+        assertElementLongPressRelease()
+        composeRule.onNodeWithContentDescription("ペン").assertExists()
+        assertEquals(viewportBefore, sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value)
+    }
+
+    private fun Harness.assertElementLongPressRelease() {
         val before = rows()
         val target = centerOf(leftText)
         val leftBefore = screenLeftTop(leftText)
@@ -313,6 +331,19 @@ class LongPressGestureTest {
     @PrSmoke
     @Test
     fun elementLongPressDragMovesAndUndoRedoApply() = withBoard {
+        assertElementLongPressDrag()
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteElementLongPressDragMovesAndUndoRedoApply() = withBoard(paletteExpanded = true) {
+        val viewportBefore = sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value
+        assertElementLongPressDrag()
+        composeRule.onNodeWithContentDescription("ペン").assertExists()
+        assertEquals(viewportBefore, sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value)
+    }
+
+    private fun Harness.assertElementLongPressDrag() {
         val before = rows()
         val scale = scale()
         val target = centerOf(leftText)
@@ -367,6 +398,19 @@ class LongPressGestureTest {
     @PrSmoke
     @Test
     fun blankLongPressDragInsertsGapAsOneUndoableOperation() = withBoard {
+        assertBlankLongPressDrag()
+    }
+
+    @PrSmoke
+    @Test
+    fun paletteBlankLongPressDragInsertsGapAsOneUndoableOperation() = withBoard(paletteExpanded = true) {
+        val viewportBefore = sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value
+        assertBlankLongPressDrag()
+        composeRule.onNodeWithContentDescription("ペン").assertExists()
+        assertEquals(viewportBefore, sessions.viewportHistoryFor(1L, BoardSnapshot()).viewportState.value)
+    }
+
+    private fun Harness.assertBlankLongPressDrag() {
         val before = rows()
         val scale = scale()
         val point = blankPoint()

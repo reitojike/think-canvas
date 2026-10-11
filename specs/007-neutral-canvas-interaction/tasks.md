@@ -79,3 +79,8 @@ T017/T020〜T022は[Issue91の最新7AC closure](https://github.com/reitojike/th
 - [ ] T027 main自然CIと最新Issue ACを個別reconcileする。実機未証明のACをチェックせず、IssueをOPENに保持する。
 
 診断証拠・strict-red・補正round履歴は[Issue #112](https://github.com/reitojike/think-canvas/issues/112)を参照する。未証明gateを個別testのPASSへ読み替えない。
+
+## Issue #112: bounded long-press handoff correction
+
+- [ ] T028 `CanvasScreen.kt`の通常tap相当のpalette候補を既存timeout/handoffへ渡す最小補正を一回行い、`LongPressGestureTest.kt`の既存native fixture/assertを共有する展開中の要素release/move・blank gap回帰を追加する。旧productionと補正後の同一identity・固定test bytes・fresh owned XMLを対応付け、local検証とinventory同期を確認する。新状態機械・待機追加・別detector・共通harness変更はしない。
+- [ ] T029 補正headの自然PR CIと最後の依頼より新しいcanonical review、base/threadを確認する。別familyのfailureまたは新findingが出たら追加補正・blind rerunせずHOLDする。今回の許可にmerge・Issue close・AC完了変更は含めず、T026/T027の残存gateと過去補正履歴を保持する。

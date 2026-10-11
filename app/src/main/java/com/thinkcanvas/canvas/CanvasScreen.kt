@@ -1458,9 +1458,11 @@ fun CanvasScreen(
                 if (mode == "lasso") lassoPoints = listOf(startWorld)
                 while (true) {
                     val remaining = longPressMillis - (SystemClock.uptimeMillis() - startTime)
-                    val event = if (mode == "tap" && remaining > 0) {
+                    // Palette owns only short release; ordinary tap candidates retain pickup/handoff.
+                    val pendingTap = mode == "tap" || mode == "paletteTap" && canvasMode == "tap"
+                    val event = if (pendingTap && remaining > 0) {
                         withTimeoutOrNull(remaining) { awaitPointerEvent() }
-                    } else if (mode == "tap" && remaining <= 0) null
+                    } else if (pendingTap && remaining <= 0) null
                     else awaitPointerEvent()
                     if (gestureGeneration != admittedGeneration) {
                         event?.changes?.forEach { it.consume() }
