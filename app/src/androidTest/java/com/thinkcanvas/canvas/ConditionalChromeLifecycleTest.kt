@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Rect
 import android.os.Build
 import android.os.SystemClock
+import android.util.Log
 import android.view.MotionEvent
 import android.view.InputDevice
 import android.view.accessibility.AccessibilityNodeInfo
@@ -29,6 +30,7 @@ import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
 import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -39,6 +41,52 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ConditionalChromeLifecycleTest {
     @get:Rule val composeRule = createEmptyComposeRule()
+
+
+    @PrSmoke
+    @Test
+    fun launcherGeometryRecordPreservesStrictBoundsFailure() {
+        // #148 の原因再現ではなく、実際の記録・assert 境界を既取得 Rect で検証する。
+        val label = "図形ツールを開く"
+        val descriptionBounds = Rect(912, 1085, 1038, 1211)
+        val controlBounds = Rect(912, 1142, 1038, 1268)
+        val original = assertThrows(AssertionError::class.java) {
+            assertEquals("$label の description と control は同じ bounds",
+                descriptionBounds, controlBounds)
+        }
+        val records = mutableListOf<String>()
+        for (sinkThrows in listOf(false, true)) {
+            val actual = assertThrows(AssertionError::class.java) {
+                assertControlBounds(label, descriptionBounds, controlBounds, 2) { record ->
+                    records += record
+                    if (sinkThrows) throw AssertionError("記録 sink の失敗")
+                }
+            }
+            assertEquals(original.message, actual.message)
+        }
+        // 模擬 test 自身の logcat で default sink と既存 artifact への保持を確認する。
+        val emitted = assertThrows(AssertionError::class.java) {
+            assertControlBounds(label, descriptionBounds, controlBounds, 2)
+        }
+        assertEquals(original.message, emitted.message)
+        assertEquals(listOf(
+            "label=$label parentHops=2 description=$descriptionBounds control=$controlBounds",
+            "label=$label parentHops=2 description=$descriptionBounds control=$controlBounds",
+        ), records)
+    }
+
+    @PrSmoke
+    @Test
+    fun launcherGeometryRecordIgnoresEqualAndOtherControls() {
+        val records = mutableListOf<String>()
+        val equal = Rect(10, 20, 30, 40)
+        assertControlBounds("図形ツールを開く", equal, Rect(equal), 0, records::add)
+        val actual = assertThrows(AssertionError::class.java) {
+            assertControlBounds("ペン", equal, Rect(10, 21, 30, 41), 1, records::add)
+        }
+        assertTrue(actual.message!!.startsWith("ペン の description と control は同じ bounds"))
+        assertTrue(records.isEmpty())
+    }
 
     @PrSmoke
     @Test
@@ -749,16 +797,40 @@ class ConditionalChromeLifecycleTest {
         assertTrue("$label の description は有効", description.isEnabled)
         assertTrue("$label の description は利用者に見える", description.isVisibleToUser)
         var node: AccessibilityNodeInfo? = description
-        while (node != null && !node.isClickable) node = node.parent
+        var parentHops = 0
+        while (node != null && !node.isClickable) {
+            node = node.parent
+            parentHops++
+        }
         val actionable = checkNotNull(node) { "$label に対応する clickable node がありません" }
         assertTrue("$label の control は有効", actionable.isEnabled)
         assertTrue("$label の control は利用者に見える", actionable.isVisibleToUser)
         assertTrue("$label の control は clickable", actionable.isClickable)
         assertTrue("$label の control は ACTION_CLICK を公開する",
             actionable.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
-        assertEquals("$label の description と control は同じ bounds",
-            bounds(description), bounds(actionable))
+        val descriptionBounds = bounds(description)
+        val controlBounds = bounds(actionable)
+        assertControlBounds(label, descriptionBounds, controlBounds, parentHops)
         return actionable
+    }
+
+    private fun assertControlBounds(
+        label: String,
+        descriptionBounds: Rect,
+        controlBounds: Rect,
+        parentHops: Int,
+        record: (String) -> Unit = { Log.e("ConditionalGeometry", it) },
+    ) {
+        if (label == "図形ツールを開く" && descriptionBounds != controlBounds) {
+            // 既取得値だけを記録する。記録 failure は native oracle の failure を置き換えない。
+            try {
+                record("label=$label parentHops=$parentHops description=$descriptionBounds control=$controlBounds")
+            } catch (_: Throwable) {
+                // 元の exact assertion は guard の外で必ず実行する。
+            }
+        }
+        assertEquals("$label の description と control は同じ bounds",
+            descriptionBounds, controlBounds)
     }
 
     private fun waitForActionable(
