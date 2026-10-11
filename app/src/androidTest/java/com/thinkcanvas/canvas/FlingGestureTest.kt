@@ -3,6 +3,7 @@ package com.thinkcanvas.canvas
 import android.content.Intent
 import android.os.SystemClock
 import android.provider.Settings
+import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
 import androidx.compose.ui.geometry.Offset
@@ -163,18 +164,23 @@ class FlingGestureTest {
     @PrSmoke
     @Test fun fastPanContinuesAndUsesOneHistoryBoundary() = withBoard {
         val before = camera()
+        val historyBefore = navigation.canBack
         composeRule.onNodeWithContentDescription("キャンバス").performTouchInput {
             val from = Offset(width * .2f, height * .65f)
             val delta = Offset(width * .35f, 0f)
-            // node-localの単一指MotionEvent。80msの論理時間で既存panと同じ終端速度にする。
+            // 一時control: 同じ80msでpanし、正常UPを維持したまま終端速度だけ0にする。
             swipeWithVelocity(
                 start = from,
                 end = from + delta,
-                endVelocity = delta.x * 1_000f / 80f,
+                endVelocity = 0f,
                 durationMillis = 80L,
             )
         }
         val release = camera() // UP処理後、継続用のclockを進める前に採取する。
+        assertTrue("CONTROL_PAN_MISSING before=$before release=$release", release.panX > before.panX + 3f)
+        assertTrue("CONTROL_NORMAL_UP_HISTORY_MISSING before=$historyBefore after=${navigation.canBack}",
+            !historyBefore && navigation.canBack)
+        Log.i("FlingPilotControl", "PAN_AND_NORMAL_UP before=$before release=$release historyBefore=$historyBefore historyAfter=${navigation.canBack}")
         advance(120L)
         assertTrue("release=$release later=${camera()}", camera().panX > release.panX + 3f)
         advance(2_000L)
