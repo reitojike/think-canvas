@@ -30,25 +30,35 @@ JDK、SDK、network、権限などの環境要因で検証を完走できない�
 
 ## Android required GMD と temporary quarantine
 
-PR は PrSmoke AND not FlakyTest の exact56を required process gate として実行し、
-not FlakyTest の exact214は job-level condition により SKIPPED となります。
-main push は exact214を required process gate とし、smoke56は SKIPPED です。
-filterなしfull252は [android-full.yml](../../.github/workflows/android-full.yml) の manual dispatch、
-FlakyTest38はdefault branch schedule/manualで保持します。android.yml に manual dispatch はありません。
-詳細、38件の裁定、strict failure、sample判定、2026-10-23 review gateは
+実行authorityはAndroidJUnitRunnerのcompiled APK discoveryとannotation filterです。
+期待identity集合はcurrent-sourceに対応した[静的suite manifest](../../scripts/android-test-suites.json)と
+実行時receiptで確認し、fresh XMLのactual identity集合・counter・deviceと照合します。
+runbookに変動する総数・lane別件数は固定しません。過去のcensusや実測値は該当Issue/PRの証拠を参照します。
+
+| Lane | Execution | 起動境界 |
+| --- | --- | --- |
+| PR smoke | PrSmoke AND NOT FlakyTest | pull_request、required process gate |
+| main regression | NOT FlakyTest | main push、required process gate |
+| quarantine | FlakyTest | default branch schedule/manual |
+| unfiltered full | filterなし | android-full.ymlのmanualのみ |
+
+完全修飾名は `com.thinkcanvas.test.PrSmoke` / `androidx.test.filters.FlakyTest` です。
+quarantineの裁定、strict failure、sample判定、2026-10-23 review gateは
 [IME quarantine手順](ime-quarantine.md)を参照します。targeted契約は変更しません。
 
-| Event | Basic | Smoke56 | non-quarantined214 | Quarantine38 | Full252 |
+| Event | Basic | PR smoke | main regression | Quarantine | Unfiltered full |
 | --- | --- | --- | --- | --- | --- |
 | PR | RUN | RUN | SKIP | - | - |
-| main push | RUN | SKIP | RUN | schedule/manual（別event） | - |
+| main push | RUN | SKIP | RUN | - | - |
 | android-full manual | - | - | - | - | RUN |
 | quarantine schedule/manual | - | - | - | RUN | - |
 | targeted manual | 既存契約 | 既存契約 | 既存契約 | 既存契約 | 既存契約 |
 
-quarantine38とfull252はmain pushでは起動しません。214または38のgreenをfull252のgreenとは扱いません。
+各eventのRUN/SKIPPEDをjob単位で確認します。quarantineとunfiltered fullはmain pushでは起動しません。
+main regressionまたはquarantineのgreenをunfiltered fullのgreenとは扱いません。
 manual fullの起動は `gh workflow run android-full.yml --ref <ref>` を使い、availability証明だけの
-追加canaryは実行しません。workflow/process requiredとserver enforced requiredを区別し、rulesetは変更しません。
+追加canaryは実行しません。android.ymlにmanual dispatchはありません。
+workflow/process requiredとserver enforced requiredを区別し、rulesetは変更しません。
 
 ローカルのreceipt検証:
 
@@ -61,7 +71,7 @@ python3 -m unittest discover -s scripts/tests
 ```
 
 receiptはrunner XMLのexact identity照合にだけ使います。独自classifier/parserやselector生成を追加しません。
-test body、production、timeout、assertion、retryの差分がないことを確認します。
+test bodyやproductionの差分はTask Contract内に限定し、timeout延長・assertion緩和・blind retryでgreen化しません。
 PrSmoke/FlakyTestは `@Test` の前に置き、targeted preflightのdirect declarationを保持します。
 test failure / Gradle failure / XML不足をgreen化せず、各laneのartifactと現行headを照合します。
-filter intersectionがactual56を選べない場合はSTOPし、独自filterへ逃げません。
+filter intersectionのactualがcurrent-sourceの期待identity集合に一致しなければSTOPし、独自filterへ逃げません。
