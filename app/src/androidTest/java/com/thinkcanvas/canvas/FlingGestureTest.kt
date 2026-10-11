@@ -10,6 +10,8 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeWithVelocity
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -161,7 +163,18 @@ class FlingGestureTest {
     @PrSmoke
     @Test fun fastPanContinuesAndUsesOneHistoryBoundary() = withBoard {
         val before = camera()
-        val release = pan()
+        composeRule.onNodeWithContentDescription("キャンバス").performTouchInput {
+            val from = Offset(width * .2f, height * .65f)
+            val delta = Offset(width * .35f, 0f)
+            // node-localの単一指MotionEvent。80msの論理時間で既存panと同じ終端速度にする。
+            swipeWithVelocity(
+                start = from,
+                end = from + delta,
+                endVelocity = delta.x * 1_000f / 80f,
+                durationMillis = 80L,
+            )
+        }
+        val release = camera() // UP処理後、継続用のclockを進める前に採取する。
         advance(120L)
         assertTrue("release=$release later=${camera()}", camera().panX > release.panX + 3f)
         advance(2_000L)
