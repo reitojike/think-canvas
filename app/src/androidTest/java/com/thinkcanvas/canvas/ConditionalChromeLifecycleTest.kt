@@ -11,6 +11,7 @@ import android.view.InputDevice
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -33,6 +34,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -427,7 +429,7 @@ class ConditionalChromeLifecycleTest {
 
     @PrSmoke
     @Test
-    fun paletteNativeControlsAndDismissedBoundsRemainActionable() = withPaletteBoard { instrumentation, _, _, sessions ->
+    fun paletteNativeControlsAndDismissedBoundsRemainActionable() = withPaletteBoard { instrumentation, activity, _, sessions ->
         val launcher = "図形ツールを開く"
         val anchor = bounds(waitForActionable(instrumentation, launcher))
         val formerPen = center(bounds(waitForActionable(instrumentation, "ペン")))
@@ -439,10 +441,55 @@ class ConditionalChromeLifecycleTest {
         assertTrue("former palette hit admits pan", before != navigation.viewportState.value)
         nativeGesture(instrumentation, listOf(center(anchor)))
         assertPaletteOpen(instrumentation)
-        nativeGesture(instrumentation, listOf(center(bounds(waitForActionable(instrumentation, "ペン")))))
-        waitForGone(instrumentation, launcher)
+        val pen = waitForActionable(instrumentation, "ペン")
+        val penPoint = center(bounds(pen))
+        val expectedWindowId = composeRule.runOnIdle { activity.window.decorView.createAccessibilityNodeInfo().windowId }
+        instrumentation.waitForIdleSync()
+        val root = checkNotNull(instrumentation.uiAutomation.rootInActiveWindow)
+        assertTrue("操作前の decor window ID は有効", expectedWindowId >= 0)
+        assertEquals("操作前の decor と native root は同じ window", expectedWindowId, root.windowId)
+        assertEquals("操作前の Pen は同じ window", expectedWindowId, pen.windowId)
+        assertEquals(instrumentation.targetContext.packageName, root.packageName?.toString())
+        assertNotNull(findExact(root, "キャンバス"))
+        assertNotNull(findExact(root, launcher))
+        nativeGesture(instrumentation, listOf(penPoint))
+        waitForGoneInWindow(instrumentation, launcher, expectedWindowId)
         clickActionable(instrumentation, "やめる")
         assertEquals(anchor, bounds(waitForActionable(instrumentation, launcher)))
+    }
+
+    @PrSmoke
+    @Test
+    fun nativeAbsenceRejectsUnavailableWindow() = withPaletteBoard { instrumentation, activity, _, _ ->
+        val pen = waitForActionable(instrumentation, "ペン")
+        val expectedWindowId = composeRule.runOnIdle { activity.window.decorView.createAccessibilityNodeInfo().windowId }
+        instrumentation.waitForIdleSync()
+        val root = checkNotNull(instrumentation.uiAutomation.rootInActiveWindow)
+        assertTrue("fixture の decor window ID は有効", expectedWindowId >= 0)
+        assertEquals(expectedWindowId, root.windowId)
+        assertEquals(expectedWindowId, pen.windowId)
+        assertEquals(instrumentation.targetContext.packageName, root.packageName?.toString())
+        assertNotNull(findExact(root, "キャンバス"))
+        val absentLabel = "#123 native absence fixture probe"
+        assertNull(findExact(root, absentLabel))
+        // 同じ実 root が完全な不在として成功することを、拒否の対照より先に確認する。
+        waitForGoneInWindow(instrumentation, absentLabel, expectedWindowId) { root }
+        for (unavailableRoot in listOf(true, false)) {
+            val windowId = if (unavailableRoot) expectedWindowId else expectedWindowId xor 1
+            val timeout = assertThrows(ComposeTimeoutException::class.java) {
+                waitForGoneInWindow(instrumentation, absentLabel, windowId) {
+                    if (unavailableRoot) null else root
+                }
+            }
+            assertTrue("nested idle timeout ではなく、この wait 自身の expiry",
+                timeout.message.orEmpty().contains("$absentLabel (window=$windowId) の完全な native 不在"))
+        }
+        val sentinel = IllegalStateException("#123 root reader sentinel")
+        val actual = assertThrows(IllegalStateException::class.java) {
+            waitForGoneInWindow(instrumentation, absentLabel, expectedWindowId) { throw sentinel }
+        }
+        assertSame(sentinel, actual)
+        // advertised child の null は source 上 fail-closed。独立した動的検証は未実施。
     }
 
     private fun withPaletteBoard(
@@ -948,6 +995,38 @@ class ConditionalChromeLifecycleTest {
             Thread.sleep(100)
         }
         error("非表示になったアクセシビリティ要素が残っています: $label")
+    }
+
+    private fun waitForGoneInWindow(
+        instrumentation: android.app.Instrumentation,
+        label: String,
+        expectedWindowId: Int,
+        rootReader: () -> AccessibilityNodeInfo? = { instrumentation.uiAutomation.rootInActiveWindow },
+    ) {
+        composeRule.waitUntil(
+            conditionDescription = "$label (window=$expectedWindowId) の完全な native 不在",
+            timeoutMillis = 4_000L,
+        ) {
+            composeRule.waitForIdle()
+            instrumentation.waitForIdleSync()
+            val root = rootReader() ?: return@waitUntil false
+            if (root.windowId != expectedWindowId ||
+                root.packageName?.toString() != instrumentation.targetContext.packageName) return@waitUntil false
+            var complete = true
+            var hasCanvas = false
+            var hasTarget = false
+            fun visit(node: AccessibilityNodeInfo) {
+                val description = node.contentDescription?.toString()
+                if (description == "キャンバス") hasCanvas = true
+                if (description == label) hasTarget = true
+                for (index in 0 until node.childCount) {
+                    val child = node.getChild(index)
+                    if (child == null) complete = false else visit(child)
+                }
+            }
+            visit(root)
+            complete && hasCanvas && !hasTarget
+        }
     }
 
     private fun bounds(node: AccessibilityNodeInfo): Rect = Rect().also(node::getBoundsInScreen)
