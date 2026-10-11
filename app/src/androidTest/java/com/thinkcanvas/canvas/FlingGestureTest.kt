@@ -10,6 +10,7 @@ import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.findViewTreeCompositionContext
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -55,12 +56,36 @@ class FlingGestureTest {
         val saves = AtomicInteger()
         val canvas get() = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().boundsInWindow
         fun ready() {
-            composeRule.waitUntil(10_000) {
-                var focused = false
-                scenario.onActivity { focused = it.window.decorView.hasWindowFocus() }
-                focused && sessions.saveStateFor(1L, initial).value == BoardSaveState.Idle &&
-                    composeRule.onAllNodesWithContentDescription("キャンバス").fetchSemanticsNodes().isNotEmpty() &&
-                    navigation.focus() != null
+            try {
+                composeRule.waitUntil(10_000) {
+                    var focused = false
+                    scenario.onActivity { focused = it.window.decorView.hasWindowFocus() }
+                    focused && sessions.saveStateFor(1L, initial).value == BoardSaveState.Idle &&
+                        composeRule.onAllNodesWithContentDescription("キャンバス").fetchSemanticsNodes().isNotEmpty() &&
+                        navigation.focus() != null
+                }
+            } catch (timeout: ComposeTimeoutException) {
+                val focused = runCatching {
+                    var value = false
+                    scenario.onActivity { value = it.window.decorView.hasWindowFocus() }
+                    value.toString()
+                }.getOrElse { "unknown:${it.javaClass.simpleName}" }
+                val saveIdle = runCatching {
+                    (sessions.saveStateFor(1L, initial).value == BoardSaveState.Idle).toString()
+                }.getOrElse { "unknown:${it.javaClass.simpleName}" }
+                val navigationFocused = runCatching {
+                    var value = false
+                    composeRule.runOnUiThread { value = navigation.focus() != null }
+                    value.toString()
+                }.getOrElse { "unknown:${it.javaClass.simpleName}" }
+                val canvasPresent = runCatching {
+                    composeRule.onAllNodesWithContentDescription("キャンバス")
+                        .fetchSemanticsNodes().isNotEmpty().toString()
+                }.getOrElse { "unknown:${it.javaClass.simpleName}" }
+                timeout.addSuppressed(IllegalStateException("ready snapshot after timeout (sequential reads): " +
+                    "windowFocus=$focused saveIdle=$saveIdle canvasPresent=$canvasPresent " +
+                    "navigationFocus=$navigationFocused"))
+                throw timeout
             }
             composeRule.waitForIdle()
         }
