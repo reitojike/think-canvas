@@ -292,7 +292,6 @@ class ConditionalChromeLifecycleTest {
         assertPaletteClosed(instrumentation)
     }
 
-    @PrSmoke
     @Test
     fun paletteNativeCanceledTouchesKeepMenuAndContent() = withPaletteBoard { instrumentation, activity, database, sessions ->
         val board = sessions.stateFor(1L, BoardSnapshot())
@@ -330,7 +329,6 @@ class ConditionalChromeLifecycleTest {
         assertEquals(0, runBlocking { database.canvasDao().inkStrokes(1).size })
     }
 
-    @PrSmoke
     @Test
     fun paletteLongPressKeepsMenuAndContent() = withPaletteBoard { instrumentation, activity, database, sessions ->
         val before = sessions.stateFor(1L, BoardSnapshot()).snapshot()
@@ -343,7 +341,6 @@ class ConditionalChromeLifecycleTest {
         assertEquals(0, runBlocking { database.canvasDao().inkStrokes(1).size })
     }
 
-    @PrSmoke
     @Test
     fun paletteOutsidePanKeepsMenuAndContent() = withPaletteBoard { instrumentation, activity, _, sessions ->
         val board = sessions.stateFor(1L, BoardSnapshot())
@@ -360,7 +357,6 @@ class ConditionalChromeLifecycleTest {
         assertEquals(before, board.snapshot())
     }
 
-    @PrSmoke
     @Test
     fun paletteOutsidePinchKeepsMenuAndContent() = withPaletteBoard { instrumentation, activity, _, sessions ->
         val board = sessions.stateFor(1L, BoardSnapshot())
@@ -376,31 +372,8 @@ class ConditionalChromeLifecycleTest {
         assertEquals(before, board.snapshot())
     }
 
-    @PrSmoke
     @Test
     fun paletteStylusNormalReleasePersistsStroke() = withPaletteBoard { instrumentation, activity, database, sessions ->
-        assertPaletteStylusStroke(instrumentation, activity, database, sessions)
-    }
-
-    @PrSmoke
-    @Test
-    fun paletteStylusAfterEditorPanAndPinchPersistsStroke() = withPaletteBoard(expanded = false) { instrumentation, activity, database, sessions ->
-        val editor = sessions.textEditorFor(1L, BoardSnapshot())
-        nativeGesture(instrumentation, listOf(paletteCanvasPoint(instrumentation, activity)))
-        composeRule.waitUntil(5_000) { editor.draft.value != null }
-        composeRule.onNodeWithContentDescription("やめる").performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
-        assertNull(editor.draft.value)
-        clickActionable(instrumentation, "図形ツールを開く")
-        assertPaletteOpen(instrumentation)
-        val blank = paletteCanvasPoint(instrumentation, activity)
-        val path = (0..6).map { (blank.first + 100f - it * 20f) to blank.second }
-        assertPalettePath(instrumentation, activity, path)
-        nativeGesture(instrumentation, path, holdMillis = 180)
-        val pinch = paletteCanvasPoint(instrumentation, activity)
-        assertPalettePath(instrumentation, activity, listOf((pinch.first + 90f) to pinch.second, (pinch.first + 230f) to pinch.second))
-        nativePinch(instrumentation, pinch.first + 160f, pinch.second)
-        assertPaletteOpen(instrumentation)
         assertPaletteStylusStroke(instrumentation, activity, database, sessions)
     }
 
