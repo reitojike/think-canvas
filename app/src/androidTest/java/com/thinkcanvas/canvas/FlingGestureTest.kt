@@ -5,7 +5,11 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.ViewGroup
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.findViewTreeCompositionContext
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -34,7 +38,10 @@ import java.util.concurrent.atomic.AtomicInteger
 /** Spec015: native速度、release後のcamera、表示履歴、durable contentを独立して観測する。 */
 @RunWith(AndroidJUnit4::class)
 class FlingGestureTest {
-    @get:Rule val composeRule = createEmptyComposeRule()
+    private val testDurationScale = object : MotionDurationScale {
+        override var scaleFactor = 1f
+    }
+    @get:Rule val composeRule = createEmptyComposeRule(effectContext = testDurationScale)
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val initial = BoardSnapshot(texts = listOf(
         TextElement(id = "fling-a", text = "Fling anchor", kind = TextKind.TITLE, x = 200f, y = 200f),
@@ -220,8 +227,24 @@ class FlingGestureTest {
         instrumentation.uiAutomation.adoptShellPermissionIdentity(android.Manifest.permission.WRITE_SECURE_SETTINGS)
         try {
             assertTrue(Settings.Global.putFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f))
+            composeRule.runOnUiThread { testDurationScale.scaleFactor = 0f }
             withBoard {
+                val clockBefore = composeRule.mainClock.currentTime
+                scenario.onActivity { activity ->
+                    val host = activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+                    assertTrue(host is ComposeView)
+                    val scale = host.findViewTreeCompositionContext()
+                        ?.effectCoroutineContext?.get(MotionDurationScale)
+                    assertSame(testDurationScale, scale)
+                    assertEquals(0f, scale!!.scaleFactor, 0f)
+                }
+                assertEquals(clockBefore, composeRule.mainClock.currentTime)
+                assertFalse(composeRule.mainClock.autoAdvance)
+                val before = camera()
+                val deltaX = canvas.width * .35f
                 val released = pan()
+                assertEquals("release must include the full native pan", before.panX + deltaX, released.panX, 1f)
+                assertEquals(before.panY, released.panY, 1f)
                 advance(48L)
                 val middle = camera()
                 assertTrue(middle.panX > released.panX)
@@ -231,8 +254,11 @@ class FlingGestureTest {
                 unchanged()
             }
         } finally {
-            Settings.Global.putString(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, original)
-            instrumentation.uiAutomation.dropShellPermissionIdentity()
+            try { composeRule.runOnUiThread { testDurationScale.scaleFactor = 1f } }
+            finally {
+                Settings.Global.putString(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, original)
+                instrumentation.uiAutomation.dropShellPermissionIdentity()
+            }
         }
     }
 
