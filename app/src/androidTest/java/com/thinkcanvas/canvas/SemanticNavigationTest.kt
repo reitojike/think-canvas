@@ -226,16 +226,14 @@ class SemanticNavigationTest {
         }
 
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val deadline = SystemClock.uptimeMillis() + 20_000L
-        for (observation in 0 until 40) {
-            if (observation > 0 && SystemClock.uptimeMillis() >= deadline) break
-            instrumentation.waitForIdleSync()
-            if (findA11y(instrumentation.uiAutomation.rootInActiveWindow, prefix, false) != null) return
-            val remaining = deadline - SystemClock.uptimeMillis()
-            if (remaining <= 0L) break
-            if (observation < 39) Thread.sleep(minOf(500L, remaining))
+        try {
+            composeRule.waitUntil(20_000) {
+                instrumentation.waitForIdleSync()
+                findA11y(instrumentation.uiAutomation.rootInActiveWindow, prefix, false) != null
+            }
+        } catch (cause: ComposeTimeoutException) {
+            throw IllegalStateException("初期platform accessibilityが ready になりません: $label", cause)
         }
-        error("初期platform accessibilityが ready になりません: $label")
     }
 
     private fun waitForZoom(label: String) {
@@ -305,12 +303,17 @@ class SemanticNavigationTest {
 
     private fun awaitEditableA11y(attempts: Int = 40): AccessibilityNodeInfo {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        repeat(attempts) {
-            instrumentation.waitForIdleSync()
-            findEditableA11y(instrumentation.uiAutomation.rootInActiveWindow)?.let { return it }
-            Thread.sleep(100)
+        var matchedNode: AccessibilityNodeInfo? = null
+        try {
+            composeRule.waitUntil(timeoutMillis = attempts * 100L) {
+                instrumentation.waitForIdleSync()
+                matchedNode = findEditableA11y(instrumentation.uiAutomation.rootInActiveWindow)
+                matchedNode != null
+            }
+        } catch (cause: ComposeTimeoutException) {
+            throw IllegalStateException("検索入力欄が見つかりません", cause)
         }
-        error("検索入力欄が見つかりません")
+        return checkNotNull(matchedNode)
     }
 
     // Layer A: the platform tree must expose the control as actionable; no platform action is performed.
