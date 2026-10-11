@@ -332,16 +332,23 @@ class TextEditorDismissalTest {
             assertFalse(board.canUndo)
             assertEquals(expectedRedo, board.canRedo)
         }
+        var dismissalObservation: DismissalObservation? = null
+        private fun closedQuery(index: Int, query: () -> Boolean) =
+            dismissalObservation?.observe(index, query) ?: query()
         fun assertClosed() {
+            dismissalObservation?.stage = "semantics"
             composeRule.waitUntil(5_000) {
+                dismissalObservation?.beginPredicate()
                 // Running removes editable semantics before the save acknowledgement closes chrome.
-                composeRule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isEmpty() &&
-                    composeRule.onAllNodesWithText("完了").fetchSemanticsNodes().isEmpty() &&
-                    composeRule.onAllNodesWithText("やめる").fetchSemanticsNodes().isEmpty() &&
-                    composeRule.onAllNodesWithText("再試行").fetchSemanticsNodes().isEmpty()
+                closedQuery(0) { composeRule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isEmpty() } &&
+                    closedQuery(1) { composeRule.onAllNodesWithText("完了").fetchSemanticsNodes().isEmpty() } &&
+                    closedQuery(2) { composeRule.onAllNodesWithText("やめる").fetchSemanticsNodes().isEmpty() } &&
+                    closedQuery(3) { composeRule.onAllNodesWithText("再試行").fetchSemanticsNodes().isEmpty() }
             }
+            dismissalObservation?.stage = "focus"
             assertTrue(composeRule.onAllNodes(hasSetTextAction() and isFocused())
                 .fetchSemanticsNodes().isEmpty())
+            dismissalObservation?.stage = "ime"
             composeRule.waitUntil(5_000) {
                 var visible = true
                 scenario.onActivity {
@@ -349,6 +356,7 @@ class TextEditorDismissalTest {
                 }
                 !visible
             }
+            dismissalObservation?.stage = "closed"
         }
         val editor get() = sessions.textEditorFor(1L, BoardSnapshot())
         fun trackSaves(): AtomicInteger {
@@ -479,21 +487,62 @@ class TextEditorDismissalTest {
 
     @PrSmoke
     @Test fun emptyDraftOutsideTapClosesWithoutCreatingAndNextTapStartsDraft() = withBoard {
-        val saves = trackSaves()
-        // A discard must preserve redo as well as undo, even when redo is available.
-        scenario.onActivity {
-            board.move(original.id, original.x + 10f, original.y)
-            board.undo()
-        }
-        startNew()
-        outside()
-        assertClosed()
-        assertUnchanged(expectedRedo = true)
-        startNew()
-        composeRule.onNodeWithText("やめる").performClick()
-        assertClosed()
-        assertUnchanged(expectedRedo = true)
-        assertEquals(0, saves.get())
+        val observedEditor = editor
+        val observation = DismissalObservation { android.util.Log.i("Dismissal141", it) }
+        dismissalObservation = observation
+        observedEditor.dismissalTrace = observation::event
+        fun mark(event: String) = observation.event("test:$event owner=${System.identityHashCode(observedEditor)} " +
+            "session=${observedEditor.draft.value?.sessionId}")
+        observation.run(block = {
+            val saves = trackSaves()
+            // A discard must preserve redo as well as undo, even when redo is available.
+            scenario.onActivity {
+                board.move(original.id, original.x + 10f, original.y)
+                board.undo()
+            }
+            startNew()
+            mark("firstStarted")
+            outside()
+            assertClosed()
+            mark("firstClosed")
+            assertUnchanged(expectedRedo = true)
+            startNew()
+            mark("secondStarted")
+            composeRule.onNodeWithText("やめる").performClick()
+            mark("performClickReturned")
+            assertClosed()
+            mark("secondClosed")
+            assertUnchanged(expectedRedo = true)
+            assertEquals(0, saves.get())
+        }, postSync = {
+            // 元の履歴は出力済み。この追加同期後の状態は元の predicate と区別する。
+            scenario.onActivity {
+                android.util.Log.i("Dismissal141", "postSync:model owner=${System.identityHashCode(editor)} " +
+                    "session=${editor.draft.value?.sessionId} " +
+                    "save=${sessions.saveStateFor(1L, BoardSnapshot()).value.dismissalTracePhase()} " +
+                    "ack=${editor.pendingDraftAcknowledgement.value?.let { System.identityHashCode(it) }}")
+            }
+            val groups = listOf(
+                "editable" to composeRule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes(),
+                "done" to composeRule.onAllNodesWithText("完了").fetchSemanticsNodes(),
+                "cancel" to composeRule.onAllNodesWithText("やめる").fetchSemanticsNodes(),
+                "retry" to composeRule.onAllNodesWithText("再試行").fetchSemanticsNodes(),
+            )
+            for ((name, nodes) in groups) {
+                android.util.Log.i("Dismissal141", "postSync:semantics $name count=${nodes.size} " + nodes.take(8).joinToString { node ->
+                    "node=${node.id}/root=${System.identityHashCode(node.root)}"
+                })
+            }
+            val canvases = composeRule.onAllNodesWithContentDescription("キャンバス").fetchSemanticsNodes()
+            android.util.Log.i("Dismissal141", "postSync:canvas count=${canvases.size} " + canvases.take(8).joinToString { node ->
+                "node=${node.id}/root=${System.identityHashCode(node.root)}"
+            })
+            android.util.Log.i("Dismissal141", "postSync:afterSemantics owner=${System.identityHashCode(editor)} " +
+                "session=${editor.draft.value?.sessionId}")
+        }, detach = {
+            observedEditor.dismissalTrace = null
+            dismissalObservation = null
+        })
     }
 
     @PrSmoke
