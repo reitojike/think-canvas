@@ -240,7 +240,25 @@ class FlingGestureTest {
                 }
                 assertEquals(clockBefore, composeRule.mainClock.currentTime)
                 assertFalse(composeRule.mainClock.autoAdvance)
-                val released = pan() // 正常UP注入成功とUI barrier後、継続用clock advance前に採取。
+                val before = camera()
+                val canvas = composeRule.onNodeWithContentDescription("キャンバス")
+                var from = Offset.Zero
+                var delta = Offset.Zero
+                val gestureStart = composeRule.mainClock.currentTime
+                canvas.performTouchInput {
+                    from = Offset(width * .2f, height * .65f)
+                    delta = Offset(width * .35f, 0f)
+                    down(from)
+                }
+                // block間で再Composeを許す。入力の16msがclockも進めるため追加frameは不要。
+                for (step in 1..5) canvas.performTouchInput {
+                    moveTo(from + delta * (step / 5f), delayMillis = 16L)
+                }
+                canvas.performTouchInput { up() }
+                val released = camera() // UP処理後、継続用のclockを進める前に採取する。
+                assertEquals(gestureStart + 80L, composeRule.mainClock.currentTime)
+                assertEquals("release must include the full pan", before.panX + delta.x, released.panX, 1f)
+                assertEquals(before.panY, released.panY, 1f)
                 advance(48L)
                 val middle = camera()
                 assertTrue(middle.panX > released.panX)
