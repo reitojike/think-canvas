@@ -30,6 +30,8 @@ internal data class RegionNameDraft(
 
 /** Transient editor state for one board; retained with its save session across recreation. */
 class TextEditorSession internal constructor() {
+    // Issue #141: enabled only for the one finite diagnostic test; never records text.
+    internal var dismissalTrace: ((String) -> Unit)? = null
     internal val draft = mutableStateOf<Draft?>(null)
     internal val regionNameDraft = mutableStateOf<RegionNameDraft?>(null)
     internal val imageDescriptionDraft = mutableStateOf<ImageDescriptionDraft?>(null)

@@ -479,6 +479,26 @@ class TextEditorDismissalTest {
 
     @PrSmoke
     @Test fun emptyDraftOutsideTapClosesWithoutCreatingAndNextTapStartsDraft() = withBoard {
+        val events = mutableListOf<String>()
+        val terminalEvents = mutableListOf<String>()
+        var sequence = 0
+        val trace: (String) -> Unit = { event ->
+            synchronized(events) {
+                sequence++
+                if (events.size < 128) events += "$sequence uptime=${SystemClock.uptimeMillis()} $event"
+            }
+        }
+        fun terminalTrace(event: String) {
+            synchronized(events) {
+                sequence++
+                terminalEvents += "$sequence uptime=${SystemClock.uptimeMillis()} $event"
+            }
+        }
+        fun mark(event: String) = trace("test:$event owner=${System.identityHashCode(editor)} " +
+            "session=${editor.draft.value?.sessionId}")
+        editor.dismissalTrace = trace
+        var failure: Throwable? = null
+        try {
         val saves = trackSaves()
         // A discard must preserve redo as well as undo, even when redo is available.
         scenario.onActivity {
@@ -486,14 +506,65 @@ class TextEditorDismissalTest {
             board.undo()
         }
         startNew()
+        mark("firstStarted")
         outside()
         assertClosed()
+        mark("firstClosed")
         assertUnchanged(expectedRedo = true)
         startNew()
+        mark("secondStarted")
         composeRule.onNodeWithText("やめる").performClick()
+        mark("performClickReturned")
         assertClosed()
+        mark("secondClosed")
         assertUnchanged(expectedRedo = true)
         assertEquals(0, saves.get())
+        } catch (original: Throwable) {
+            failure = original
+            throw original
+        } finally {
+            try {
+                // After the unchanged assertions, before withBoard closes Activity/Room.
+                scenario.onActivity {
+                    terminalTrace("test:terminalModel owner=${System.identityHashCode(editor)} " +
+                        "session=${editor.draft.value?.sessionId} " +
+                        "save=${sessions.saveStateFor(1L, BoardSnapshot()).value} " +
+                        "ack=${editor.pendingDraftAcknowledgement.value?.let { System.identityHashCode(it) }} " +
+                        "activity=${System.identityHashCode(it)} lifecycle=${it.lifecycle.currentState} " +
+                        "windowFocused=${it.window.decorView.hasWindowFocus()} " +
+                        "ime=${it.window.decorView.rootWindowInsets?.isVisible(WindowInsets.Type.ime())}")
+                }
+                val groups = listOf(
+                    "editable" to composeRule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes(),
+                    "done" to composeRule.onAllNodesWithText("完了").fetchSemanticsNodes(),
+                    "cancel" to composeRule.onAllNodesWithText("やめる").fetchSemanticsNodes(),
+                    "retry" to composeRule.onAllNodesWithText("再試行").fetchSemanticsNodes(),
+                )
+                for ((name, nodes) in groups) {
+                    terminalTrace("test:terminalSemantics $name count=${nodes.size} " + nodes.take(8).joinToString { node ->
+                        "node=${node.id}/root=${System.identityHashCode(node.root)}/bounds=${node.boundsInRoot}/" +
+                            "disabled=${node.config.contains(SemanticsProperties.Disabled)}"
+                    })
+                }
+                val canvases = composeRule.onAllNodesWithContentDescription("キャンバス").fetchSemanticsNodes()
+                terminalTrace("test:terminalCanvas count=${canvases.size} " + canvases.take(8).joinToString { node ->
+                    "node=${node.id}/root=${System.identityHashCode(node.root)}/bounds=${node.boundsInRoot}"
+                })
+                terminalTrace("test:afterSemantics owner=${System.identityHashCode(editor)} " +
+                    "session=${editor.draft.value?.sessionId}")
+            } catch (diagnostic: Throwable) {
+                terminalTrace("test:diagnosticFailed type=${diagnostic.javaClass.simpleName}")
+                if (failure != null) failure.addSuppressed(diagnostic) else throw diagnostic
+            } finally {
+                editor.dismissalTrace = null
+                synchronized(events) {
+                    for (event in (events + terminalEvents).sortedBy { it.substringBefore(' ').toInt() })
+                        android.util.Log.i("Dismissal141", event)
+                    android.util.Log.i("Dismissal141", "end events=$sequence truncated=${sequence > events.size + terminalEvents.size} " +
+                        "failure=${failure?.javaClass?.simpleName}")
+                }
+            }
+        }
     }
 
     @PrSmoke
