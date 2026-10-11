@@ -27,19 +27,26 @@ stale/foreign result と異なる入力の誤認防止です。malicious post-ru
 
 Windows の PowerShell 7.3 以上、Java 25、既存の Gradle wrapper distribution、Android SDK の
 platform 37.0 / build-tools 36.0.0 / google_apis x86_64 system image / adb / emulator が必要です。
+Fullのcurrent-source receipt取得には、既存suite validatorを実行するPython 3.10以上が必要です。
+以下の例はPATH上の python コマンドを使います。python --versionで版を確認し、
+py -3 / python3だけが利用可能な環境では、例のPython呼び出しをその同じinterpreterへ置き換えます。
 Codex と Claude Code は対象 worktree の同じ script を次のように呼びます。
 
 ```powershell
 ./scripts/run-windows-gmd.ps1 `
   -Test 'com.thinkcanvas.canvas.InkGestureTest#secondFingerCancelsWetInkAndSingleFingerStillDraws'
 
-./scripts/run-windows-gmd.ps1 -ExpectedTestCount 66
+# Fullの実行がTask Contractで許可されている場合だけ、current-sourceのreceiptを取得する。
+python scripts/check-android-test-suites.py validate --suite full --receipt-out ./build/full-receipt.json
+$fullReceipt = Get-Content ./build/full-receipt.json -Raw | ConvertFrom-Json
+./scripts/run-windows-gmd.ps1 -ExpectedTestCount $fullReceipt.expected_count
 ```
 
 Focused は単一 `Class#method` だけで expected count は1です。空値、class-only、comma list、
 regex、任意の追加 Gradle argv は受け付けません。Full は current instrumentation source の
 plain `@Test fun` census を count / 全 testcase 名の期待集合にします。未対応 runner 形式や
-caller count との不一致は実行前に停止します。現行 main は66件です。
+caller countとの不一致は実行前に停止します。上のreceiptは現在sourceに対応した期待値であり、
+launcherが独立して取得するsource censusとの一致も必要です。古いreceiptや固定件数を流用しません。
 
 launcher の所在を cwd とし、linked worktree の共通 Git directory から shared repository root
 を解決します。既存 dirty source を変更しません。canonical homes は
@@ -137,8 +144,8 @@ gate で停止しました。configuration-only dry-run 1回で device/variant �
 を渡す補正後の launcher を実証済みです (`ISSUE_52_WINDOWS_GMD_RUNTIME_PROVEN`)。
 
 - focused `InkGestureTest#secondFingerCancelsWetInkAndSingleFingerStillDraws`: 1/0/0/0、exact testcase
-- full `-ExpectedTestCount 66` を 2 回: いずれも 66/0/0/0、unique testcase 66、run ごとの fresh
-  owned XML (2 回目は 1 回目と別の XML)
+- fullのconsecutive valid samples: current-sourceのexact identity/counterとfresh owned XMLを照合。
+  dated census・各runの実数は[Issue #52の完了証拠](https://github.com/reitojike/think-canvas/issues/52)を参照
 - launcher の判定は `WINDOWS_GMD_PASS` / `FRESH_EXACT_XML`、実際の emulator argv は
   `-gpu swiftshader_indirect`
 

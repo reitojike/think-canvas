@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   quarantine:
-    name: Android 17 IME quarantine GMD (38)
+    name: Android 17 IME quarantine GMD
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     permissions:
       contents: read
@@ -42,7 +42,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: FlakyTest 38件を実行
+      - name: FlakyTest を実行
         id: gmd
         shell: bash
         run: |
