@@ -3,6 +3,7 @@ package com.thinkcanvas.canvas
 import android.content.Intent
 import android.os.SystemClock
 import android.provider.Settings
+import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
 import androidx.compose.ui.geometry.Offset
@@ -162,6 +163,7 @@ class FlingGestureTest {
     @PrSmoke
     @Test fun fastPanContinuesAndUsesOneHistoryBoundary() = withBoard {
         val before = camera()
+        assertFalse(navigation.canBack)
         val canvas = composeRule.onNodeWithContentDescription("キャンバス")
         var from = Offset.Zero
         var delta = Offset.Zero
@@ -175,11 +177,14 @@ class FlingGestureTest {
         for (step in 1..5) canvas.performTouchInput {
             moveTo(from + delta * (step / 5f), delayMillis = 16L)
         }
-        canvas.performTouchInput { up() }
+        canvas.performTouchInput { advanceEventTime(180L); up() }
         val release = camera() // UP処理後、継続用のclockを進める前に採取する。
-        assertEquals(gestureStart + 80L, composeRule.mainClock.currentTime)
+        assertEquals(gestureStart + 260L, composeRule.mainClock.currentTime)
         assertEquals("release must include the full pan", before.panX + delta.x, release.panX, 1f)
         assertEquals(before.panY, release.panY, 1f)
+        assertTrue("paused normal UP must record the pan boundary", navigation.canBack)
+        Log.i("FlingPilotControl", "FULL_PAN_AND_NORMAL_UP before=$before release=$release delta=$delta " +
+            "logicalMs=${composeRule.mainClock.currentTime - gestureStart}")
         advance(120L)
         assertTrue("release=$release later=${camera()}", camera().panX > release.panX + 3f)
         advance(2_000L)
