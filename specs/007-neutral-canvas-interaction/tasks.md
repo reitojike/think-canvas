@@ -82,5 +82,10 @@ T017/T020〜T022は[Issue91の最新7AC closure](https://github.com/reitojike/th
 
 ## Issue #112: bounded long-press handoff correction
 
-- [ ] T028 `CanvasScreen.kt`の通常tap相当のpalette候補を既存timeout/handoffへ渡す最小補正を一回行い、`LongPressGestureTest.kt`の既存native fixture/assertを共有する展開中の要素release/move・blank gap回帰を追加する。旧productionと補正後の同一identity・固定test bytes・fresh owned XMLを対応付け、local検証とinventory同期を確認する。新状態機械・待機追加・別detector・共通harness変更はしない。
+- [x] T028 `CanvasScreen.kt`の通常tap相当のpalette候補を既存timeout/handoffへ渡す最小補正を一回行い、`LongPressGestureTest.kt`の既存native fixture/assertを共有する展開中の要素release/move・blank gap回帰を追加する。旧productionと補正後の同一identity・固定test bytes・fresh owned XMLを対応付け、local検証とinventory同期を確認する。新状態機械・待機追加・別detector・共通harness変更はしない。
 - [ ] T029 補正headの自然PR CIと最後の依頼より新しいcanonical review、base/threadを確認する。別familyのfailureまたは新findingが出たら追加補正・blind rerunせずHOLDする。今回の許可にmerge・Issue close・AC完了変更は含めず、T026/T027の残存gateと過去補正履歴を保持する。
+
+## Issue #112: 明示handle ownershipの最小補正
+
+- [x] T030 初期modeのpalette上書きを通常tap候補へ限定し、既存handle/grip ownerを維持する。画像resize一件を既存fixtureで追加し、七行の実geometry・全配送のhit/chrome/slop/正常UPを確認した同一test bytesの旧幅RED・補正全GREEN、palette/viewport/他content不変・matching保存一回を対応付ける。不備のあった広範囲候補・前提失敗の証拠は保持し、採用候補へ含めない。
+- [ ] T031 最小候補のlocal gate・inventory/public境界と自然PR CIの実体、最後の依頼より新しい現行head canonical review・base/threadを確認する。範囲内fixture補正は担当協議と具体的証拠による利用者承認に従い、別familyや複雑性増加はHOLDする。merge・Issue close・AC完了は行わず、T026/T027の未証明gateを保持する。

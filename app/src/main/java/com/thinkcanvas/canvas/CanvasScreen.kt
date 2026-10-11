@@ -1437,7 +1437,7 @@ fun CanvasScreen(
                     selectedGrip -> "move"
                     else -> "tap"
                 }
-                var mode = if (paletteTap) "paletteTap" else canvasMode
+                var mode = if (paletteTap && canvasMode == "tap") "paletteTap" else canvasMode
                 var manualViewportOrigin: ViewportFocus? = null
                 val panVelocity = VelocityTracker().also { it.addPointerInputChange(down) }
                 val startWorld = viewport.screenToWorld(start.x, start.y).let { WorldPoint(it.first, it.second) }
