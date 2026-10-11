@@ -27,6 +27,9 @@ stale/foreign result と異なる入力の誤認防止です。malicious post-ru
 
 Windows の PowerShell 7.3 以上、Java 25、既存の Gradle wrapper distribution、Android SDK の
 platform 37.0 / build-tools 36.0.0 / google_apis x86_64 system image / adb / emulator が必要です。
+Fullのcurrent-source receipt取得には、既存suite validatorを実行するPython 3.10以上が必要です。
+以下の例はPATH上の python コマンドを使います。python --versionで版を確認し、
+py -3 / python3だけが利用可能な環境では、例のPython呼び出しをその同じinterpreterへ置き換えます。
 Codex と Claude Code は対象 worktree の同じ script を次のように呼びます。
 
 ```powershell
