@@ -77,31 +77,6 @@ class BoardListScreenTest {
     private val context = instrumentation.targetContext
     private val automation = instrumentation.uiAutomation
 
-    // #123 の独立診断。root は元の oracle の値を使い、待機や window 補正はしない。
-    private fun diagnosticSurface(case: String, phase: String, root: AccessibilityNodeInfo?, detail: String) {
-        runCatching {
-            val window = root?.window
-            val infoRead = runCatching { automation.serviceInfo }
-            val info = infoRead.getOrNull()
-            try {
-                val config = context.resources.configuration
-                android.util.Log.i("TC123DIAG", org.json.JSONObject()
-                    .put("case", "com.thinkcanvas.board.BoardListScreenTest#$case")
-                    .put("phase", phase).put("monoNs", android.os.SystemClock.elapsedRealtimeNanos())
-                    .put("rootPackage", root?.packageName ?: org.json.JSONObject.NULL)
-                    .put("rootWindowId", root?.windowId ?: org.json.JSONObject.NULL)
-                    .put("windowFocused", window?.isFocused ?: org.json.JSONObject.NULL)
-                    .put("windowActive", window?.isActive ?: org.json.JSONObject.NULL)
-                    .put("windowInfoPresent", window != null)
-                    .put("serviceInfoReadFailed", infoRead.isFailure)
-                    .put("uiaFlags", info?.flags ?: org.json.JSONObject.NULL)
-                    .put("uiaCapabilities", info?.capabilities ?: org.json.JSONObject.NULL)
-                    .put("contextFontScale", config.fontScale).put("contextDensityDpi", config.densityDpi)
-                    .put("detail", detail).toString())
-            } finally { window?.recycle() }
-        }
-    }
-
     private fun listActions(activity: MainActivity) =
         ViewModelProvider(activity)[BoardListActionViewModel::class.java]
 
@@ -151,26 +126,13 @@ class BoardListScreenTest {
             .remove("lastOpenedBoardId").commit())
     }
 
-    private fun awaitDescription(value: String, substring: Boolean = false, diagnosticCase: String? = null) {
-        var lastCount = -1
-        try {
-            composeRule.waitUntil(5_000) {
-                composeRule.onAllNodesWithContentDescription(value, substring = substring)
-                    .fetchSemanticsNodes().also { if (diagnosticCase != null) lastCount = it.size }.isNotEmpty()
-            }
-            assertTrue(composeRule.onAllNodesWithContentDescription(value, substring = substring)
-                .fetchSemanticsNodes().isNotEmpty())
-        } catch (failure: Throwable) {
-            if (diagnosticCase != null) runCatching {
-                diagnosticSurface(diagnosticCase, "description_failure", automation.rootInActiveWindow,
-                    "target=$value lastComposeCount=$lastCount failure=${failure.javaClass.simpleName}")
-            }
-            throw failure
+    private fun awaitDescription(value: String, substring: Boolean = false) {
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithContentDescription(value, substring = substring)
+                .fetchSemanticsNodes().isNotEmpty()
         }
-        if (diagnosticCase != null) runCatching {
-            diagnosticSurface(diagnosticCase, "description_pass", automation.rootInActiveWindow,
-                "target=$value lastComposeCount=$lastCount")
-        }
+        assertTrue(composeRule.onAllNodesWithContentDescription(value, substring = substring)
+            .fetchSemanticsNodes().isNotEmpty())
     }
 
     private fun awaitText(value: String, substring: Boolean = false) {
@@ -273,8 +235,6 @@ class BoardListScreenTest {
                 "Android accessibility surface was unavailable after Compose readiness"
             }
             collectVisibleHints(accessibilityRoot)
-            diagnosticSurface("emptyBoardShowsExactlyOneCanonicalAccessibleHint", "hint_count",
-                accessibilityRoot, "visibleCanonicalCount=${matchingVisibleHints.size}")
             assertEquals("canonical resource-backed hint is accessible exactly once",
                 1, matchingVisibleHints.size)
             assertEquals(canonicalHint, matchingVisibleHints.single().text.toString())
@@ -403,13 +363,9 @@ class BoardListScreenTest {
         val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
         try {
             awaitText("‹ 戻る対象")
-            runCatching { android.util.Log.i("TC123DIAG", org.json.JSONObject()
-                .put("case", "com.thinkcanvas.board.BoardListScreenTest#systemBackReturnsFromBoardToList")
-                .put("phase", "before_back").put("monoNs", android.os.SystemClock.elapsedRealtimeNanos()).toString()) }
             assertTrue(automation.performGlobalAction(android.accessibilityservice.AccessibilityService
                 .GLOBAL_ACTION_BACK))
-            awaitDescription("戻る対象、", substring = true,
-                diagnosticCase = "systemBackReturnsFromBoardToList")
+            awaitDescription("戻る対象、", substring = true)
             scenario.onActivity { assertFalse(it.isFinishing) }
         } finally { scenario.close() }
     }
