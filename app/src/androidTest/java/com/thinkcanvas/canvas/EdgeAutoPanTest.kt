@@ -71,7 +71,12 @@ class EdgeAutoPanTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         private var diagnosticWindow: org.json.JSONObject? = null
         private var diagnosticInput: org.json.JSONObject? = null
+        private val diagnosticDownHistory = if (diagnosticCase != null)
+            mutableListOf<Pair<org.json.JSONObject?, org.json.JSONObject?>>() else null
+        private var diagnosticDroppedDowns = 0
         private var diagnosticValues = "not_evaluated"
+        private var diagnosticStationaryValues: String? = null
+        private var diagnosticStationaryNs: Long? = null
         private var diagnosticSaveCount: Int? = null
         private var diagnosticIdle: Boolean? = null
         private var diagnosticSnapshotMatches: Boolean? = null
@@ -81,6 +86,7 @@ class EdgeAutoPanTest {
         // 既存の origin 取得 callback 内だけで採取。同期待ちや入力を追加しない。
         private fun recordInputWindow(activity: MainActivity, action: Int) {
             if (diagnosticCase == null || action != MotionEvent.ACTION_DOWN) return
+            diagnosticWindow = null
             runCatching {
                 val decor = activity.window.decorView
                 val config = activity.resources.configuration
@@ -97,11 +103,16 @@ class EdgeAutoPanTest {
 
         private fun recordInjectedDown(event: MotionEvent, accepted: Boolean) {
             if (diagnosticCase == null || event.actionMasked != MotionEvent.ACTION_DOWN) return
+            diagnosticInput = null
             runCatching {
                 diagnosticInput = org.json.JSONObject().put("monoNs", SystemClock.elapsedRealtimeNanos())
                     .put("action", event.actionMasked).put("downTime", event.downTime)
                     .put("eventTime", event.eventTime).put("pointerCount", event.pointerCount)
                     .put("x", event.x).put("y", event.y).put("accepted", accepted)
+                diagnosticDownHistory?.let { history ->
+                    if (history.size < 4) history.add(diagnosticWindow to diagnosticInput)
+                    else diagnosticDroppedDowns++
+                }
             }
         }
 
@@ -111,6 +122,8 @@ class EdgeAutoPanTest {
                 // assertion/wait の決着後だけ追加query。取得時刻は入力/条件評価とは区別する。
                 val root = instrumentation.uiAutomation.rootInActiveWindow
                 val window = root?.window
+                val infoRead = runCatching { instrumentation.uiAutomation.serviceInfo }
+                val info = infoRead.getOrNull()
                 try {
                     android.util.Log.i("TC123DIAG", org.json.JSONObject()
                         .put("case", "com.thinkcanvas.canvas.EdgeAutoPanTest#$case")
@@ -119,16 +132,33 @@ class EdgeAutoPanTest {
                         .put("rootWindowId", root?.windowId ?: org.json.JSONObject.NULL)
                         .put("windowFocused", window?.isFocused ?: org.json.JSONObject.NULL)
                         .put("windowActive", window?.isActive ?: org.json.JSONObject.NULL)
+                        .put("windowInfoPresent", window != null)
+                        .put("serviceInfoReadFailed", infoRead.isFailure)
+                        .put("uiaFlags", info?.flags ?: org.json.JSONObject.NULL)
+                        .put("uiaCapabilities", info?.capabilities ?: org.json.JSONObject.NULL)
                         .put("inputWindow", diagnosticWindow ?: org.json.JSONObject.NULL)
                         .put("lastDown", diagnosticInput ?: org.json.JSONObject.NULL)
                         .put("mainClockMs", composeRule.mainClock.currentTime)
                         .put("autoAdvance", composeRule.mainClock.autoAdvance)
                         .put("values", diagnosticValues).put("predicateNs", diagnosticPredicateNs)
+                        .put("stationaryValues", diagnosticStationaryValues ?: org.json.JSONObject.NULL)
+                        .put("stationaryPredicateNs", diagnosticStationaryNs ?: org.json.JSONObject.NULL)
+                        .put("downHistoryCount", diagnosticDownHistory?.size ?: 0)
+                        .put("downHistoryDropped", diagnosticDroppedDowns)
                         .put("saveCount", diagnosticSaveCount ?: org.json.JSONObject.NULL)
                         .put("idle", diagnosticIdle ?: org.json.JSONObject.NULL)
                         .put("snapshotMatches", diagnosticSnapshotMatches ?: org.json.JSONObject.NULL)
                         .put("inkNonEmpty", diagnosticInk ?: org.json.JSONObject.NULL)
                         .put("failure", failure?.javaClass?.simpleName ?: org.json.JSONObject.NULL).toString())
+                    // 既存DOWN時に保存した参照だけを、body決着後に小packetで出す。
+                    diagnosticDownHistory?.forEachIndexed { index, (inputWindow, down) ->
+                        android.util.Log.i("TC123DIAG", org.json.JSONObject()
+                            .put("case", "com.thinkcanvas.canvas.EdgeAutoPanTest#$case")
+                            .put("phase", "down_history").put("downOrdinal", index + 1)
+                            .put("monoNs", SystemClock.elapsedRealtimeNanos())
+                            .put("inputWindow", inputWindow ?: org.json.JSONObject.NULL)
+                            .put("lastDown", down ?: org.json.JSONObject.NULL).toString())
+                    }
                 } finally { window?.recycle() }
             }
         }
@@ -390,6 +420,8 @@ class EdgeAutoPanTest {
                 if (diagnosticCase != null) {
                     diagnosticValues = "stationary beforeX=${fixedBefore.x} afterX=${fixedAfter.x} thresholdX=${fixedBefore.x - 100f} targetBefore=$targetBefore targetAfter=$targetAfter clockMs=${composeRule.mainClock.currentTime}"
                     diagnosticPredicateNs = SystemClock.elapsedRealtimeNanos()
+                    diagnosticStationaryValues = diagnosticValues
+                    diagnosticStationaryNs = diagnosticPredicateNs
                 }
                 assertTrue("静止した指の保持中にもcameraが進む", fixedAfter.x < fixedBefore.x - 100f)
                 assertEquals("finger offset x", targetBefore.x, targetAfter.x, 3f)

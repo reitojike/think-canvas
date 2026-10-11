@@ -81,6 +81,8 @@ class BoardListScreenTest {
     private fun diagnosticSurface(case: String, phase: String, root: AccessibilityNodeInfo?, detail: String) {
         runCatching {
             val window = root?.window
+            val infoRead = runCatching { automation.serviceInfo }
+            val info = infoRead.getOrNull()
             try {
                 val config = context.resources.configuration
                 android.util.Log.i("TC123DIAG", org.json.JSONObject()
@@ -90,6 +92,10 @@ class BoardListScreenTest {
                     .put("rootWindowId", root?.windowId ?: org.json.JSONObject.NULL)
                     .put("windowFocused", window?.isFocused ?: org.json.JSONObject.NULL)
                     .put("windowActive", window?.isActive ?: org.json.JSONObject.NULL)
+                    .put("windowInfoPresent", window != null)
+                    .put("serviceInfoReadFailed", infoRead.isFailure)
+                    .put("uiaFlags", info?.flags ?: org.json.JSONObject.NULL)
+                    .put("uiaCapabilities", info?.capabilities ?: org.json.JSONObject.NULL)
                     .put("contextFontScale", config.fontScale).put("contextDensityDpi", config.densityDpi)
                     .put("detail", detail).toString())
             } finally { window?.recycle() }

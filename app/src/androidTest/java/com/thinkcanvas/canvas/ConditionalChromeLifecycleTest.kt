@@ -46,6 +46,8 @@ class ConditionalChromeLifecycleTest {
         val case = diagnosticCase ?: return
         runCatching {
             val window = root?.window
+            val infoRead = runCatching { InstrumentationRegistry.getInstrumentation().uiAutomation.serviceInfo }
+            val info = infoRead.getOrNull()
             try {
                 android.util.Log.i("TC123DIAG", org.json.JSONObject()
                     .put("case", "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#$case")
@@ -54,6 +56,10 @@ class ConditionalChromeLifecycleTest {
                     .put("rootWindowId", root?.windowId ?: org.json.JSONObject.NULL)
                     .put("windowFocused", window?.isFocused ?: org.json.JSONObject.NULL)
                     .put("windowActive", window?.isActive ?: org.json.JSONObject.NULL)
+                    .put("windowInfoPresent", window != null)
+                    .put("serviceInfoReadFailed", infoRead.isFailure)
+                    .put("uiaFlags", info?.flags ?: org.json.JSONObject.NULL)
+                    .put("uiaCapabilities", info?.capabilities ?: org.json.JSONObject.NULL)
                     .put("detail", detail).toString())
             } finally { window?.recycle() }
         }
