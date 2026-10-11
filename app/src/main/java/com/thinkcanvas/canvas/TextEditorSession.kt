@@ -2,6 +2,7 @@ package com.thinkcanvas.canvas
 
 import androidx.compose.runtime.mutableStateOf
 import com.thinkcanvas.BoardSaveAcknowledgement
+import com.thinkcanvas.BoardSaveState
 import java.util.UUID
 
 internal data class Draft(
@@ -30,10 +31,18 @@ internal data class RegionNameDraft(
 
 /** Transient editor state for one board; retained with its save session across recreation. */
 class TextEditorSession internal constructor() {
+    // #141: 対象の instrumentation test だけが設定し、利用者の内容は記録しない。
+    internal var dismissalTrace: ((String) -> Unit)? = null
     internal val draft = mutableStateOf<Draft?>(null)
     internal val regionNameDraft = mutableStateOf<RegionNameDraft?>(null)
     internal val imageDescriptionDraft = mutableStateOf<ImageDescriptionDraft?>(null)
     internal val pendingImageAcknowledgement = mutableStateOf<BoardSaveAcknowledgement?>(null)
     internal val pendingDraftAcknowledgement = mutableStateOf<BoardSaveAcknowledgement?>(null)
     internal val pendingNewElementId = mutableStateOf<String?>(null)
+}
+
+internal fun BoardSaveState.dismissalTracePhase(): String = when (this) {
+    BoardSaveState.Idle -> "Idle"
+    is BoardSaveState.Running -> "Running"
+    is BoardSaveState.Failed -> "Failed"
 }

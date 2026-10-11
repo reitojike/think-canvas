@@ -221,6 +221,22 @@ fun CanvasScreen(
     var pendingDraftAcknowledgement by editorSession.pendingDraftAcknowledgement
     val currentSaveState by saveState.collectAsState()
     val latestExternalBlock = rememberUpdatedState(externalInteractionBlocked)
+    fun traceDismissal(event: String, capturedSession: String? = null) {
+        editorSession.dismissalTrace?.let { trace ->
+            trace("$event owner=${System.identityHashCode(editorSession)} session=${draft?.sessionId} " +
+                "captured=$capturedSession save=${saveState.value.dismissalTracePhase()} " +
+                "ack=${pendingDraftAcknowledgement?.let { System.identityHashCode(it) }}")
+        }
+    }
+    fun writeTracedDraft(source: String, value: Draft?) {
+        if (editorSession.dismissalTrace == null) {
+            draft = value
+            return
+        }
+        val previous = draft?.sessionId
+        draft = value
+        traceDismissal("write:$source old=$previous new=${value?.sessionId}")
+    }
     fun saveBlocked(): Boolean = saveState.value != BoardSaveState.Idle || latestExternalBlock.value()
     val saving = currentSaveState is BoardSaveState.Running || latestExternalBlock.value()
     val saveFailed = currentSaveState is BoardSaveState.Failed
@@ -500,7 +516,7 @@ fun CanvasScreen(
         cancelBlankTap()
         if (!live) return
         if (selectedIds.isNotEmpty()) { selectedId = null; selectedIds = emptySet() }
-        else if (!searchOpen) draft = Draft(null, pending.world.x, pending.world.y)
+        else if (!searchOpen) writeTracedDraft("confirmedBlank", Draft(null, pending.world.x, pending.world.y))
     }
 
     DisposableEffect(blankTapBoundary) {
@@ -528,11 +544,13 @@ fun CanvasScreen(
     }
 
     fun closeDraft() {
+        traceDismissal("close.enter")
         clearEditorFocus()
         textEditorBounds = null
         editorToolbarBounds = null
         discardTarget = null
-        draft = null
+        writeTracedDraft("close", null)
+        traceDismissal("close.exit")
     }
 
     fun openRegionName(id: String, name: String) {
@@ -676,7 +694,12 @@ fun CanvasScreen(
     }
 
     fun cancelDraft() {
-        if (saveState.value != BoardSaveState.Idle || pendingDraftAcknowledgement != null) return
+        traceDismissal("cancel.enter")
+        if (saveState.value != BoardSaveState.Idle || pendingDraftAcknowledgement != null) {
+            traceDismissal("cancel.rejected")
+            return
+        }
+        traceDismissal("cancel.accepted")
         closeDraft()
     }
 
@@ -1068,7 +1091,7 @@ fun CanvasScreen(
             selectedIds = latestSelectedIds.value - element.id
         } else if (element != null && latestSelected.value == element.id) {
             cancelBlankTap()
-            draft = Draft(element.id, element.x, element.y, element.text, element.kind, element.color)
+            writeTracedDraft("existingTap", Draft(element.id, element.x, element.y, element.text, element.kind, element.color))
         } else if (element != null) { cancelBlankTap(); selectedId = element.id; selectedIds = setOf(element.id) }
     }
 
@@ -2129,7 +2152,11 @@ fun CanvasScreen(
             val screenY = if (imeBottom > 0) worldScreenY.coerceIn(0f, maxY) else worldScreenY
             BasicTextField(
                 value = current.text,
-                onValueChange = { if (!latestExternalBlock.value()) draft = current.copy(text = it) },
+                onValueChange = {
+                    traceDismissal("valueChange.enter", current.sessionId)
+                    if (!latestExternalBlock.value()) writeTracedDraft("valueChange", current.copy(text = it))
+                    else traceDismissal("valueChange.externalRejected", current.sessionId)
+                },
                 readOnly = saveBlocked(),
                 textStyle = TextStyle(
                     color = if (current.color == TextColor.INK) ink else vermilion,
@@ -2518,7 +2545,7 @@ fun CanvasScreen(
                         EditorOption(stringResource(R.string.edit), false, false, enabled = !saveBlocked()) {
                             if (saveBlocked()) return@EditorOption
                             val element = board.elements.first { it.id == id }
-                            draft = Draft(id, element.x, element.y, element.text, element.kind, element.color)
+                            writeTracedDraft("existingMenu", Draft(id, element.x, element.y, element.text, element.kind, element.color))
                             menuTarget = null
                         }
                     }
@@ -2571,17 +2598,18 @@ fun CanvasScreen(
             ) {
                 val editingEnabled = !saveBlocked()
                 EditorOption(stringResource(R.string.title_kind), draft!!.kind == TextKind.TITLE, false, enabled = editingEnabled) {
-                    if (!saveBlocked()) draft = draft?.copy(kind = TextKind.TITLE)
+                    if (!saveBlocked()) writeTracedDraft("title", draft?.copy(kind = TextKind.TITLE))
                 }
                 EditorOption(stringResource(R.string.body_kind), draft!!.kind == TextKind.BODY, false, enabled = editingEnabled) {
-                    if (!saveBlocked()) draft = draft?.copy(kind = TextKind.BODY)
+                    if (!saveBlocked()) writeTracedDraft("body", draft?.copy(kind = TextKind.BODY))
                 }
                 EditorOption(stringResource(R.string.vermilion_short), draft!!.color == TextColor.VERMILION, true, enabled = editingEnabled) {
-                    if (!saveBlocked()) draft = draft?.copy(
+                    if (!saveBlocked()) writeTracedDraft("color", draft?.copy(
                         color = if (draft?.color == TextColor.VERMILION) TextColor.INK else TextColor.VERMILION,
-                    )
+                    ))
                 }
                 EditorOption(stringResource(R.string.cancel_short), false, false, enabled = editingEnabled) {
+                    traceDismissal("cancel.toolbarCallback")
                     cancelDraft()
                 }
                 EditorOption(stringResource(if (saveFailed) R.string.retry else R.string.done), false, true, enabled = !saving) { commitDraft() }
