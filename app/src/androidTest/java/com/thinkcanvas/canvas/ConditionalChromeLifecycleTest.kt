@@ -784,56 +784,71 @@ class ConditionalChromeLifecycleTest {
             }
             error("操作可能なアクセシビリティ要素が見つかりません: $label")
         }
-        repeat(40) {
+        var matchedNode: AccessibilityNodeInfo? = null
+        composeRule.waitUntil(
+            conditionDescription = "操作可能なアクセシビリティ要素が見つかりません: $label",
+            timeoutMillis = 4_000L,
+        ) {
             composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
-            findActionable(instrumentation.uiAutomation.rootInActiveWindow, label)?.let { return it }
-            Thread.sleep(100)
+            matchedNode = findActionable(instrumentation.uiAutomation.rootInActiveWindow, label)
+            matchedNode != null
         }
-        error("操作可能なアクセシビリティ要素が見つかりません: $label")
+        return checkNotNull(matchedNode)
     }
 
     private fun waitForAnyActionable(
         instrumentation: android.app.Instrumentation,
         labels: List<String>,
     ): AccessibilityNodeInfo {
-        repeat(40) {
+        var matchedNode: AccessibilityNodeInfo? = null
+        composeRule.waitUntil(
+            conditionDescription = "操作可能なアクセシビリティ要素が見つかりません: ${labels.joinToString()}",
+            timeoutMillis = 4_000L,
+        ) {
             composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
             val root = instrumentation.uiAutomation.rootInActiveWindow
-            for (label in labels) findActionable(root, label)?.let { return it }
-            Thread.sleep(100)
+            matchedNode = labels.firstNotNullOfOrNull { label -> findActionable(root, label) }
+            matchedNode != null
         }
-        error("操作可能なアクセシビリティ要素が見つかりません: ${labels.joinToString()}")
+        return checkNotNull(matchedNode)
     }
 
     private fun waitForRegionState(
         instrumentation: android.app.Instrumentation,
         expected: String,
     ): String {
-        repeat(40) {
+        var matchedState: String? = null
+        composeRule.waitUntil(
+            conditionDescription = "囲みの stateDescription が $expected になりません",
+            timeoutMillis = 4_000L,
+        ) {
             composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
-            val state = findActionable(instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster")
+            matchedState = findActionable(instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster")
                 ?.stateDescription?.toString()
-            if (state == expected) return state
-            Thread.sleep(100)
+            matchedState == expected
         }
-        error("囲みの stateDescription が $expected になりません")
+        return checkNotNull(matchedState)
     }
 
     private fun waitForRegionRenameAction(
         instrumentation: android.app.Instrumentation,
     ): Pair<AccessibilityNodeInfo, AccessibilityNodeInfo.AccessibilityAction> {
-        repeat(40) {
+        var matchedAction: Pair<AccessibilityNodeInfo, AccessibilityNodeInfo.AccessibilityAction>? = null
+        composeRule.waitUntil(
+            conditionDescription = "囲み: Cluster の名前編集 accessibility action が見つかりません",
+            timeoutMillis = 4_000L,
+        ) {
             composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
             val region = findActionable(instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster")
             val action = region?.actionList?.firstOrNull { it.label?.toString() == "囲みの名前を編集" }
-            if (region != null && action != null) return region to action
-            Thread.sleep(100)
+            matchedAction = if (region != null && action != null) region to action else null
+            matchedAction != null
         }
-        error("囲み: Cluster の名前編集 accessibility action が見つかりません")
+        return checkNotNull(matchedAction)
     }
 
     private fun clickActionable(instrumentation: android.app.Instrumentation, label: String) {
