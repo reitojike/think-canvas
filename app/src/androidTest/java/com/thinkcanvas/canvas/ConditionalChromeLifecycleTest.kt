@@ -37,9 +37,33 @@ import org.junit.runner.RunWith
 class ConditionalChromeLifecycleTest {
     @get:Rule val composeRule = createEmptyComposeRule()
 
+    private var diagnosticCase: String? = null
+    private var diagnosticLabel: String? = null
+    private var diagnosticExactLabels = 0
+    private var diagnosticOwnClicks = 0
+
+    private fun diagnosticSurface(phase: String, root: AccessibilityNodeInfo?, detail: String) {
+        val case = diagnosticCase ?: return
+        runCatching {
+            val window = root?.window
+            try {
+                android.util.Log.i("TC123DIAG", org.json.JSONObject()
+                    .put("case", "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#$case")
+                    .put("phase", phase).put("monoNs", android.os.SystemClock.elapsedRealtimeNanos())
+                    .put("rootPackage", root?.packageName ?: org.json.JSONObject.NULL)
+                    .put("rootWindowId", root?.windowId ?: org.json.JSONObject.NULL)
+                    .put("windowFocused", window?.isFocused ?: org.json.JSONObject.NULL)
+                    .put("windowActive", window?.isActive ?: org.json.JSONObject.NULL)
+                    .put("detail", detail).toString())
+            } finally { window?.recycle() }
+        }
+    }
+
     @PrSmoke
     @Test
     fun regionNameTransitionRemovesFormerSelectionSharePointUntilReselected() {
+        diagnosticCase = "regionNameTransitionRemovesFormerSelectionSharePointUntilReselected"
+        diagnosticLabel = "囲み: Cluster"
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         seedBoard(context)
@@ -141,6 +165,8 @@ class ConditionalChromeLifecycleTest {
     @PrSmoke
     @Test
     fun collapsedAndExpandedToolFormerCentersAdmitPersistedInkAndAllowReentry() {
+        diagnosticCase = "collapsedAndExpandedToolFormerCentersAdmitPersistedInkAndAllowReentry"
+        diagnosticLabel = "図形ツールを開く"
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         seedBoard(context)
@@ -297,6 +323,10 @@ class ConditionalChromeLifecycleTest {
     private fun findActionable(node: AccessibilityNodeInfo?, label: String): AccessibilityNodeInfo? {
         if (node == null) return null
         val ownsClick = node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }
+        if (diagnosticLabel == label && node.contentDescription?.toString() == label) {
+            diagnosticExactLabels++
+            if (ownsClick) diagnosticOwnClicks++
+        }
         if (node.contentDescription?.toString() == label &&
             (label != "囲み: Cluster" || ownsClick)) {
             assertPlatformControl(node, label)
@@ -333,13 +363,39 @@ class ConditionalChromeLifecycleTest {
         instrumentation: android.app.Instrumentation,
         label: String,
     ): AccessibilityNodeInfo {
-        repeat(40) {
-            composeRule.waitForIdle()
-            instrumentation.waitForIdleSync()
-            findActionable(instrumentation.uiAutomation.rootInActiveWindow, label)?.let { return it }
-            Thread.sleep(100)
+        val diagnostic = diagnosticLabel == label
+        var lastRoot: AccessibilityNodeInfo? = null
+        var lastProbeNs = 0L
+        try {
+            repeat(40) { attempt ->
+                composeRule.waitForIdle()
+                instrumentation.waitForIdleSync()
+                val root = instrumentation.uiAutomation.rootInActiveWindow
+                if (diagnostic) {
+                    lastRoot = root
+                    lastProbeNs = android.os.SystemClock.elapsedRealtimeNanos()
+                    diagnosticExactLabels = 0
+                    diagnosticOwnClicks = 0
+                }
+                findActionable(root, label)?.let {
+                    if (diagnostic) {
+                        diagnosticSurface("first_wait_pass", root,
+                            "label=$label attempt=${attempt + 1} probeNs=$lastProbeNs exactVisited=$diagnosticExactLabels ownClicksVisited=$diagnosticOwnClicks")
+                        diagnosticLabel = null
+                    }
+                    return it
+                }
+                Thread.sleep(100)
+            }
+            error("操作可能なアクセシビリティ要素が見つかりません: $label")
+        } catch (failure: Throwable) {
+            if (diagnostic) {
+                diagnosticSurface("first_wait_failure", lastRoot,
+                    "label=$label lastProbeNs=$lastProbeNs exactVisited=$diagnosticExactLabels ownClicksVisited=$diagnosticOwnClicks failure=${failure.javaClass.simpleName}")
+                diagnosticLabel = null
+            }
+            throw failure
         }
-        error("操作可能なアクセシビリティ要素が見つかりません: $label")
     }
 
     private fun waitForAnyActionable(

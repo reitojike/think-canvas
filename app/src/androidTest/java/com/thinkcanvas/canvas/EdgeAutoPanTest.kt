@@ -64,10 +64,86 @@ class EdgeAutoPanTest {
         to = ArrowEnd.Free(1000f, 1550f))
 
     private inner class Harness(val scenario: ActivityScenario<MainActivity>,
-                               val sessions: BoardSessionViewModel, val database: CanvasDatabase) {
+                               val sessions: BoardSessionViewModel, val database: CanvasDatabase,
+                               val diagnosticCase: String? = null) {
         val board get() = sessions.stateFor(1L, BoardSnapshot())
         val saves = AtomicInteger()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
+        private var diagnosticWindow: org.json.JSONObject? = null
+        private var diagnosticInput: org.json.JSONObject? = null
+        private var diagnosticValues = "not_evaluated"
+        private var diagnosticSaveCount: Int? = null
+        private var diagnosticIdle: Boolean? = null
+        private var diagnosticSnapshotMatches: Boolean? = null
+        private var diagnosticInk: Boolean? = null
+        private var diagnosticPredicateNs = 0L
+
+        // 既存の origin 取得 callback 内だけで採取。同期待ちや入力を追加しない。
+        private fun recordInputWindow(activity: MainActivity, action: Int) {
+            if (diagnosticCase == null || action != MotionEvent.ACTION_DOWN) return
+            runCatching {
+                val decor = activity.window.decorView
+                val config = activity.resources.configuration
+                diagnosticWindow = org.json.JSONObject()
+                    .put("monoNs", SystemClock.elapsedRealtimeNanos())
+                    .put("activityIdentity", System.identityHashCode(activity))
+                    .put("lifecycle", activity.lifecycle.currentState.name)
+                    .put("focused", decor.hasWindowFocus()).put("attached", decor.isAttachedToWindow)
+                    .put("visibility", decor.visibility).put("fontScale", config.fontScale)
+                    .put("densityDpi", config.densityDpi).put("widthDp", config.screenWidthDp)
+                    .put("heightDp", config.screenHeightDp)
+            }
+        }
+
+        private fun recordInjectedDown(event: MotionEvent, accepted: Boolean) {
+            if (diagnosticCase == null || event.actionMasked != MotionEvent.ACTION_DOWN) return
+            runCatching {
+                diagnosticInput = org.json.JSONObject().put("monoNs", SystemClock.elapsedRealtimeNanos())
+                    .put("action", event.actionMasked).put("downTime", event.downTime)
+                    .put("eventTime", event.eventTime).put("pointerCount", event.pointerCount)
+                    .put("x", event.x).put("y", event.y).put("accepted", accepted)
+            }
+        }
+
+        fun diagnosticSurface(phase: String, failure: Throwable? = null) {
+            val case = diagnosticCase ?: return
+            runCatching {
+                // assertion/wait の決着後だけ追加query。取得時刻は入力/条件評価とは区別する。
+                val root = instrumentation.uiAutomation.rootInActiveWindow
+                val window = root?.window
+                try {
+                    android.util.Log.i("TC123DIAG", org.json.JSONObject()
+                        .put("case", "com.thinkcanvas.canvas.EdgeAutoPanTest#$case")
+                        .put("phase", phase).put("monoNs", SystemClock.elapsedRealtimeNanos())
+                        .put("rootPackage", root?.packageName ?: org.json.JSONObject.NULL)
+                        .put("rootWindowId", root?.windowId ?: org.json.JSONObject.NULL)
+                        .put("windowFocused", window?.isFocused ?: org.json.JSONObject.NULL)
+                        .put("windowActive", window?.isActive ?: org.json.JSONObject.NULL)
+                        .put("inputWindow", diagnosticWindow ?: org.json.JSONObject.NULL)
+                        .put("lastDown", diagnosticInput ?: org.json.JSONObject.NULL)
+                        .put("mainClockMs", composeRule.mainClock.currentTime)
+                        .put("autoAdvance", composeRule.mainClock.autoAdvance)
+                        .put("values", diagnosticValues).put("predicateNs", diagnosticPredicateNs)
+                        .put("saveCount", diagnosticSaveCount ?: org.json.JSONObject.NULL)
+                        .put("idle", diagnosticIdle ?: org.json.JSONObject.NULL)
+                        .put("snapshotMatches", diagnosticSnapshotMatches ?: org.json.JSONObject.NULL)
+                        .put("inkNonEmpty", diagnosticInk ?: org.json.JSONObject.NULL)
+                        .put("failure", failure?.javaClass?.simpleName ?: org.json.JSONObject.NULL).toString())
+                } finally { window?.recycle() }
+            }
+        }
+
+        fun recordStylusSaveCount(count: Int) {
+            if (diagnosticCase == null) return
+            diagnosticSaveCount = count
+            diagnosticInk = null
+            diagnosticValues = "stylus_wait"
+            diagnosticPredicateNs = SystemClock.elapsedRealtimeNanos()
+        }
+
+        fun recordStylusInk(nonEmpty: Boolean) {
+            if (diagnosticCase != null) diagnosticInk = nonEmpty
+        }
         val canvas get() = composeRule.onNodeWithContentDescription("キャンバス")
             .fetchSemanticsNode().boundsInWindow
         fun bounds(label: String) = composeRule.onNodeWithContentDescription(label)
@@ -99,7 +175,10 @@ class EdgeAutoPanTest {
                       ids: List<Int> = positions.indices.toList()) {
                 point = positions.first()
                 val origin = IntArray(2)
-                if (activity == null) scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
+                if (activity == null) scenario.onActivity {
+                    it.window.decorView.getLocationOnScreen(origin)
+                    recordInputWindow(it, action)
+                }
                 val properties = Array(positions.size) { index -> MotionEvent.PointerProperties().apply {
                     id = ids[index]
                     toolType = if (stylus && index == positions.lastIndex) MotionEvent.TOOL_TYPE_STYLUS
@@ -116,7 +195,9 @@ class EdgeAutoPanTest {
                     InputDevice.SOURCE_TOUCHSCREEN, flags)
                 try {
                     if (activity == null) {
-                        assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
+                        val accepted = instrumentation.uiAutomation.injectInputEvent(event, true)
+                        recordInjectedDown(event, accepted)
+                        assertTrue(accepted)
                         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) ended = true
                     } else activity.dispatchTouchEvent(event)
                 } finally { event.recycle() }
@@ -162,6 +243,9 @@ class EdgeAutoPanTest {
             var deliveredDown: Offset? = null
             var deliveredMove: Offset? = null
             var deliveredUp = false
+            var diagnosticRawEvents = 0
+            var diagnosticMatchedEvents = 0
+            var diagnosticLastEvent = "none"
             lateinit var window: Window
             lateinit var original: Window.Callback
             lateinit var observer: Window.Callback
@@ -170,6 +254,11 @@ class EdgeAutoPanTest {
                 original = window.callback
                 observer = object : Window.Callback by original {
                     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                        if (diagnosticCase != null) {
+                            diagnosticRawEvents++
+                            diagnosticLastEvent = "action=${event.actionMasked} downTime=${event.downTime} pointers=${event.pointerCount}"
+                            if (event.downTime == gesture.downTime && event.pointerCount == 1) diagnosticMatchedEvents++
+                        }
                         if (event.downTime == gesture.downTime && event.pointerCount == 1) {
                             when (event.actionMasked) {
                                 MotionEvent.ACTION_DOWN -> deliveredDown = Offset(event.x, event.y)
@@ -193,6 +282,10 @@ class EdgeAutoPanTest {
                 finally { composeRule.runOnUiThread { if (window.callback === observer) window.callback = original } }
             }
             composeRule.waitForIdle()
+            if (diagnosticCase != null) {
+                diagnosticValues = "nextPan expectedDownTime=${gesture.downTime} rawEvents=$diagnosticRawEvents matchedEvents=$diagnosticMatchedEvents lastEvent=[$diagnosticLastEvent] down=$deliveredDown move=$deliveredMove up=$deliveredUp"
+                diagnosticPredicateNs = SystemClock.elapsedRealtimeNanos()
+            }
             assertNotNull("$case native DOWN", deliveredDown)
             assertNotNull("$case native MOVE", deliveredMove)
             assertTrue("$case native UP", deliveredUp)
@@ -215,8 +308,17 @@ class EdgeAutoPanTest {
 
         fun waitSaved() {
             composeRule.waitUntil(10_000) {
-                saves.get() == 1 && sessions.saveStateFor(1L, defaults).value == BoardSaveState.Idle &&
-                    savedSnapshot() == board.snapshot()
+                saves.get().also { if (diagnosticCase != null) {
+                    diagnosticSaveCount = it
+                    diagnosticIdle = null
+                    diagnosticSnapshotMatches = null
+                    diagnosticValues = "waitSaved"
+                    diagnosticPredicateNs = SystemClock.elapsedRealtimeNanos()
+                } } == 1 &&
+                    (sessions.saveStateFor(1L, defaults).value == BoardSaveState.Idle)
+                        .also { if (diagnosticCase != null) diagnosticIdle = it } &&
+                    (savedSnapshot() == board.snapshot())
+                        .also { if (diagnosticCase != null) diagnosticSnapshotMatches = it }
             }
         }
         fun assertOneHistory(before: BoardSnapshot, after: BoardSnapshot) {
@@ -249,11 +351,18 @@ class EdgeAutoPanTest {
         }
         fun send(action: Int, point: Offset, downTime: Long) {
             val origin = IntArray(2)
-            scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
+            scenario.onActivity {
+                it.window.decorView.getLocationOnScreen(origin)
+                recordInputWindow(it, action)
+            }
             val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action,
                 point.x + origin[0], point.y + origin[1], 0)
             event.source = InputDevice.SOURCE_TOUCHSCREEN
-            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
+            try {
+                val accepted = instrumentation.uiAutomation.injectInputEvent(event, true)
+                recordInjectedDown(event, accepted)
+                assertTrue(accepted)
+            }
             finally { event.recycle() }
         }
         fun stationaryDrag(cancel: Boolean = false) {
@@ -278,6 +387,10 @@ class EdgeAutoPanTest {
                 frames(90)
                 val targetAfter = position(moving.text)
                 val fixedAfter = position(fixed.text)
+                if (diagnosticCase != null) {
+                    diagnosticValues = "stationary beforeX=${fixedBefore.x} afterX=${fixedAfter.x} thresholdX=${fixedBefore.x - 100f} targetBefore=$targetBefore targetAfter=$targetAfter clockMs=${composeRule.mainClock.currentTime}"
+                    diagnosticPredicateNs = SystemClock.elapsedRealtimeNanos()
+                }
                 assertTrue("静止した指の保持中にもcameraが進む", fixedAfter.x < fixedBefore.x - 100f)
                 assertEquals("finger offset x", targetBefore.x, targetAfter.x, 3f)
                 assertEquals("finger offset y", targetBefore.y, targetAfter.y, 3f)
@@ -336,6 +449,7 @@ class EdgeAutoPanTest {
     }
 
     private fun withBoard(snapshot: BoardSnapshot = defaults, profile: EdgeAutoPanProfile? = null,
+                          diagnosticCase: String? = null,
                           block: Harness.() -> Unit) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val seed = CanvasDatabase.open(context)
@@ -350,13 +464,15 @@ class EdgeAutoPanTest {
         showBoardOneAtStartup(context)
         val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
         val database = CanvasDatabase.open(context)
+        var diagnosticHarness: Harness? = null
         try {
             composeRule.waitUntil(10_000) {
                 composeRule.onAllNodesWithContentDescription("キャンバス").fetchSemanticsNodes().isNotEmpty()
             }
             lateinit var sessions: BoardSessionViewModel
             scenario.onActivity { sessions = ViewModelProvider(it)[BoardSessionViewModel::class.java] }
-            val harness = Harness(scenario, sessions, database)
+            val harness = Harness(scenario, sessions, database, diagnosticCase)
+            if (diagnosticCase != null) diagnosticHarness = harness
             if (profile != null) {
                 scenario.onActivity { activity -> activity.setContent {
                     MaterialTheme {
@@ -372,6 +488,10 @@ class EdgeAutoPanTest {
                 CanvasStore.get(context).save(id, snapshot)
             }
             harness.block()
+            diagnosticHarness?.diagnosticSurface("completed")
+        } catch (failure: Throwable) {
+            diagnosticHarness?.diagnosticSurface("failure", failure)
+            throw failure
         } finally {
             composeRule.mainClock.autoAdvance = true
             scenario.close()
@@ -380,12 +500,15 @@ class EdgeAutoPanTest {
     }
 
     @PrSmoke
-    @Test fun stationaryPointerPreservesOffsetStopsInCenterAndCommitsOnce() = withBoard { stationaryDrag() }
+    @Test fun stationaryPointerPreservesOffsetStopsInCenterAndCommitsOnce() = withBoard(
+        diagnosticCase = "stationaryPointerPreservesOffsetStopsInCenterAndCommitsOnce") { stationaryDrag() }
     @PrSmoke
-    @Test fun nativeCancelDiscardsPreviewWithoutSavingOrHistory() = withBoard { stationaryDrag(cancel = true) }
+    @Test fun nativeCancelDiscardsPreviewWithoutSavingOrHistory() = withBoard(
+        diagnosticCase = "nativeCancelDiscardsPreviewWithoutSavingOrHistory") { stationaryDrag(cancel = true) }
 
     @PrSmoke
-    @Test fun backRejectsQueuedFrameAndSameTurnStaleMoveAndUp() = withBoard {
+    @Test fun backRejectsQueuedFrameAndSameTurnStaleMoveAndUp() = withBoard(
+        diagnosticCase = "backRejectsQueuedFrameAndSameTurnStaleMoveAndUp") {
         val before = board.snapshot()
         val (start, edge) = startAndEdge()
         drag(start, edge) { gesture ->
@@ -427,7 +550,8 @@ class EdgeAutoPanTest {
     }
 
     @PrSmoke
-    @Test fun stylusTakeoverCancelsMoveAndCommitsOnlyTheStroke() = withBoard {
+    @Test fun stylusTakeoverCancelsMoveAndCommitsOnlyTheStroke() = withBoard(
+        diagnosticCase = "stylusTakeoverCancelsMoveAndCommitsOnlyTheStroke") {
         val before = board.snapshot()
         val (start, edge) = startAndEdge()
         // #115: 所有するstylusのFLAG_CANCELED付きPOINTER_UPはstrokeを確定しない。残った指のUPも内容を確定しない。
@@ -457,7 +581,10 @@ class EdgeAutoPanTest {
             gesture.send(MotionEvent.ACTION_UP)
             frames(3)
         }
-        composeRule.waitUntil(10_000) { saves.get() == 1 && savedSnapshot().ink.isNotEmpty() }
+        composeRule.waitUntil(10_000) {
+            saves.get().also { recordStylusSaveCount(it) } == 1 &&
+                savedSnapshot().ink.isNotEmpty().also { recordStylusInk(it) }
+        }
         assertEquals(before, board.snapshot().copy(ink = emptyList()))
         assertEquals(1, board.ink.size)
         assertEquals(InkInputType.STYLUS, board.ink.single().strokes.single().inputType)
@@ -866,7 +993,8 @@ class EdgeAutoPanTest {
             finally { composeRule.mainClock.autoAdvance = true }
             assertUnchanged(before)
         }
-        withBoard(defaults.copy(shapes = listOf(rectangle))) {
+        withBoard(defaults.copy(shapes = listOf(rectangle)),
+            diagnosticCase = "tapAndSlopJitterDoNotStartAutoPan") {
             select("四角: Movable")
             val before = board.snapshot()
             val start = bounds("移動").center
