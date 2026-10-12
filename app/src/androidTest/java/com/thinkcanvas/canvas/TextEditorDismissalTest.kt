@@ -705,7 +705,11 @@ class TextEditorDismissalTest {
         val started = clock.currentTime
         try {
             clock.autoAdvance = false
-            nativeBlankSingle(location)
+            composeRule.onNodeWithContentDescription("キャンバス").performTouchInput {
+                down(location - origin)
+                advanceEventTime(40L)
+                up()
+            }
             repeat(3) { clock.advanceTimeByFrame() }
             assertTrue(clock.currentTime - started < configuration.doubleTapTimeoutMillis)
             scenario.onActivity { assertEquals(null, editor.draft.value) }
