@@ -591,9 +591,15 @@ function Verify-StaticChecks {
     }
     $allNames = Get-ExpectedTestNames
     $receiptPath = Join-Path $diagnostics 'static-full-receipt.json'
-    $pythonExe = @(Get-Command python -CommandType Application -ErrorAction Stop)[0].Source
-    $validation = Invoke-Child $pythonExe @('-B', (Join-Path $worktree 'scripts/check-android-test-suites.py'),
-        'validate', '--suite', 'full', '--receipt-out', $receiptPath) 'static-full-receipt'
+    $pythonCommands = @(Get-Command python,py,python3 -CommandType Application -ErrorAction SilentlyContinue)
+    Check ($pythonCommands.Count -gt 0) 'PYTHON_AVAILABLE'
+    # Prefer an installed interpreter/launcher over a Windows Store command alias.
+    $pythonCommand = $pythonCommands | Where-Object { $_.Source -notmatch '\\Microsoft\\WindowsApps\\' } | Select-Object -First 1
+    if (-not $pythonCommand) { $pythonCommand = $pythonCommands[0] }
+    $pythonArgs = @('-B', (Join-Path $worktree 'scripts/check-android-test-suites.py'),
+        'validate', '--suite', 'full', '--receipt-out', $receiptPath)
+    if ($pythonCommand.Name -ieq 'py.exe') { $pythonArgs = @('-3') + $pythonArgs }
+    $validation = Invoke-Child $pythonCommand.Source $pythonArgs 'static-full-receipt'
     Check ($validation.exitCode -eq 0) 'FULL_RECEIPT_VALID'
     $receipt = [IO.File]::ReadAllText($receiptPath) | ConvertFrom-Json
     Check ($receipt.lane -ceq 'full' -and (Test-StaticCensus $allNames $receipt.expected $receipt.expected_count)) 'SOURCE_CENSUS_FULL_RECEIPT'
