@@ -57,10 +57,10 @@ class ConditionalChromeLifecycleTest {
         val records = mutableListOf<String>()
         for (sinkThrows in listOf(false, true)) {
             val actual = assertThrows(AssertionError::class.java) {
-                assertControlBounds(label, descriptionBounds, controlBounds, 2) { record ->
+                assertControlBounds(label, descriptionBounds, controlBounds, 2, record = { record ->
                     records += record
                     if (sinkThrows) throw AssertionError("記録 sink の失敗")
-                }
+                })
             }
             assertEquals(original.message, actual.message)
         }
@@ -151,24 +151,37 @@ class ConditionalChromeLifecycleTest {
         assertEquals(2, sameRefreshes)
         assertEquals(4, sameReads[0])
         val controlRect = Rect(912, 1893, 1038, 2019) // 保存済み820px不一致の値だけを使う負例。
+        val descriptionBefore = Rect(912, 1576, 1038, 1702)
+        val controlBefore = Rect(912, 1123, 1038, 1249)
         val original = assertThrows(AssertionError::class.java) {
             assertEquals("$label の description と control は同じ bounds", rect, controlRect)
         }
         for (sinkThrows in listOf(false, true)) {
             val boundsReads = intArrayOf(0)
-            val control = platformNodeFixture(null, controlRect, true, null, boundsReads)
-            val description = platformNodeFixture(label, rect, false, control, boundsReads)
+            val descriptionCurrent = Rect(descriptionBefore)
+            val controlCurrent = Rect(controlBefore)
+            val control = platformNodeFixture(null, controlCurrent, true, null, boundsReads)
+            val description = platformNodeFixture(label, descriptionCurrent, false, control, boundsReads)
             var descriptionRefreshes = 0
             var controlRefreshes = 0
-            var records = 0
+            val records = mutableListOf<String>()
             var actions = 0
             val actual = assertThrows(AssertionError::class.java) {
                 clickNode(instrumentation, description, label,
                     refresh = {
-                        if (it === description) descriptionRefreshes++ else { assertTrue(it === control); controlRefreshes++ }
+                        if (it === description) {
+                            descriptionRefreshes++
+                            descriptionCurrent.set(rect)
+                            it.setBoundsInScreen(rect)
+                        } else {
+                            assertTrue(it === control)
+                            controlRefreshes++
+                            controlCurrent.set(controlRect)
+                            it.setBoundsInScreen(controlRect)
+                        }
                         true
                     }, record = {
-                        records++
+                        records += it
                         if (sinkThrows) throw AssertionError("記録 sink の失敗")
                     }, click = { actions++ })
             }
@@ -176,7 +189,11 @@ class ConditionalChromeLifecycleTest {
             assertEquals(1, descriptionRefreshes)
             assertEquals(1, controlRefreshes)
             assertEquals(2, boundsReads[0])
-            assertEquals(1, records)
+            assertEquals(listOf(
+                "label=$label parentHops=1 description=$rect control=$controlRect" +
+                    " descriptionBefore=$descriptionBefore descriptionAfter=$rect" +
+                    " controlBefore=$controlBefore controlAfter=$controlRect",
+            ), records)
             assertEquals(0, actions)
         }
     }
@@ -188,6 +205,7 @@ class ConditionalChromeLifecycleTest {
         override fun getParent(): AccessibilityNodeInfo? = parent
         override fun getBoundsInScreen(outBounds: Rect) { boundsReads[0]++; outBounds.set(rect) }
     }.apply {
+        setBoundsInScreen(rect)
         contentDescription = label
         isEnabled = true
         isVisibleToUser = true
@@ -895,6 +913,8 @@ class ConditionalChromeLifecycleTest {
         return null
     }
 
+    private data class RefreshBounds(val before: Rect, val after: Rect)
+
     // Layer A: exact description と同じ control の platform exposure / geometry を確認する。
     private fun assertPlatformControl(
         description: AccessibilityNodeInfo,
@@ -903,7 +923,9 @@ class ConditionalChromeLifecycleTest {
         record: (String) -> Unit = { Log.e("ConditionalGeometry", it) },
     ): AccessibilityNodeInfo {
         // 一度とはこの Layer A 検証ごと。取得時と clickNode の直前で各々再検証する。
-        if (label == "図形ツールを開く") refreshLauncherInfo(description, label, "description", refresh)
+        val descriptionRefreshBounds = if (label == "図形ツールを開く") {
+            refreshLauncherInfo(description, label, "description", refresh)
+        } else null
         assertEquals(label, description.contentDescription?.toString())
         assertTrue("$label の description は有効", description.isEnabled)
         assertTrue("$label の description は利用者に見える", description.isVisibleToUser)
@@ -914,9 +936,9 @@ class ConditionalChromeLifecycleTest {
             parentHops++
         }
         val actionable = checkNotNull(node) { "$label に対応する clickable node がありません" }
-        if (label == "図形ツールを開く" && actionable !== description) {
+        val controlRefreshBounds = if (label == "図形ツールを開く" && actionable !== description) {
             refreshLauncherInfo(actionable, label, "control", refresh)
-        }
+        } else null
         assertTrue("$label の control は有効", actionable.isEnabled)
         assertTrue("$label の control は利用者に見える", actionable.isVisibleToUser)
         assertTrue("$label の control は clickable", actionable.isClickable)
@@ -924,7 +946,8 @@ class ConditionalChromeLifecycleTest {
             actionable.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
         val descriptionBounds = bounds(description)
         val controlBounds = bounds(actionable)
-        assertControlBounds(label, descriptionBounds, controlBounds, parentHops, record)
+        assertControlBounds(label, descriptionBounds, controlBounds, parentHops, record,
+            descriptionRefreshBounds, controlRefreshBounds)
         return actionable
     }
 
@@ -933,7 +956,7 @@ class ConditionalChromeLifecycleTest {
         label: String,
         role: String,
         refresh: (AccessibilityNodeInfo) -> Boolean,
-    ) {
+    ): RefreshBounds? {
         val before = AccessibilityNodeInfo(node)
         assertTrue("$label の $role を一度 refresh できる", refresh(node))
         val after = AccessibilityNodeInfo(node)
@@ -946,6 +969,8 @@ class ConditionalChromeLifecycleTest {
         assertEquals("$label の $role ACTION_CLICK は変わらない",
             before.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK },
             after.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
+        // 既存コピーだけを読む。診断値の取得失敗は元の geometry oracle を妨げない。
+        return try { RefreshBounds(bounds(before), bounds(after)) } catch (_: Throwable) { null }
     }
 
     private fun assertControlBounds(
@@ -954,11 +979,19 @@ class ConditionalChromeLifecycleTest {
         controlBounds: Rect,
         parentHops: Int,
         record: (String) -> Unit = { Log.e("ConditionalGeometry", it) },
+        descriptionRefreshBounds: RefreshBounds? = null,
+        controlRefreshBounds: RefreshBounds? = null,
     ) {
         if (label == "図形ツールを開く" && descriptionBounds != controlBounds) {
             // 既取得値だけを記録する。記録 failure は native oracle の failure を置き換えない。
             try {
-                record("label=$label parentHops=$parentHops description=$descriptionBounds control=$controlBounds")
+                val refreshRecord = if (descriptionRefreshBounds != null && controlRefreshBounds != null) {
+                    " descriptionBefore=${descriptionRefreshBounds.before}" +
+                        " descriptionAfter=${descriptionRefreshBounds.after}" +
+                        " controlBefore=${controlRefreshBounds.before}" +
+                        " controlAfter=${controlRefreshBounds.after}"
+                } else ""
+                record("label=$label parentHops=$parentHops description=$descriptionBounds control=$controlBounds$refreshRecord")
             } catch (_: Throwable) {
                 // 元の exact assertion は guard の外で必ず実行する。
             }
