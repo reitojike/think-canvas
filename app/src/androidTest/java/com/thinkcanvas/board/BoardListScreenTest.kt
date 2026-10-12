@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
 import android.os.SystemClock
+import android.util.Log
 import android.view.MotionEvent
 import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
@@ -19,6 +20,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
@@ -43,6 +45,8 @@ import com.thinkcanvas.BoardListAction
 import com.thinkcanvas.BoardListActionOutcome
 import com.thinkcanvas.BoardListActionState
 import com.thinkcanvas.BoardListActionViewModel
+import com.thinkcanvas.image.ImageImportViewModel
+import com.thinkcanvas.share.ShareImportViewModel
 import com.thinkcanvas.MainActivity
 import com.thinkcanvas.canvas.BoardSnapshot
 import com.thinkcanvas.canvas.BoardState
@@ -281,7 +285,46 @@ class BoardListScreenTest {
             .putBoolean("guideDismissed", false).commit())
         val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
         try {
-            composeRule.onNodeWithText("基本の操作").assertIsDisplayed()
+            try {
+                composeRule.onNodeWithText("基本の操作").assertIsDisplayed()
+            } catch (failure: AssertionError) {
+                // MUST_NOT_MERGE: all observation happens after the unchanged original assertion fails.
+                fun observe(stage: String) {
+                    val titles = composeRule.onAllNodesWithText("基本の操作")
+                        .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                    val roots = composeRule.onAllNodes(isRoot())
+                        .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                    fun textCount(label: String) = composeRule.onAllNodesWithText(label)
+                        .fetchSemanticsNodes(atLeastOneRootRequired = false).size
+                    fun descriptionCount(label: String) = composeRule.onAllNodesWithContentDescription(label)
+                        .fetchSemanticsNodes(atLeastOneRootRequired = false).size
+                    val settings = context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
+                    var actionState = "unavailable"
+                    var sharePhase = "unavailable"
+                    var imagePhase = "unavailable"
+                    scenario.onActivity {
+                        actionState = listActions(it).state.value.javaClass.simpleName
+                        sharePhase = ViewModelProvider(it)[ShareImportViewModel::class.java].state.phase.name
+                        imagePhase = ViewModelProvider(it)[ImageImportViewModel::class.java].state.phase.name
+                    }
+                    Log.i("GuideStartupDiag", "stage=$stage uptimeMs=${SystemClock.uptimeMillis()} roots=${roots.size} " +
+                        "rootBounds=${roots.map { it.boundsInWindow }} titles=${titles.size} " +
+                        "titleBounds=${titles.map { it.boundsInWindow }} " +
+                        "titleRoots=${titles.map { title -> roots.indices.filter { index ->
+                            roots[index].boundsInWindow.contains(title.boundsInWindow.center) } }} " +
+                        "canvas=${descriptionCount("キャンバス")} loading=${textCount(context.getString(com.thinkcanvas.R.string.loading_board))} " +
+                        "list=${descriptionCount("新しいボード")} error=${textCount("操作を完了できません")} " +
+                        "action=$actionState share=$sharePhase image=$imagePhase " +
+                        "lastBoard=${settings.getLong("lastOpenedBoardId", -1)} " +
+                        "eligibleBoard=${settings.getLong("guideEligibleBoardId", -1)} " +
+                        "dismissed=${settings.getBoolean("guideDismissed", false)}")
+                }
+                runCatching { observe("post_assertion_query") }
+                    .onFailure { Log.i("GuideStartupDiag", "post_assertion_query_error=${it.javaClass.simpleName}") }
+                runCatching { composeRule.waitForIdle(); observe("after_compose_idle") }
+                    .onFailure { Log.i("GuideStartupDiag", "after_compose_idle_error=${it.javaClass.simpleName}") }
+                throw failure
+            }
             composeRule.onNodeWithText("はじめる").performClick()
             composeRule.waitUntil(5_000) {
                 context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
