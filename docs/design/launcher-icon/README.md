@@ -38,7 +38,7 @@ applicationId、署名、version設定、保存データ、配布workflowは変�
 端末のmaskに従う。`mipmap-anydpi` に共通のadaptive iconを置き、API 33以降は
 明示したmonochromeレイヤーを使う。それ以前のAndroidはこの子要素を無視する。
 
-`minSdk 26` のため、対応Android端末はAPI 26のadaptive iconを使える。
+`minSdk 30` のため、対応Android端末はAPI 30のadaptive iconを使える。
 追加の密度別PNGやlegacy fallbackは不要。前景のVectorDrawableを全密度で拡大縮小する。
 `debug` ではadaptive iconが参照する前景、背景色、monochromeを上書きし、TEST表示を保つ。
 

@@ -75,7 +75,7 @@ debug APK と internal APK は applicationId と署名が異なり、端末上�
 - インターネット接続（初回の Gradle と Android 依存関係の取得に必要）
 - Spec Kit の操作には Python 環境と `uv` が必要です
 
-`compileSdk` / `targetSdk` は Android 17 / API 37、`minSdk` は API 26 です。
+`compileSdk` / `targetSdk` は Android 17 / API 37、`minSdk` は API 30 です。
 [Android checks](.github/workflows/android.yml) は Ubuntu 26.04 / JDK 25 で lint・単体テスト・
 debug build・Room schema の差分・公開情報境界を確認します。必須の Gradle Managed Device
 （GMD）は Pixel 9 / Android 17（API 37、`google_apis`、`x86_64`）で、
