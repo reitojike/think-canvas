@@ -8,6 +8,7 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -35,6 +36,7 @@ import org.junit.runner.RunWith
 class InkGestureTest {
     @get:Rule val composeRule = createEmptyComposeRule()
     @PrSmoke
+    @OptIn(ExperimentalTestApi::class)
     @Test
     fun secondFingerCancelsWetInkAndSingleFingerStillDraws() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -88,6 +90,7 @@ class InkGestureTest {
             Thread.sleep(35)
         }
 
+        composeRule.waitUntilAtLeastOneExists(hasContentDescription("図形ツールを開く"), timeoutMillis = 1_000L)
         click("図形ツールを開く")
         click("ペン")
 
