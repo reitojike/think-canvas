@@ -326,7 +326,7 @@ class ConditionalChromeLifecycleTest {
         val formerShare = center(bounds(waitForActionable(instrumentation, "選択範囲を画像で共有")))
         val (region, rename) = waitForRegionRenameAction(instrumentation)
         assertTrue(region.performAction(rename.id))
-        waitForGone(instrumentation, "選択範囲を画像で共有")
+        waitForGone(instrumentation, "選択範囲を画像で共有", recordPostRenameShareDecision = true)
         clickActionable(instrumentation, "図形ツールを開く")
         assertPaletteOpen(instrumentation)
         nativeGesture(instrumentation, listOf(formerShare))
@@ -940,11 +940,23 @@ class ConditionalChromeLifecycleTest {
         instrumentation.waitForIdleSync()
     }
 
-    private fun waitForGone(instrumentation: android.app.Instrumentation, label: String) {
+    private fun waitForGone(
+        instrumentation: android.app.Instrumentation,
+        label: String,
+        recordPostRenameShareDecision: Boolean = false,
+    ) {
         repeat(40) {
             composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
-            if (findExact(instrumentation.uiAutomation.rootInActiveWindow, label) == null) return
+            val root = instrumentation.uiAutomation.rootInActiveWindow
+            val gone = findExact(root, label) == null
+            if (gone) {
+                // 元の消失判定の成功sampleだけを、return前に記録する。
+                if (recordPostRenameShareDecision) {
+                    Log.i("ConditionalAbsence", "postRenameShare rootNull=${root == null} gone=$gone")
+                }
+                return
+            }
             Thread.sleep(100)
         }
         error("非表示になったアクセシビリティ要素が残っています: $label")
