@@ -12,7 +12,7 @@ Compose の単一画面で世界座標を保持するキャンバス、テキス
 [root の Gradle 設定](../../build.gradle.kts)、[app の Gradle 設定](../../app/build.gradle.kts)、
 [Gradle Wrapper の設定](../../gradle/wrapper/gradle-wrapper.properties) を参照してください。
 
-- **言語**: AGP 9.4.1 組み込み Kotlin、Compose compiler plugin 2.4.20、CI の JDK 25、Java 17 bytecode
+- **言語**: AGP 9.4.1 組み込み Kotlin、Compose compiler plugin 2.4.21、CI の JDK 25、Java 17 bytecode
 - **主な依存**: Jetpack Compose BOM 2026.09.00、Activity Compose 1.13.0、Room 3.0.3、KSP 2.3.12
 - **保存**: Room 3 / SQLite。Board、TextElement、SpatialElement、ArrowElement の四表、schema v1
 - **検証**: JUnit による座標変換と履歴の単体テスト、Android 上での Room と操作シナリオ確認、GitHub Actions で lint・テスト・ビルド・公開情報境界チェック
