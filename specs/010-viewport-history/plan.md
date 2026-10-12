@@ -64,3 +64,79 @@ PR105のfull CIで確認dialog復帰後のIME readinessが失敗した。mainに
 既存window ownership → focus → IME control → Compose frameの後に、native `View.post`によるdispatchの完了を待つ。Androidの[window focus後にpostする標準手順](https://developer.android.com/develop/ui/views/touch-and-input/keyboard-input/visibility?hl=ja)に従い、最後にcurrent requestとnative window ownershipを再判定してから一度showする。取消時はposted callbackを除去する。#91の未完了request寿命、accepted IME Backの取消、session交代、read-only/save block、完了したrequestの再表示禁止を維持する。native polling、retry-show、timeout延長、独自input connection ownershipは導入しない。
 
 責務は既存CanvasScreenのinput request内に閉じる。診断用interceptor/logを除去したfocusedと全native suite、final head CI/canonicalを検証する。利用者からMERGE_READYまでの継続と条件達成後のmergeが許可された。
+
+## Issue #156: J4の下位層coverageとAndroid保持境界
+
+[監査J4](https://github.com/reitojike/think-canvas/issues/151#issuecomment-6111312983)と
+[#118 J4/L24・Slice D](https://github.com/reitojike/think-canvas/issues/118#issuecomment-6032824867)の残余を扱う。
+基準mainは `71df1e1a2628f19b4921267f15052d927cf59c7d`。FR-005/006/007、SC-002/003の製品契約を変更しない。
+既存JUnitへ不足2本を先に追加し、既存のaffected IDs、bounds選択、Back/Forwardは重複追加しない。
+text boundsは明示fixture値であり、Android実測geometryの証明には使わない。
+
+### 元Android assertionの対応表（実装前）
+
+元 `ViewportHistoryInteractionTest#everyFamilyDeletionAndMultipleUndoTargetsUseOneDisplayNavigation`
+L708–762の各assertionを以下へ対応付ける。Dは追加する
+`deletionUndoRedoKeepsDisplayTargetsForEveryFamily`、Mは追加する
+`multipleUndoTargetsUseRestoredBoundsForFit`。行番号は基準mainを指す。
+
+| 元assertion | 下位層authority／不足coverage | 縮小する場合の保持Android oracle |
+| --- | --- | --- |
+| L711 対象delete成功 | D: 独立BoardState、exact削除snapshot、canUndo/canRedo | textの既存delete入力前提 |
+| L714、L720 visible Undo/Redoのcamera不変 | stateだけでは証明しない | textの両sameFocus |
+| L715、L726 Undo後exact initial | D: 4-family Undo復元、M: move Undo復元 | textのvisible/offscreen exact snapshot |
+| L716、L721 保存1→2 | JVMから保存数を推定しない | textのvisible Undo/Redo保存数 |
+| L719、L735 Redo後initialと異なる | D: 対象だけ削除したexact snapshotへ強化 | textのexact削除snapshot |
+| L722–725 native pan前提 | JVMからnative入力を推定しない | textの既存4回pan、distant取得 |
+| L727、L736 保存3→4 | JVMから保存数を推定しない | textのoffscreen Undo/Redo保存数 |
+| L728、L737 offscreen Undo/Redoでcamera移動 | D: Undo後／Redo消失前の対象bounds | textのassertNotEquals |
+| L730、L739 各1回の視点Backでdistant復元 | 既存ViewportHistoryTest L31–59: 往復とrestore非記録 | textの両sameFocus、実UI結合 |
+| L731 canRedo、L732 内容不変、L733/L740 Back後保存不変 | D: Undo後canRedoとexact snapshot | textのBack後canRedo／内容／保存数 |
+| L743 moveSelection(ids,90,40)成功、L744–747 native pan前提 | M: 同じmove量、2対象、exact moved snapshot | multiの既存moveと4回pan |
+| L749 Undo後exact initial | M: 復元とcanRedo、未変更要素除外 | multiのexact snapshot |
+| L750–757 実canvas/densityで両bounds包含 | M: 復元後boundsを既存fit/worldToScreenへ渡し固定canvasで包含 | multiの実測canvas/densityによる包含 |
+| L759 1回のBackでdistant復元、L760 内容不変、L761 保存1回 | M: fit計算前後の内容／Redo不変。既存Back/Forward | multiのsameFocus／exact snapshot／保存1回 |
+
+既存 `ContentHistoryFocusTest` L29–66は全familyのaffected IDsとadded/removed、L99–123は
+survivor-after／deleted-before fallback／複数boundsを保持する。D/MはこれらをBoardStateの実Undo/Redoへ接続する不足だけを補う。
+CanvasScreen L845–896の実測geometry→focus/fit→navigation→save結合はAndroidに保持する。
+FlakyTest(106)付きcaseは通常laneの代替に数えない。
+
+positive JVM2本、関連history/geometry、基本検証と既存suite validatorを順に確認する。
+negativeはbefore fallback除去、multi boundsを1対象、pending history focusだけrecord=falseの最大3件。
+mutationは一時ローカルのみで復元し、commit/pushしない。Android negativeが実行不能なら
+Android matrixとmanifestを保持し、JVM追加だけのDraft PRに限定する。
+縮小採用時だけtext/multiの2 identitiesをfull_onlyへ置き、既存exact-method経路のfresh XML／receipt／
+source identity／counters／deviceを確認する。production、Gradle、依存、workflow、既存helperとframeworkは変更しない。
+速度・不安定率の改善は測定していないため主張しない。mergeは独立レビュー後の判断とする。
+
+### 実行結果と採用境界
+
+初回focused JVMは追加2 identitiesだけのfresh XML **2/0/0/0**。XML SHA256は
+`1bf70a139e4826aa95db5885ce25fbb6cec0dc8a8966277c10ca6bf3b37d95c0`。
+以下の一時ローカルnegativeは各1回だけ実行し、両方とも狙ったassertion failureを検出した。
+
+| control | exact JVM identity／失敗位置 | tests/failures/errors/skipped | XML SHA256 |
+| --- | --- | --- | --- |
+| before fallback除去 | D: Redo後の消失前text boundsが空、L178 | 1/1/0/0 | `34ab6176ed7321be893436d6cc6149b455bb1515b59c0ee961d1c29bead334af` |
+| multi boundsを最初の1対象だけへ限定 | M: ink復元bounds欠落、L209 | 1/1/0/0 | `169b8f67e8899f425157ee1d72f15a6817374205dfabfbc4e254516ae8953fb0` |
+
+両control終了時に `ContentHistoryFocus.kt` を元bytesへ復元し、SHA256
+`4bc87e6ebbe0be8d38575d2645083f047498921c26566de7746af1c15c959c1a` とproduction差分0を確認した。
+復元後のContentHistoryFocus／ViewportHistory／SpatialGeometry／InkElement／BoardGeometryは **52/0/0/0**。
+既存suite validatorはsmoke67／non-quarantined230／quarantine38／full268でPASS、script testsは13/13。
+script tests初回はsandboxの一時領域への書込み権限で停止し、書込み可能な作業用一時領域へ限定して実行した。
+test helperやrunnerの変更はない。
+
+pending history focusのnavigationだけrecord=falseにするAndroid negativeは未実行。
+[#67の既知Windows runtime制約](https://github.com/reitojike/think-canvas/issues/67)に対する新しい解消証拠がなく、
+同じadb/GMD probeを繰り返さない。remoteへproduction mutationをpublishする代替も採らない。
+したがって今回は**JVM不足2本だけを採用し、Android縮小は保留**する。
+元Android matrix、全assertion、入力／待機／IME helper、annotation、manifestのidentityと分類はそのまま保持する。
+text/multiの新Android2 identitiesはまだ作らず、同等性成立や移管完了を主張しない。
+
+local lint／全unit／assembleは成功、全unitはfresh XML **191/0/0/0**（25 classes）。
+公開境界326候補、diff check、Room schema差分0を確認した。
+最終採用差分は `ContentHistoryFocusTest.kt`（103行追加）、本planとtasksの3 files。
+production、Android test、manifest、Gradle、依存、workflow、既存helperの差分は0。
+候補freeze後のexact-head CI、保持した元Android identityのtargeted evidence、canonical reviewはDraft PRへ記録する。
