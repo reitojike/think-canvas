@@ -7,11 +7,11 @@
   ],
   "integration_settings": {
     "codex": {
-      "script": "ps",
+      "script": "py",
       "invoke_separator": "-"
     },
     "claude": {
-      "script": "ps",
+      "script": "py",
       "invoke_separator": "-"
     }
   },

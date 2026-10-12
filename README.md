@@ -103,23 +103,27 @@ macOS / Linux では各 Gradle コマンドの先頭を `./gradlew` に置き換
 ## Spec Kit
 
 Spec Kit は公式 **v1.1.3** に固定しています。Codex skills は `.agents/skills/`、
-Claude Code skills は `.claude/skills/`、共通テンプレートと PowerShell スクリプトは
-`.specify/` にあります。既定の integration は Codex、両方の script variant は `ps` です。
+Claude Code skills は `.claude/skills/`、共通テンプレートと Python スクリプトは
+`.specify/` にあります。既定の integration は Codex、両方の script variant は `py` です。
+以前の PowerShell スクリプトも公式 manifest の管理対象として残りますが、両方の skills は
+Python スクリプトを参照します。
 CLI/scaffold の版は `.specify/init-options.json`、導入状態は `.specify/integration.json`
 に記録されています。workflow の版（`.specify/workflows/speckit/workflow.yml`）は別管理です。
 
-`uv` を用意した後、公式タグに固定した一時 CLI で導入状態を確認し、既存の連携を更新します。
+Python 3 と `uv` を用意した後、公式タグに固定した一時 CLI で導入状態を確認し、
+既存の連携を更新します。
+Windows では `python --version` が実際の Python 3 を起動することも確認します。
 管理対象ファイルの手編集が報告されたら、差分を確認して更新を止めてください。
 
 ```powershell
 uvx --from git+https://github.com/github/spec-kit.git@v1.1.3 specify version
 uvx --from git+https://github.com/github/spec-kit.git@v1.1.3 specify integration status
-uvx --from git+https://github.com/github/spec-kit.git@v1.1.3 specify integration upgrade codex --script ps
-uvx --from git+https://github.com/github/spec-kit.git@v1.1.3 specify integration upgrade claude --script ps
+uvx --from git+https://github.com/github/spec-kit.git@v1.1.3 specify integration upgrade codex --script py
+uvx --from git+https://github.com/github/spec-kit.git@v1.1.3 specify integration upgrade claude --script py
 ```
 
 Claude Code をまだ導入していない場合だけ、最後の `upgrade claude` の代わりに
-`uvx --from git+https://github.com/github/spec-kit.git@v1.1.3 specify integration install claude --script ps`
+`uvx --from git+https://github.com/github/spec-kit.git@v1.1.3 specify integration install claude --script py`
 を実行します。追加しても既定の Codex は変わりません。
 
 Constitution は [`.specify/memory/constitution.md`](.specify/memory/constitution.md) にあります。
