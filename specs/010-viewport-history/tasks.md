@@ -77,6 +77,7 @@ T026/T029のfinal-head CI/canonical/merge/closure証跡は[PR105](https://github
 - [x] T033 関連history/geometry、lint/unit/assemble、既存suite validator/scripts/public boundary/diffを確認し、最大3件の一時ローカルnegativeを復元後の差分とともに記録する。
 - [ ] T034 下位層coverageとAndroid negativeが成立した場合だけAndroid matrixをtext/multi代表2本へ縮小し、manifestをfull_onlyへ同期する。実測geometry→navigation→save契約とexact-method fresh evidenceを保持する。実行不能なら未達のままJVMだけのDraft PRに限定する。
 - [ ] T035 Draft PRのexact-head CI/reviewと元契約同等性／positive-negative／blockerを親へ報告する。mergeは独立レビュー後に調整する。
+- [x] T036 canonical reviewのdocs 2件を同じbounded correctionで補正する。基準mainの元Android全assertion行を再照合し、J4は旧4-familyだけ、imageはscope外、SC-003全familyの成立は未主張と `plan.md` へ明記する。[行参照](https://github.com/reitojike/think-canvas/pull/157#discussion_r4243967719)／[family境界](https://github.com/reitojike/think-canvas/pull/157#discussion_r4243967724)。code／test body／Android／manifest差分を追加しない。
 
 T031/T032の初回2本は2/0/0/0、復元後の関連5 classesは52/0/0/0。
 ローカルnegative2件は各1/1/0/0で検出後に元sourceを復元した（証拠はplan.md）。

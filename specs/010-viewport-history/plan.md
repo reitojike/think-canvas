@@ -70,6 +70,9 @@ PR105のfull CIで確認dialog復帰後のIME readinessが失敗した。mainに
 [監査J4](https://github.com/reitojike/think-canvas/issues/151#issuecomment-6111312983)と
 [#118 J4/L24・Slice D](https://github.com/reitojike/think-canvas/issues/118#issuecomment-6032824867)の残余を扱う。
 基準mainは `71df1e1a2628f19b4921267f15052d927cf59c7d`。FR-005/006/007、SC-002/003の製品契約を変更しない。
+今回のJ4は旧matrixのtext／rectangle／free arrow／pen inkの4-familyに限定する。
+imageは元matrixにも追加2本にも含めず、このPRのcoverage対象外とする。
+現在のBoardSnapshotにはimageもあるため、この旧4-familyの証拠をSC-003の全要素familyの成立とは扱わない。
 既存JUnitへ不足2本を先に追加し、既存のaffected IDs、bounds選択、Back/Forwardは重複追加しない。
 text boundsは明示fixture値であり、Android実測geometryの証明には使わない。
 
@@ -83,21 +86,21 @@ L708–762の各assertionを以下へ対応付ける。Dは追加する
 | 元assertion | 下位層authority／不足coverage | 縮小する場合の保持Android oracle |
 | --- | --- | --- |
 | L711 対象delete成功 | D: 独立BoardState、exact削除snapshot、canUndo/canRedo | textの既存delete入力前提 |
-| L714、L720 visible Undo/Redoのcamera不変 | stateだけでは証明しない | textの両sameFocus |
-| L715、L726 Undo後exact initial | D: 4-family Undo復元、M: move Undo復元 | textのvisible/offscreen exact snapshot |
-| L716、L721 保存1→2 | JVMから保存数を推定しない | textのvisible Undo/Redo保存数 |
-| L719、L735 Redo後initialと異なる | D: 対象だけ削除したexact snapshotへ強化 | textのexact削除snapshot |
-| L722–725 native pan前提 | JVMからnative入力を推定しない | textの既存4回pan、distant取得 |
-| L727、L736 保存3→4 | JVMから保存数を推定しない | textのoffscreen Undo/Redo保存数 |
-| L728、L737 offscreen Undo/Redoでcamera移動 | D: Undo後／Redo消失前の対象bounds | textのassertNotEquals |
-| L730、L739 各1回の視点Backでdistant復元 | 既存ViewportHistoryTest L31–59: 往復とrestore非記録 | textの両sameFocus、実UI結合 |
-| L731 canRedo、L732 内容不変、L733/L740 Back後保存不変 | D: Undo後canRedoとexact snapshot | textのBack後canRedo／内容／保存数 |
-| L743 moveSelection(ids,90,40)成功、L744–747 native pan前提 | M: 同じmove量、2対象、exact moved snapshot | multiの既存moveと4回pan |
-| L749 Undo後exact initial | M: 復元とcanRedo、未変更要素除外 | multiのexact snapshot |
-| L750–757 実canvas/densityで両bounds包含 | M: 復元後boundsを既存fit/worldToScreenへ渡し固定canvasで包含 | multiの実測canvas/densityによる包含 |
+| L714、L719 visible Undo/Redoのcamera不変 | stateだけでは証明しない | textの両sameFocus |
+| L715、L725 Undo後exact initial | D: 4-family Undo復元、M: move Undo復元 | textのvisible/offscreen exact snapshot |
+| L716、L720 保存1→2 | JVMから保存数を推定しない | textのvisible Undo/Redo保存数 |
+| L718、L734 Redo後initialと異なる | D: 対象だけ削除したexact snapshotへ強化 | textのexact削除snapshot |
+| L721–723 native pan前提 | JVMからnative入力を推定しない | textの既存4回pan、distant取得 |
+| L726、L735 保存3→4 | JVMから保存数を推定しない | textのoffscreen Undo/Redo保存数 |
+| L727、L736 offscreen Undo/Redoでcamera移動 | D: Undo後／Redo消失前の対象bounds | textのassertNotEquals |
+| L729、L738 各1回の視点Backでdistant復元 | 既存ViewportHistoryTest L31–59: 往復とrestore非記録 | textの両sameFocus、実UI結合 |
+| L730 canRedo、L731 内容不変、L732/L739 Back後保存不変 | D: Undo後canRedoとexact snapshot | textのBack後canRedo／内容／保存数 |
+| L743 moveSelection(ids,90,40)成功、L744–746 native pan前提 | M: 同じmove量、2対象、exact moved snapshot | multiの既存moveと4回pan |
+| L748 Undo後exact initial | M: 復元とcanRedo、未変更要素除外 | multiのexact snapshot |
+| L749–756 実canvas/densityで両bounds包含 | M: 復元後boundsを既存fit/worldToScreenへ渡し固定canvasで包含 | multiの実測canvas/densityによる包含 |
 | L759 1回のBackでdistant復元、L760 内容不変、L761 保存1回 | M: fit計算前後の内容／Redo不変。既存Back/Forward | multiのsameFocus／exact snapshot／保存1回 |
 
-既存 `ContentHistoryFocusTest` L29–66は全familyのaffected IDsとadded/removed、L99–123は
+既存 `ContentHistoryFocusTest` L29–66は旧4-familyのaffected IDsとadded/removed、L99–123は
 survivor-after／deleted-before fallback／複数boundsを保持する。D/MはこれらをBoardStateの実Undo/Redoへ接続する不足だけを補う。
 CanvasScreen L845–896の実測geometry→focus/fit→navigation→save結合はAndroidに保持する。
 FlakyTest(106)付きcaseは通常laneの代替に数えない。
