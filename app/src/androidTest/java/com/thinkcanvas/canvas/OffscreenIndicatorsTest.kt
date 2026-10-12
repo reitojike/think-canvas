@@ -2,8 +2,10 @@ package com.thinkcanvas.canvas
 
 import android.content.Intent
 import android.os.SystemClock
+import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.Window
 import android.view.WindowInsets
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -40,6 +42,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import java.util.Collections
 
 /** Spec009: actual target ownership, native viewport gestures and durable content are independent observations. */
 @RunWith(AndroidJUnit4::class)
@@ -108,7 +112,8 @@ class OffscreenIndicatorsTest {
             assertFalse(board.canUndo)
             assertFalse(board.canRedo)
         }
-        fun event(action: Int, points: List<Offset>, downTime: Long) {
+        fun event(action: Int, points: List<Offset>, downTime: Long,
+                  onInject: ((MotionEvent, IntArray) -> Unit)? = null) {
             val origin = IntArray(2)
             scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
             val properties = Array(points.size) { index -> MotionEvent.PointerProperties().apply {
@@ -119,20 +124,24 @@ class OffscreenIndicatorsTest {
             } }
             val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, points.size,
                 properties, coordinates, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
-            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
+            try {
+                onInject?.invoke(event, origin)
+                assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
+            }
             finally { event.recycle() }
         }
         fun pan(delta: Offset, start: Offset = Offset(canvas.left + canvas.width * .2f,
-                                                       canvas.top + canvas.height * .72f)) {
+                                                       canvas.top + canvas.height * .72f),
+                onInject: ((MotionEvent, IntArray) -> Unit)? = null) {
             val time = SystemClock.uptimeMillis()
             try {
-                event(MotionEvent.ACTION_DOWN, listOf(start), time)
-                event(MotionEvent.ACTION_MOVE, listOf(start + delta), time)
+                event(MotionEvent.ACTION_DOWN, listOf(start), time, onInject)
+                event(MotionEvent.ACTION_MOVE, listOf(start + delta), time, onInject)
                 // 精密panの停止位置を確認する。高速releaseの慣性はFlingGestureTestで扱う。
                 Thread.sleep(180L)
-                event(MotionEvent.ACTION_UP, listOf(start + delta), time)
+                event(MotionEvent.ACTION_UP, listOf(start + delta), time, onInject)
             } catch (failure: Throwable) {
-                event(MotionEvent.ACTION_CANCEL, listOf(start + delta), time)
+                event(MotionEvent.ACTION_CANCEL, listOf(start + delta), time, onInject)
                 throw failure
             }
             composeRule.waitForIdle()
@@ -181,7 +190,7 @@ class OffscreenIndicatorsTest {
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             composeRule.waitForIdle()
         }
-        fun nextPanAt(point: Offset) {
+        fun nextPanAt(point: Offset, diagnose: Boolean = false) {
             var previousBounds: Rect? = null
             var previousFocus: ViewportFocus? = null
             var previousPosition: Offset? = null
@@ -206,10 +215,67 @@ class OffscreenIndicatorsTest {
             composeRule.waitForIdle()
             assertTrue("The old indicator point must remain inside the current canvas", canvas.contains(point))
             val before = position(reference.text)
-            pan(Offset(90f, 25f), point)
-            val after = position(reference.text)
-            assertEquals(before.x + 90f, after.x, 2f)
-            assertEquals(before.y + 25f, after.y, 2f)
+            if (!diagnose) {
+                pan(Offset(90f, 25f), point)
+                val after = position(reference.text)
+                assertEquals(before.x + 90f, after.x, 2f)
+                assertEquals(before.y + 25f, after.y, 2f)
+                return
+            }
+            // MUST_NOT_MERGE: observe this one native next pan; keep its injection and oracle unchanged.
+            val beforeCamera = navigation.viewportState.value
+            val beforeCanvas = canvas
+            val downTime = AtomicLong(-1L)
+            data class PanSample(val kind: String, val action: Int, val downTime: Long,
+                                 val eventTime: Long, val x: Float, val y: Float,
+                                 val originX: Int, val originY: Int,
+                                 val history: List<Triple<Long, Float, Float>>)
+            val events = Collections.synchronizedList(mutableListOf<PanSample>())
+            fun record(kind: String, event: MotionEvent, origin: IntArray) {
+                val history = (0 until event.historySize).map { index ->
+                    Triple(event.getHistoricalEventTime(index),
+                        event.getHistoricalX(0, index), event.getHistoricalY(0, index))
+                }
+                events += PanSample(kind, event.actionMasked, event.downTime, event.eventTime,
+                    event.x, event.y, origin[0], origin[1], history)
+            }
+            lateinit var window: Window
+            lateinit var original: Window.Callback
+            lateinit var observer: Window.Callback
+            scenario.onActivity {
+                window = it.window
+                original = window.callback
+                observer = object : Window.Callback by original {
+                    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                        if (event.downTime == downTime.get() && event.pointerCount == 1) {
+                            val origin = IntArray(2)
+                            window.decorView.getLocationOnScreen(origin)
+                            record("delivered", event, origin)
+                        }
+                        return original.dispatchTouchEvent(event)
+                    }
+                }
+                window.callback = observer
+            }
+            var afterCamera: Viewport? = null
+            var afterCanvas: Rect? = null
+            var after: Offset? = null
+            try {
+                pan(Offset(90f, 25f), point) { event, origin ->
+                    if (event.actionMasked == MotionEvent.ACTION_DOWN) downTime.set(event.downTime)
+                    record("injected", event, origin)
+                }
+                afterCamera = navigation.viewportState.value
+                afterCanvas = canvas
+                after = position(reference.text)
+                assertEquals(before.x + 90f, after.x, 2f)
+                assertEquals(before.y + 25f, after.y, 2f)
+            } finally {
+                composeRule.runOnUiThread { if (window.callback === observer) window.callback = original }
+                Log.i("NextPanDiag", "cameraBefore=$beforeCamera cameraAfter=$afterCamera " +
+                    "canvasBefore=$beforeCanvas canvasAfter=$afterCanvas referenceBefore=$before referenceAfter=$after")
+                events.forEach { sample -> Log.i("NextPanDiag", sample.toString()) }
+            }
         }
     }
 
@@ -279,7 +345,7 @@ class OffscreenIndicatorsTest {
         val old = marker("現在の検索結果、").boundsInWindow.center
         click("検索を閉じる")
         assertEquals(0, indicators().size)
-        nextPanAt(old)
+        nextPanAt(old, diagnose = true)
         unchanged()
     }
 
