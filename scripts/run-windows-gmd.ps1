@@ -634,6 +634,7 @@ function Verify-StaticChecks {
     function CacheSnapshot($Selection) {
         if (-not (Test-Path -LiteralPath $Selection.cacheDirectory)) { return '' }
         return (@(Get-ChildItem -LiteralPath $Selection.cacheDirectory -Recurse -Force | ForEach-Object {
+            $_.Refresh()
             $_.FullName + '|' + $(if ($_.PSIsContainer) { 'd' } else { $_.Length }) + '|' + $_.LastWriteTimeUtc.Ticks }) -join ';')
     }
     function CacheRejected($Selection, [string]$Name) {
