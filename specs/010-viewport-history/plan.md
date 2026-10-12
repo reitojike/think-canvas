@@ -10,7 +10,7 @@
 **Primary Dependencies**: 既存Compose BOM 2026.09.00 / lifecycle。追加更新なし
 **Storage**: BoardSessionViewModelのprocess sessionのみ、永続stackなし
 **Testing**: JUnit / Compose instrumentation / 標準Windows focused GMD / Android CI両job
-**Target Platform**: Android min26 / target37
+**Target Platform**: Android min30 / target37
 **Project Type**: Android mobile app
 **Performance Goals**: MOVE/frameごとの履歴追加0、stack上限80
 **Constraints**: 内容Redo/配置/query/選択/保存への副作用0。cancel/IME/save ack/hidden chrome維持

@@ -8,7 +8,7 @@ CanvasScreenの6 call siteに限定。長押し成立のLongPressを維持し、
 
 ## Technical Context
 
-Kotlin / Compose compiler 2.4.20、現行BOM 2026.09.00 / UI 1.12.1、AndroidX Core 1.19.1。Android min26/target37のmobile app。依存・Room schema変更なし。native MotionEventとLocalHapticFeedback recorderで種類・回数・操作結果を観測する。frameごとの処理追加なし。正常native UPの確認は成功feedback条件だけに適用する。
+Kotlin / Compose compiler 2.4.20、現行BOM 2026.09.00 / UI 1.12.1、AndroidX Core 1.19.1。Android min30/target37のmobile app。依存・Room schema変更なし。native MotionEventとLocalHapticFeedback recorderで種類・回数・操作結果を観測する。frameごとの処理追加なし。正常native UPの確認は成功feedback条件だけに適用する。
 
 ## Constitution Check
 

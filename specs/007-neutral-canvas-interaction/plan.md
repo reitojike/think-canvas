@@ -8,7 +8,7 @@ CanvasScreenの有限なexit判定・cleanupを共通化し、Backのeditor破�
 
 ## Technical Context
 
-Kotlin / Compose / Material 3、Android API 26〜37、JDK 25。既存dependencyを使用し、Room schema/Gradle/workflowは変更しない。BoardStateが内容・履歴・geometry、BoardSessionViewModelがsave/retry/ackを所有する。既存TextEditorSessionに囲み名editorを保持し、小さいtool/確認targetはrememberSaveable、確認はAlertDialogを使う。
+Kotlin / Compose / Material 3、Android API 30〜37、JDK 25。既存dependencyを使用し、Room schema/Gradle/workflowは変更しない。BoardStateが内容・履歴・geometry、BoardSessionViewModelがsave/retry/ackを所有する。既存TextEditorSessionに囲み名editorを保持し、小さいtool/確認targetはrememberSaveable、確認はAlertDialogを使う。
 
 ## Constitution Check
 

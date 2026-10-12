@@ -14,7 +14,7 @@
 - **主な依存**: Compose と Room 3 を使う。JVM の Room 再オープン検証には `sqlite-bundled-jvm` を使う。新しい描画ライブラリは導入しない。
 - **保存**: Room 3 の `boards`・`text_elements`・`spatial_elements`・`arrow_elements` を schema v1 として export する。確定済み snapshot を単一 transaction で保存する。
 - **検証**: JUnit で包含、移動、矢印接続、余白、Undo/Redo、現行四表の保存と再オープンを検証する。GitHub CI では lint、単体テスト、デバッグビルド、公開情報境界を実行する。
-- **対象**: Android API 26 以上の単一ボード。文字要素と既存のパン・ズーム・編集を保持する。
+- **対象**: Android API 30 以上の単一ボード。文字要素と既存のパン・ズーム・編集を保持する。
 - **性能目標**: 100 要素を含むボードで、gesture 中に Room 書き込みを行わず、パン・ズームと移動 preview が連続して追従する。大規模ボードの上限は別途実機で評価する。
 - **制約**: オフライン、端末内保存、80 操作のセッション内履歴。PRD と HTML モックは公開リポジトリへ追加しない。
 

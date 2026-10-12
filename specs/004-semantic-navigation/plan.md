@@ -12,7 +12,7 @@
 **Primary Dependencies**: 既存の Jetpack Compose、AndroidX Ink、Room 3。追加ライブラリは不要
 **Storage**: 既存 `thinkcanvas.db` を読み取る。表示段階、検索語、viewport は永続化しない
 **Testing**: JUnit による表示規則・検索順・座標不変条件、Android 17 エミュレーターで UI と gesture、lint・ビルド
-**Target Platform**: Android API 26–37
+**Target Platform**: Android API 30–37
 **Project Type**: 単一 module の Android アプリ
 **Performance Goals**: 視点の指操作に追従する表示更新、目標約340msの視点移動、通常規模のボードで入力中に目立つ停止を起こさない
 **Constraints**: オフライン、保存データと Undo 履歴を変更しない、PRD と HTML モックは非公開のまま

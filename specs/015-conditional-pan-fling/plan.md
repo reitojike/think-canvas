@@ -8,7 +8,7 @@
 
 ## Technical Context
 
-Kotlin/Compose、BOM2026.09.00/UI1.12.1、min26/target37。既存animation依存内のAnimationState<Offset>/splineBasedDecay、UIのVelocityTrackerを使用。依存・Room schema更新なし。研究agentが現行cache APIと公式sourceを確認済み。新しいphysics/gesture frameworkは導入しない。
+Kotlin/Compose、BOM2026.09.00/UI1.12.1、min30/target37。既存animation依存内のAnimationState<Offset>/splineBasedDecay、UIのVelocityTrackerを使用。依存・Room schema更新なし。研究agentが現行cache APIと公式sourceを確認済み。新しいphysics/gesture frameworkは導入しない。
 
 ## Constitution Check
 
