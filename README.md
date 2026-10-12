@@ -102,22 +102,31 @@ macOS / Linux では各 Gradle コマンドの先頭を `./gradlew` に置き換
 
 ## Spec Kit
 
-Spec Kit は **v1.0.12** に固定しています。Codex skills integration は `.agents/skills/`、
-共通テンプレートと PowerShell スクリプトは `.specify/` にあります。初期化オプションと
-バージョンは `.specify/init-options.json` に記録されています。
+Spec Kit は公式 **v1.1.3** に固定しています。Codex skills は `.agents/skills/`、
+Claude Code skills は `.claude/skills/`、共通テンプレートと PowerShell スクリプトは
+`.specify/` にあります。既定の integration は Codex、両方の script variant は `ps` です。
+CLI/scaffold の版は `.specify/init-options.json`、導入状態は `.specify/integration.json`
+に記録されています。workflow の版（`.specify/workflows/speckit/workflow.yml`）は別管理です。
 
-`uv` を用意した後、次のコマンドで同じバージョンの CLI と設定を再現・更新できます。
-既存の Constitution を変更する場合は、再初期化後に差分を確認してください。
+`uv` を用意した後、公式タグに固定した一時 CLI で導入状態を確認し、既存の連携を更新します。
+管理対象ファイルの手編集が報告されたら、差分を確認して更新を止めてください。
 
 ```powershell
-uvx --from specify-cli==1.0.12 specify version
-uvx --from specify-cli==1.0.12 specify init --here --force --integration codex --script ps --ignore-agent-tools
+uvx --from git+https://github.com/github/spec-kit.git@v1.1.3 specify version
+uvx --from git+https://github.com/github/spec-kit.git@v1.1.3 specify integration status
+uvx --from git+https://github.com/github/spec-kit.git@v1.1.3 specify integration upgrade codex --script ps
+uvx --from git+https://github.com/github/spec-kit.git@v1.1.3 specify integration upgrade claude --script ps
 ```
+
+Claude Code をまだ導入していない場合だけ、最後の `upgrade claude` の代わりに
+`uvx --from git+https://github.com/github/spec-kit.git@v1.1.3 specify integration install claude --script ps`
+を実行します。追加しても既定の Codex は変わりません。
 
 Constitution は [`.specify/memory/constitution.md`](.specify/memory/constitution.md) にあります。
 開発と PR レビューの手順は [`docs/runbooks/change-review.md`](docs/runbooks/change-review.md)
 にまとめています。`AGENTS.md` はこれらの判断基準を案内します。
-Codex では `$speckit-constitution` などの skill 名を使います。各機能の成果物は
+Codex では `$speckit-constitution`、Claude Code では `/speckit-constitution` などの
+skill 名を使います。各機能の成果物は
 [`specs/`](specs/) 内にあり、公開仕様は上の「現在の状態」から参照できます。
 `$speckit-specify` → `$speckit-clarify` → `$speckit-plan` → `$speckit-checklist` →
 `$speckit-tasks` → `$speckit-analyze` → `$speckit-implement` → `$speckit-converge`
