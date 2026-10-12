@@ -1,6 +1,9 @@
 package com.thinkcanvas.canvas
 
+import com.thinkcanvas.board.fittedViewport
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ContentHistoryFocusTest {
@@ -121,6 +124,106 @@ class ContentHistoryFocusTest {
 
         assertEquals(mapOf("first" to first, "second" to second),
             historyDisplayBounds(setOf("first", "second", "no-geometry"), before, after).boundsById)
+    }
+
+    @Test fun deletionUndoRedoKeepsDisplayTargetsForEveryFamily() {
+        val text = TextElement(id = "text", text = "delete", x = 10f, y = 20f)
+        val rectangle = ShapeElement(id = "rectangle", kind = ShapeKind.RECTANGLE,
+            x = 200f, y = 40f, width = 80f, height = 50f)
+        val arrow = freeArrow("arrow", 400f)
+        val stroke = ink("ink", 600f)
+        val untouched = rectangle.copy(id = "untouched", x = 10_000f, y = -8000f)
+        val initial = BoardSnapshot(texts = listOf(text), shapes = listOf(rectangle, untouched),
+            arrows = listOf(arrow), ink = listOf(stroke))
+        // Explicit JVM fixture bounds; these are not Android text measurements.
+        val textBounds = mapOf(text.id to WorldBounds(10f, 20f, 150f, 60f))
+        val initialGeometry = initial.resolveRenderedGeometry(textBounds)
+        for (id in listOf(text.id, rectangle.id, arrow.id, stroke.id)) {
+            val board = BoardState(initial.texts, initial.shapes, initial.arrows, initial.ink)
+            val ids = setOf(id)
+            val deleted = initial.copy(texts = initial.texts.filterNot { it.id == id },
+                shapes = initial.shapes.filterNot { it.id == id },
+                arrows = initial.arrows.filterNot { it.id == id },
+                ink = initial.ink.filterNot { it.id == id })
+            val expectedBounds = mapOf(id to checkNotNull(initialGeometry.bounds(id)))
+            assertFalse(board.canUndo)
+            assertFalse(board.canRedo)
+            assertTrue(board.delete(ids))
+            assertEquals(deleted, board.snapshot())
+            assertTrue(board.canUndo)
+            assertFalse(board.canRedo)
+            val deletedGeometry = board.snapshot().resolveRenderedGeometry(textBounds)
+            assertEquals(ids, affectedHistoryDisplayIds(initial, deleted,
+                initialGeometry, deletedGeometry))
+
+            assertTrue(board.undo())
+            assertEquals(initial, board.snapshot())
+            assertFalse(board.canUndo)
+            assertTrue(board.canRedo)
+            val restoredGeometry = board.snapshot().resolveRenderedGeometry(textBounds)
+            val undoIds = affectedHistoryDisplayIds(deleted, board.snapshot(),
+                deletedGeometry, restoredGeometry)
+            assertEquals(ids, undoIds)
+            assertEquals(expectedBounds, historyDisplayBounds(undoIds,
+                deletedGeometry, restoredGeometry).boundsById)
+
+            assertTrue(board.redo())
+            assertEquals(deleted, board.snapshot())
+            assertTrue(board.canUndo)
+            assertFalse(board.canRedo)
+            val redoGeometry = board.snapshot().resolveRenderedGeometry(textBounds)
+            val redoIds = affectedHistoryDisplayIds(initial, board.snapshot(),
+                restoredGeometry, redoGeometry)
+            assertEquals(ids, redoIds)
+            assertEquals(expectedBounds, historyDisplayBounds(redoIds,
+                restoredGeometry, redoGeometry).boundsById)
+        }
+    }
+
+    @Test fun multipleUndoTargetsUseRestoredBoundsForFit() {
+        val rectangle = ShapeElement(id = "rectangle", kind = ShapeKind.RECTANGLE,
+            x = 10f, y = 20f, width = 200f, height = 120f)
+        val stroke = ink("ink", 700f)
+        val untouched = rectangle.copy(id = "untouched", x = 10_000f, y = -8000f)
+        val initial = BoardSnapshot(shapes = listOf(rectangle, untouched), ink = listOf(stroke))
+        val board = BoardState(initialShapes = initial.shapes, initialInk = initial.ink)
+        val ids = setOf(rectangle.id, stroke.id)
+        val expectedBounds = initial.resolveRenderedGeometry(emptyMap()).boundsById.filterKeys { it in ids }
+        assertTrue(board.moveSelection(ids, 90f, 40f))
+        val moved = initial.copy(shapes = listOf(rectangle.copy(x = 100f, y = 60f), untouched),
+            ink = listOf(stroke.copy(strokes = stroke.strokes.map { line ->
+                line.copy(points = line.points.map { it.copy(x = it.x + 90f, y = it.y + 40f) }) })))
+        assertEquals(moved, board.snapshot())
+        assertTrue(board.canUndo)
+        assertFalse(board.canRedo)
+        val movedGeometry = board.snapshot().resolveRenderedGeometry(emptyMap())
+
+        assertTrue(board.undo())
+        assertEquals(initial, board.snapshot())
+        assertFalse(board.canUndo)
+        assertTrue(board.canRedo)
+        val restoredGeometry = board.snapshot().resolveRenderedGeometry(emptyMap())
+        val undoIds = affectedHistoryDisplayIds(moved, board.snapshot(), movedGeometry, restoredGeometry)
+        assertEquals(ids, undoIds)
+        val display = historyDisplayBounds(undoIds, movedGeometry, restoredGeometry)
+        assertEquals(expectedBounds, display.boundsById)
+        assertFalse(untouched.id in display.boundsById)
+
+        val width = 1000f
+        val height = 800f
+        val view = board.snapshot().fittedViewport(width, height, renderedGeometry = display)
+        for (bounds in expectedBounds.values) {
+            val (left, top) = view.worldToScreen(bounds.left, bounds.top)
+            val (right, bottom) = view.worldToScreen(bounds.right, bounds.bottom)
+            assertTrue(left >= 0f && top >= 0f && right <= width && bottom <= height)
+        }
+        assertEquals(initial, board.snapshot())
+        assertFalse(board.canUndo)
+        assertTrue(board.canRedo)
+        assertTrue(board.redo())
+        assertEquals(moved, board.snapshot())
+        assertTrue(board.canUndo)
+        assertFalse(board.canRedo)
     }
 
     private fun freeArrow(id: String, x: Float) = ArrowElement(id = id,
