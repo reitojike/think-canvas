@@ -183,7 +183,10 @@ Codex native Windows は引き続き別の runtime/profile-context blocker
 ```
 
 `-VerifyStatic` は launcher 自身が所有する fixture / static check だけを行います。ignored fixture
-namespace で selector、wrapper cache の readiness (合成 fixture 上の distribution directory 数、
+namespace の full receipt を既存 suite validator と PATH 上の Python 3.10 以上で取得し、同じ checkout の
+source census と nonempty・unique・case-sensitive な全 identity の一致を確認します。件数を固定せず、
+empty / duplicate / missing / extra / 同件数の名前違いを拒否する合成 fixture は live suite の件数から分離します。
+同じ namespace で selector、wrapper cache の readiness (合成 fixture 上の distribution directory 数、
 launcher JAR の個数・型・case・場所、reparse、列挙失敗)、zero/wrong/stale/foreign XML、
 source bytes mismatch、hidden flags、external config、secret 非継承、GPU property がちょうど 1 回
 であることを確認します。Gradle/GMD は起動しません。`STATIC_PASS` は、次の repository 検証を実行した

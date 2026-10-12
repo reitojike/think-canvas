@@ -581,7 +581,35 @@ function Verify-StaticChecks {
     $script:owned = @{ initPath = 'fixture-init.gradle' }; $gmdArgs = @(Get-GmdArguments); $script:owned = $oldOwned
     Check (@($gmdArgs | Where-Object { $_ -ceq $gpuProperty }).Count -eq 1 -and
         @($gmdArgs | Where-Object { $_ -like '*emulator.gpu*' }).Count -eq 1) 'GPU_PROPERTY_ONCE'
-    $allNames = Get-ExpectedTestNames; Check ($allNames.Count -eq 66) 'SOURCE_CENSUS_66'
+    # Reuse the full manifest receipt from this checkout; no runner selector is generated.
+    function Test-StaticCensus([string[]]$SourceNames, [string[]]$ReceiptNames, [int]$ReceiptCount) {
+        $sourceSet = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        $receiptSet = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($name in $SourceNames) { if (-not $name -or -not $sourceSet.Add($name)) { return $false } }
+        foreach ($name in $ReceiptNames) { if (-not $name -or -not $receiptSet.Add($name)) { return $false } }
+        return $sourceSet.Count -gt 0 -and $ReceiptCount -eq $receiptSet.Count -and $sourceSet.SetEquals($receiptSet)
+    }
+    $allNames = Get-ExpectedTestNames
+    $receiptPath = Join-Path $diagnostics 'static-full-receipt.json'
+    $pythonExe = @(Get-Command python -CommandType Application -ErrorAction Stop)[0].Source
+    $validation = Invoke-Child $pythonExe @('-B', (Join-Path $worktree 'scripts/check-android-test-suites.py'),
+        'validate', '--suite', 'full', '--receipt-out', $receiptPath) 'static-full-receipt'
+    Check ($validation.exitCode -eq 0) 'FULL_RECEIPT_VALID'
+    $receipt = [IO.File]::ReadAllText($receiptPath) | ConvertFrom-Json
+    Check ($receipt.lane -ceq 'full' -and (Test-StaticCensus $allNames $receipt.expected $receipt.expected_count)) 'SOURCE_CENSUS_FULL_RECEIPT'
+    # Tiny synthetic identity sets exercise the gate independently of the live suite size.
+    $syntheticNames = @('a.b.C#m', 'a.b.C#n')
+    Check (Test-StaticCensus $syntheticNames @('a.b.C#n', 'a.b.C#m') 2) 'CENSUS_EXACT'
+    Check (Test-StaticCensus ($syntheticNames + 'a.b.C#o') ($syntheticNames + 'a.b.C#o') 3) 'CENSUS_GROWTH'
+    Check (-not (Test-StaticCensus @() @() 0)) 'CENSUS_EMPTY_REJECT'
+    Check (-not (Test-StaticCensus @('') @('') 1)) 'CENSUS_EMPTY_NAME_REJECT'
+    Check (-not (Test-StaticCensus ($syntheticNames + 'a.b.C#m') $syntheticNames 2)) 'CENSUS_SOURCE_DUPLICATE_REJECT'
+    Check (-not (Test-StaticCensus $syntheticNames ($syntheticNames + 'a.b.C#m') 3)) 'CENSUS_RECEIPT_DUPLICATE_REJECT'
+    Check (-not (Test-StaticCensus $syntheticNames @('a.b.C#m') 1)) 'CENSUS_MISSING_REJECT'
+    Check (-not (Test-StaticCensus $syntheticNames ($syntheticNames + 'a.b.C#o') 3)) 'CENSUS_EXTRA_REJECT'
+    Check (-not (Test-StaticCensus $syntheticNames @('a.b.C#m', 'a.b.C#o') 2)) 'CENSUS_SAME_COUNT_WRONG_NAME_REJECT'
+    Check (-not (Test-StaticCensus $syntheticNames @('a.b.C#m', 'a.b.C#N') 2)) 'CENSUS_CASE_REJECT'
+    Check (-not (Test-StaticCensus $syntheticNames $syntheticNames 1)) 'CENSUS_COUNT_REJECT'
     $dist = Get-DistributionSelection ([IO.File]::ReadAllBytes((Join-Path $worktree 'gradle/wrapper/gradle-wrapper.properties')))
     Check ($dist.cacheDirectory.EndsWith('a2l6ltp3k1vth6lwipzm5p2jp')) 'WRAPPER_CACHE_KEY'
     Check (Test-WrapperCache $dist) 'REAL_CACHE_PRESENT'
