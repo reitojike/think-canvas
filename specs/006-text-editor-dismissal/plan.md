@@ -8,7 +8,7 @@ CanvasScreen の draft、pointer admission、BasicTextField focus、chrome bound
 
 ## Technical Context
 
-- Kotlin、Jetpack Compose、Android API 26～37。依存版・SDK・schema の変更なし。
+- Kotlin、Jetpack Compose、Android API 30～37。依存版・SDK・schema の変更なし。
 - テスト: focused instrumentation（実 pointer、Room 照合、ActivityScenario）、既存単体テスト、Android CI の Pixel 9 API 37 GMD。
 - 制約: explicit cancel と空の新規入力では保存・履歴を変更しない。外側確定は既存 Done の保存・履歴と world 座標を維持する。process death の draft 復元は追加しない。
 - 範囲: CanvasScreen、ボードごとの editor holder、ViewModel と MainActivity の受け渡し、回帰テスト。

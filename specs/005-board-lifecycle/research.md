@@ -34,7 +34,7 @@
 
 ## Android の画像受け渡し
 
-**判断**: PNG の保存は API 29 以上で `MediaStore.Images`、API 26–28 で system の文書作成画面を使う。コピーと Android 共有には限定した cache 領域の PNG を `FileProvider` の content URI で渡す。共有先の選択を利用者へ委ね、cache は直後に消さず期限を設ける。
+**判断**: PNG の保存は API 29 以上で `MediaStore.Images`、API 26–28 で system の文書作成画面を使う。現行の対応対象である Android 11（API 30）以上では `MediaStore.Images` を使用し、API 26–28 の文書作成経路は旧対応範囲の設計記録として残す。コピーと Android 共有には限定した cache 領域の PNG を `FileProvider` の content URI で渡す。共有先の選択を利用者へ委ね、cache は直後に消さず期限を設ける。
 
 **理由**: Android の標準フローを使い、広いストレージ権限や公開 file URI を避ける。保存は書込成功後に公開し、失敗時は不完全な出力を削除する。[共有メディア](https://developer.android.com/training/data-storage/shared/media)、[文書作成](https://developer.android.com/reference/androidx/activity/result/contract/ActivityResultContracts.CreateDocument)、[安全なファイル共有](https://developer.android.com/training/secure-file-sharing)、[FileProvider](https://developer.android.com/reference/androidx/core/content/FileProvider)、[コピーと貼り付け](https://developer.android.com/develop/ui/views/touch-and-input/copy-paste)。
 

@@ -16,7 +16,7 @@ Compose の単一画面で世界座標を保持するキャンバス、テキス
 - **主な依存**: Jetpack Compose BOM 2026.09.00、Activity Compose 1.13.0、Room 3.0.3、KSP 2.3.12
 - **保存**: Room 3 / SQLite。Board、TextElement、SpatialElement、ArrowElement の四表、schema v1
 - **検証**: JUnit による座標変換と履歴の単体テスト、Android 上での Room と操作シナリオ確認、GitHub Actions で lint・テスト・ビルド・公開情報境界チェック
-- **対象**: Android API 26 以上、compile API 37、target API 37、Gradle 9.8.0
+- **対象**: Android API 30 以上、compile API 37、target API 37、Gradle 9.8.0
 - **性能目標**: 100 テキスト要素でパン・ズーム時の操作が追従し、確定後の再起動で欠損しない
 - **制約**: オフライン、AI なし、既存の単一 app module を維持
 

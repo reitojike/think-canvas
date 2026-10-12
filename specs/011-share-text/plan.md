@@ -8,7 +8,7 @@ Issue79のA/A・Bを実装する。受信→保留→内容/board確認→表示
 
 ## Technical Context
 
-- **Language/Version**: 現行Kotlin/AGPを維持。API 26以上、compile/target 37。
+- **Language/Version**: 現行Kotlin/AGPを維持。API 30以上、compile/target 37。
 - **Primary Dependencies**: 現行Compose BOM 2026.09.00、Activity 1.13.0、Room 3.0.3、SQLite 2.7.1、coroutines。追加/更新なし。
 - **Storage**: Room schema 2→3で完了receiptを追加。保留本文はbackup対象外private file、task復元tokenだけをActivity saved stateへ置く。
 - **Testing**: JUnit、実SQLite/Room、Compose instrumentation、既存Windows GMD/Android CI。

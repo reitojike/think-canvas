@@ -8,7 +8,7 @@
 
 ## Technical Context
 
-- Kotlin、JDK25、Java target17、Android API26〜37。既存Compose BOM 2026.09.00、Activity1.13.0、Room3 3.0.3、Ink1.0.0を維持。
+- Kotlin、JDK25、Java target17、Android API30〜37。既存Compose BOM 2026.09.00、Activity1.13.0、Room3 3.0.3、Ink1.0.0を維持。
 - Storage: 既存BoardSnapshot/Room。UI sessionとviewportは保存schemaに追加しない。
 - Testing: JUnit、Compose instrumentation、既存Windows GMD launcherとCI Pixel9/API37。frameのdeterministic testはmanual Compose clock。
 - Scope: CanvasScreen、pureなEdgeAutoPan helper、unit/instrumentation、Spec008/README。依存・workflow・schema更新なし。

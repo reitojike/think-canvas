@@ -12,7 +12,7 @@
 **Primary Dependencies**: 既存の Jetpack Compose、Room 3、AndroidX Ink。画像 URI の提供には既存の AndroidX Core `FileProvider` を用いる
 **Storage**: 既存 `thinkcanvas.db` schema v2 の boards と4種の要素表、端末内設定の最後に開いた ID と案内完了、明示操作で作る PNG
 **Testing**: JUnit のボード複製・範囲・寸法・保存不変条件、Room を使う Android instrumentation テスト、Android 17 エミュレーターで一覧・保存・共有・TalkBack、lint・ビルド
-**Target Platform**: Android API 26–37
+**Target Platform**: Android API 30–37
 **Project Type**: 単一 module の Android アプリ
 **Performance Goals**: 20件の一覧を操作でき、プレビューを含む表示で目立つ入力停止を起こさない。画像出力時も UI を長時間占有しない
 **Constraints**: オフライン、元データを変えない共有、画像は 1–2 px/世界座標単位・最大 4096 px / 16 MP、PRD と HTML モックは非公開
@@ -39,7 +39,7 @@
 - 一覧カードは `LazyVerticalGrid` の2列とし、ボード名・日付・遠景の縮小図を表示する。縮小図は遠景で可視の図形・見出し・矢印・手書きを描き、マーカーとペンの重なり順をキャンバスに合わせる。カードの長押しは下部の操作シートを開く。案内と共有も下部シートとして表示し、TalkBack のラベルと操作を与える。
 - 画像対象の計算、全体と選択範囲の要素抽出、余白と寸法決定を UI から分ける。余白は世界座標で上下左右に同じ `max(24, 対象長辺×0.05)` を加える。画像は原則 2 px/世界座標単位で作り、長辺4096 px・総画素16 MPの上限に合わせて1 px/単位まで縮小する。1 px/単位でも収まらない場合は失敗として利用者に示す。画像プレビューと PNG は同じ描画計画を使う。共有画像には本文・手書き・矢印を含め、操作 chrome、選択ハンドル、検索の強調は含めない。一覧カードだけに Spec 004 の遠景投影を適用する。
 - 共有開始時の Compose の density・font scale・文字間隔を文字の組版へ渡す。本文・囲み名の測定結果を画像の外接範囲と描画で共有し、折り返しや行間が異なる計算で切り抜かれないようにする。組版、画像計画、描画は UI thread の外で行う。
-- PNG 保存は API 29 以上で `MediaStore`、API 26–28 で文書作成画面を使う。コピーと Android 共有は `FileProvider` の cache URI とし、URI の read grant を受け手へ渡す。圧縮・書込は UI thread の外で行い、失敗時に不完全な出力を掃除する。
+- PNG 保存は API 29 以上で `MediaStore`、API 26–28 で文書作成画面を使う。現行の対応対象である Android 11（API 30）以上では `MediaStore` を使用し、API 26–28 の文書作成経路は旧対応範囲の設計記録として残す。コピーと Android 共有は `FileProvider` の cache URI とし、URI の read grant を受け手へ渡す。圧縮・書込は UI thread の外で行い、失敗時に不完全な出力を掃除する。
 
 ## Project Structure
 

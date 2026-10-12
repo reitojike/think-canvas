@@ -13,7 +13,7 @@ ImageElementをBoardSnapshotの第五のcollectionとし、既存geometry・選�
 - **Primary Dependencies**: 現行Compose/Activity1.13.0/Room3 3.0.3/Ink。新規はAndroidX ExifInterface1.4.2（公式最新stable、API26でも同じ8向き補正を行うため）。画像loaderや独自pickerライブラリを増やさない。
 - **Storage**: Room schema3→4にimage_elementsを追加。素材はfilesDir内のUUID専用folder、immutable original bytes。外部URI/絶対path/ファイル名を保存しない。
 - **Testing**: unit（model/geometry/history/plan/migration/receipt）、native（実Room/素材/EXIF/picker callback/recreation/guard/export）、標準Windows GMDと現行GitHub CI、代表実機。
-- **Platform/Type**: Android API26〜37の単一Activity Compose app。singleTask/text共有のManifestは変更しない。
+- **Platform/Type**: Android API30〜37の単一Activity Compose app。singleTask/text共有のManifestは変更しない。
 - **Performance**: copy64MiB/source以内、source寸法各65535以内・100MP以内、sampled decode一枚最大2048px/4MP・ARGB8888。process cache32MiB、decode並列1、素材rotate一時領域最大16MiB追加。出力の既存4096px/16MP制限を維持し、画像は一枚ずつ描画/一時bitmap解放。cache外のbitmapを各Compose nodeに保持しない。
 - **Scope**: 静止JPEG/PNG/WebP。GIF/animated WebP/APNG/未知形式は明示拒否する。形式判定はMIME申告だけでなくcopy済みheaderとdecoderの結果を確認。HEIF等は本v1の保証対象に含めず、読取り不可を明示する。
 

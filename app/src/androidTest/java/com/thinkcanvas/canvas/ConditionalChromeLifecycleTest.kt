@@ -90,6 +90,113 @@ class ConditionalChromeLifecycleTest {
 
     @PrSmoke
     @Test
+    fun launcherRefreshPreservesStrictPlatformFailures() {
+        val label = "図形ツールを開く"
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val rect = Rect(912, 1073, 1038, 1199)
+        fun rejected(refresh: (AccessibilityNodeInfo) -> Boolean) {
+            val boundsReads = intArrayOf(0)
+            val node = platformNodeFixture(label, rect, true, null, boundsReads)
+            var refreshCalls = 0
+            var actions = 0
+            assertThrows(AssertionError::class.java) {
+                clickNode(instrumentation, node, label,
+                    refresh = { refreshCalls++; refresh(it) }, click = { actions++ })
+            }
+            assertEquals(1, refreshCalls)
+            assertEquals(0, boundsReads[0])
+            assertEquals(0, actions)
+        }
+        rejected { false }
+        rejected { it.isEnabled = false; true }
+        rejected { it.isVisibleToUser = false; true }
+        rejected { it.contentDescription = "別の control"; true }
+        rejected { it.setSource(android.view.View(instrumentation.targetContext)); true }
+
+        fun rejectedControl(refresh: (AccessibilityNodeInfo) -> Boolean) {
+            val boundsReads = intArrayOf(0)
+            val control = platformNodeFixture(null, rect, true, null, boundsReads)
+            val description = platformNodeFixture(label, rect, false, control, boundsReads)
+            var descriptionRefreshes = 0
+            var controlRefreshes = 0
+            var records = 0
+            var actions = 0
+            assertThrows(AssertionError::class.java) {
+                clickNode(instrumentation, description, label,
+                    refresh = {
+                        if (it === description) { descriptionRefreshes++; true } else {
+                            assertTrue(it === control)
+                            controlRefreshes++
+                            refresh(it)
+                        }
+                    }, record = { records++ }, click = { actions++ })
+            }
+            assertEquals(1, descriptionRefreshes)
+            assertEquals(1, controlRefreshes)
+            assertEquals(0, boundsReads[0])
+            assertEquals(0, records)
+            assertEquals(0, actions)
+        }
+        rejectedControl { false }
+        rejectedControl { it.isClickable = false; true }
+        rejectedControl { it.removeAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK); true }
+
+        val sameReads = intArrayOf(0)
+        val same = platformNodeFixture(label, rect, true, null, sameReads)
+        var sameRefreshes = 0
+        // 取得時／click前の二段で再検証でき、0hopは各段で1回だけ。
+        repeat(2) {
+            assertTrue(same === assertPlatformControl(same, label, refresh = { sameRefreshes++; true }))
+        }
+        assertEquals(2, sameRefreshes)
+        assertEquals(4, sameReads[0])
+        val controlRect = Rect(912, 1893, 1038, 2019) // 保存済み820px不一致の値だけを使う負例。
+        val original = assertThrows(AssertionError::class.java) {
+            assertEquals("$label の description と control は同じ bounds", rect, controlRect)
+        }
+        for (sinkThrows in listOf(false, true)) {
+            val boundsReads = intArrayOf(0)
+            val control = platformNodeFixture(null, controlRect, true, null, boundsReads)
+            val description = platformNodeFixture(label, rect, false, control, boundsReads)
+            var descriptionRefreshes = 0
+            var controlRefreshes = 0
+            var records = 0
+            var actions = 0
+            val actual = assertThrows(AssertionError::class.java) {
+                clickNode(instrumentation, description, label,
+                    refresh = {
+                        if (it === description) descriptionRefreshes++ else { assertTrue(it === control); controlRefreshes++ }
+                        true
+                    }, record = {
+                        records++
+                        if (sinkThrows) throw AssertionError("記録 sink の失敗")
+                    }, click = { actions++ })
+            }
+            assertEquals(original.message, actual.message)
+            assertEquals(1, descriptionRefreshes)
+            assertEquals(1, controlRefreshes)
+            assertEquals(2, boundsReads[0])
+            assertEquals(1, records)
+            assertEquals(0, actions)
+        }
+    }
+
+    private fun platformNodeFixture(
+        label: String?, rect: Rect, clickable: Boolean,
+        parent: AccessibilityNodeInfo?, boundsReads: IntArray,
+    ): AccessibilityNodeInfo = object : AccessibilityNodeInfo() {
+        override fun getParent(): AccessibilityNodeInfo? = parent
+        override fun getBoundsInScreen(outBounds: Rect) { boundsReads[0]++; outBounds.set(rect) }
+    }.apply {
+        contentDescription = label
+        isEnabled = true
+        isVisibleToUser = true
+        isClickable = clickable
+        if (clickable) addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK)
+    }
+
+    @PrSmoke
+    @Test
     fun regionNameTransitionRemovesFormerSelectionSharePointUntilReselected() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -792,7 +899,11 @@ class ConditionalChromeLifecycleTest {
     private fun assertPlatformControl(
         description: AccessibilityNodeInfo,
         label: String,
+        refresh: (AccessibilityNodeInfo) -> Boolean = AccessibilityNodeInfo::refresh,
+        record: (String) -> Unit = { Log.e("ConditionalGeometry", it) },
     ): AccessibilityNodeInfo {
+        // 一度とはこの Layer A 検証ごと。取得時と clickNode の直前で各々再検証する。
+        if (label == "図形ツールを開く") refreshLauncherInfo(description, label, "description", refresh)
         assertEquals(label, description.contentDescription?.toString())
         assertTrue("$label の description は有効", description.isEnabled)
         assertTrue("$label の description は利用者に見える", description.isVisibleToUser)
@@ -803,6 +914,9 @@ class ConditionalChromeLifecycleTest {
             parentHops++
         }
         val actionable = checkNotNull(node) { "$label に対応する clickable node がありません" }
+        if (label == "図形ツールを開く" && actionable !== description) {
+            refreshLauncherInfo(actionable, label, "control", refresh)
+        }
         assertTrue("$label の control は有効", actionable.isEnabled)
         assertTrue("$label の control は利用者に見える", actionable.isVisibleToUser)
         assertTrue("$label の control は clickable", actionable.isClickable)
@@ -810,8 +924,28 @@ class ConditionalChromeLifecycleTest {
             actionable.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
         val descriptionBounds = bounds(description)
         val controlBounds = bounds(actionable)
-        assertControlBounds(label, descriptionBounds, controlBounds, parentHops)
+        assertControlBounds(label, descriptionBounds, controlBounds, parentHops, record)
         return actionable
+    }
+
+    private fun refreshLauncherInfo(
+        node: AccessibilityNodeInfo,
+        label: String,
+        role: String,
+        refresh: (AccessibilityNodeInfo) -> Boolean,
+    ) {
+        val before = AccessibilityNodeInfo(node)
+        assertTrue("$label の $role を一度 refresh できる", refresh(node))
+        val after = AccessibilityNodeInfo(node)
+        assertTrue("$label の $role identity は変わらない", before == after)
+        assertEquals("$label の $role description は変わらない",
+            before.contentDescription?.toString(), after.contentDescription?.toString())
+        assertEquals("$label の $role enabled は変わらない", before.isEnabled, after.isEnabled)
+        assertEquals("$label の $role visible は変わらない", before.isVisibleToUser, after.isVisibleToUser)
+        assertEquals("$label の $role clickable は変わらない", before.isClickable, after.isClickable)
+        assertEquals("$label の $role ACTION_CLICK は変わらない",
+            before.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK },
+            after.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
     }
 
     private fun assertControlBounds(
@@ -931,11 +1065,16 @@ class ConditionalChromeLifecycleTest {
         instrumentation: android.app.Instrumentation,
         node: AccessibilityNodeInfo,
         label: String,
+        refresh: (AccessibilityNodeInfo) -> Boolean = AccessibilityNodeInfo::refresh,
+        record: (String) -> Unit = { Log.e("ConditionalGeometry", it) },
+        click: () -> Unit = {
+            composeRule.onNode(hasContentDescription(label) and hasClickAction())
+                .performSemanticsAction(SemanticsActions.OnClick)
+        },
     ) {
-        assertPlatformControl(node, label)
+        assertPlatformControl(node, label, refresh, record)
         // Layer B: Layer A で確認した exact control の OnClick を実行する。
-        composeRule.onNode(hasContentDescription(label) and hasClickAction())
-            .performSemanticsAction(SemanticsActions.OnClick)
+        click()
         composeRule.waitForIdle()
         instrumentation.waitForIdleSync()
     }

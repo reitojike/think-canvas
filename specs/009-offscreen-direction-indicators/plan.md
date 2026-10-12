@@ -14,7 +14,7 @@ CanvasScreenの現在のsearch matchとselectedIdsのrendered boundsから最大
 **Primary Dependencies**: 既存Compose BOM2026.09.00 / Material3。追加・更新なし
 **Storage**: 既存Room3、schema・保存path変更なし
 **Testing**: JUnit4のpure geometry、Compose/native MotionEvent instrumentation、現行Android CI
-**Target Platform**: Android min26 / target37、Pixel9/API37 CI
+**Target Platform**: Android min30 / target37、Pixel9/API37 CI
 **Project Type**: Android mobile app
 **Performance Goals**: markerは最大2個。pan時に既存geometry参照と選択IDsだけを集約し、全要素の新たな探索・測定を追加しない
 **Constraints**: offline、48dp touch、viewportだけの移動、source freeze後に検証

@@ -2,7 +2,7 @@
 
 ## 準備
 
-JDK 25 と Android SDK Platform 37.0 / Build Tools 36.0.0 を用意する。エミュレーターまたは実機に API 26 以上の Android を用意する。`compileSdk` と `targetSdk` は 37 とする。Android 17 の実機では、既存 APK からの更新、system bars、キャンバス操作と再起動後の保存状態を確認する。
+JDK 25 と Android SDK Platform 37.0 / Build Tools 36.0.0 を用意する。エミュレーターまたは実機に API 30 以上の Android を用意する。`compileSdk` と `targetSdk` は 37 とする。Android 17 の実機では、既存 APK からの更新、system bars、キャンバス操作と再起動後の保存状態を確認する。
 
 ```powershell
 .\gradlew.bat :app:lintDebug
