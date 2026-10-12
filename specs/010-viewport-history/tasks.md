@@ -68,3 +68,20 @@ T012/T013/T016〜T022は[PR90](https://github.com/reitojike/think-canvas/pull/90
 - [ ] T029 ユーザーの追加指示に従い、T026達成後にPR105をmergeする。最新Issue104/106のACをmerge済み成果物とnative/full CI/review/実機証跡で個別判定し、実際に達成した条件だけ同期する。
 
 T026/T029のfinal-head CI/canonical/merge/closure証跡は[PR105](https://github.com/reitojike/think-canvas/pull/105)と対象Issueへ記録する。候補freeze時点では未完了markerを保持し、既存delivery同期と同じく次の必要な統合でcheckboxを同期する。実機確認をCI/review成功で置き換えない。Task ContractはMERGE_READYまでの継続と条件達成後のmergeへ更新された。
+
+## Phase 9: Issue #156 J4の限定移管
+
+- [x] T030 元Android L708–762の全assertion、既存JVM authority、不足2本、保持Android oracleを `plan.md` へ対応付ける。FR-005/006/007、SC-002/003。既存Issueとreviewer-owned checklistは変更しない。
+- [x] T031 `ContentHistoryFocusTest.kt` に独立BoardStateの4-family delete→Undo→Redo、exact snapshots、history flags、対象だけのIDsと復元後／消失前boundsを追加し、2本を最初に実行する。
+- [x] T032 同fileにrectangle+ink move(90,40)→Undo、2対象の復元bounds、固定canvasの既存fit包含、内容／Redo不変を追加する。navigationを人工recordしない。
+- [x] T033 関連history/geometry、lint/unit/assemble、既存suite validator/scripts/public boundary/diffを確認し、最大3件の一時ローカルnegativeを復元後の差分とともに記録する。
+- [ ] T034 下位層coverageとAndroid negativeが成立した場合だけAndroid matrixをtext/multi代表2本へ縮小し、manifestをfull_onlyへ同期する。実測geometry→navigation→save契約とexact-method fresh evidenceを保持する。実行不能なら未達のままJVMだけのDraft PRに限定する。
+- [ ] T035 Draft PRのexact-head CI/reviewと元契約同等性／positive-negative／blockerを親へ報告する。mergeは独立レビュー後に調整する。
+- [x] T036 canonical reviewのdocs 2件を同じbounded correctionで補正する。基準mainの元Android全assertion行を再照合し、J4は旧4-familyだけ、imageはscope外、SC-003全familyの成立は未主張と `plan.md` へ明記する。[行参照](https://github.com/reitojike/think-canvas/pull/157#discussion_r4243967719)／[family境界](https://github.com/reitojike/think-canvas/pull/157#discussion_r4243967724)。code／test body／Android／manifest差分を追加しない。
+
+T031/T032の初回2本は2/0/0/0、復元後の関連5 classesは52/0/0/0。
+ローカルnegative2件は各1/1/0/0で検出後に元sourceを復元した（証拠はplan.md）。
+T034はAndroid navigation negative未証明のため保留し、元Android matrixとmanifestを維持する。
+今回の採用scopeはJVM追加2本だけ。T035の候補freeze後のCI/review証跡は対象Draft PRへ記録する。
+local lint/unit/assembleは成功、全unit191/0/0/0、suite validator4 laneとscript tests13/13、公開境界とdiff checkはPASS。
+T035のdelivery markerはfreeze時点の未完了を維持し、最終結果はPR／Issueの証拠で照合する。

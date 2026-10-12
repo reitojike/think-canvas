@@ -2,12 +2,9 @@ package com.thinkcanvas.canvas
 
 import android.content.Intent
 import android.graphics.Rect
-import android.os.SystemClock
-import android.view.InputDevice
-import android.view.MotionEvent
-import android.view.View
 import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.hasClickAction
@@ -16,15 +13,12 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.UiController
-import androidx.test.espresso.ViewAction
-import androidx.test.espresso.matcher.ViewMatchers.isRoot
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thinkcanvas.MainActivity
 import com.thinkcanvas.data.CanvasDatabase
@@ -33,7 +27,6 @@ import com.thinkcanvas.data.SpatialElementRow
 import com.thinkcanvas.data.BoardRow
 import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
-import org.hamcrest.Matcher
 import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -153,7 +146,17 @@ class SemanticNavigationTest {
             activateViaSemantics("検索を閉じる")
             awaitA11y("ボード内を検索")
 
-            onView(isRoot()).perform(blankDoubleTap())
+            composeRule.onNode(hasContentDescription("キャンバス")).performTouchInput {
+                val blank = Offset(width * .5f, height * .38f)
+                // Same node-local point, with DOWN/UP at 0/40/80/120ms.
+                down(blank)
+                advanceEventTime(40L)
+                up()
+                advanceEventTime(40L)
+                down(blank)
+                advanceEventTime(40L)
+                up()
+            }
             waitForZoom("50%  中")
 
             val database = CanvasDatabase.open(context)
@@ -347,44 +350,6 @@ class SemanticNavigationTest {
     private fun replaceSearchTextViaSemantics(term: String) {
         composeRule.onNode(hasSetTextAction()).performTextReplacement(term)
         composeRule.waitForIdle()
-    }
-
-    // One deterministic touchscreen double-tap: a single injectMotionEventSequence with DOWN/UP at 0/40/80/120ms.
-    // Timestamps end at "now" so no event is stamped in the future.
-    private fun blankDoubleTap() = object : ViewAction {
-        override fun getConstraints(): Matcher<View> = isRoot()
-        override fun getDescription() = "blank-canvas double tap as one motion event sequence"
-        override fun perform(uiController: UiController, view: View) {
-            val location = IntArray(2).also(view::getLocationOnScreen)
-            val tapX = location[0] + view.width * 0.5f
-            val tapY = location[1] + view.height * 0.38f
-            val start = SystemClock.uptimeMillis() - 120
-            val events = listOf(
-                Triple(start, start, MotionEvent.ACTION_DOWN),
-                Triple(start, start + 40, MotionEvent.ACTION_UP),
-                Triple(start + 80, start + 80, MotionEvent.ACTION_DOWN),
-                Triple(start + 80, start + 120, MotionEvent.ACTION_UP),
-            ).map { (downTime, eventTime, action) ->
-                val properties = arrayOf(MotionEvent.PointerProperties().apply {
-                    id = 0
-                    toolType = MotionEvent.TOOL_TYPE_FINGER
-                })
-                val coords = arrayOf(MotionEvent.PointerCoords().apply {
-                    x = tapX
-                    y = tapY
-                    pressure = 1f
-                    size = 1f
-                })
-                MotionEvent.obtain(
-                    downTime, eventTime, action, 1, properties, coords,
-                    0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0,
-                )
-            }
-            try {
-                assertTrue("double tap の motion event sequence を注入できる",
-                    uiController.injectMotionEventSequence(events))
-            } finally { events.forEach { it.recycle() } }
-        }
     }
 
     private fun clickA11y(prefix: String, clickable: Boolean = false, attempts: Int = 40) {

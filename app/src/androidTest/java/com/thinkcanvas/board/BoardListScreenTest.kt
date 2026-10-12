@@ -493,6 +493,11 @@ class BoardListScreenTest {
             release.await()
             commitListAction(action)
         }
+        // #106: この wait の既取得値だけを保持。-2 は未取得/未評価、ime の -1 は inset なし。
+        val samples = Array(512) { LongArray(13) { -2L } }
+        var pollCount = 0
+        val boundaries = LongArray(4) // wait 開始/終了、close 開始/終了 (elapsedRealtimeNanos)
+        var waitOutcome = "NOT_STARTED"
         try {
             awaitDescription("変更前、", substring = true)
             composeRule.onNodeWithContentDescription("変更前、", substring = true)
@@ -503,20 +508,42 @@ class BoardListScreenTest {
             nameField.performTextInput("変更後")
             var previousBounds: Rect? = null
             var stableBounds = 0
-            composeRule.waitUntil(5_000) {
-                var imeVisible = false
-                scenario.onActivity {
-                    imeVisible = it.window.decorView.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true
+            boundaries[0] = SystemClock.elapsedRealtimeNanos()
+            try {
+                composeRule.waitUntil(5_000) {
+                    val sample = samples.getOrNull(pollCount++)
+                    sample?.set(0, SystemClock.elapsedRealtimeNanos())
+                    var imeVisible = false
+                    scenario.onActivity {
+                        val insets = it.window.decorView.rootWindowInsets
+                        imeVisible = insets?.isVisible(WindowInsets.Type.ime()) == true
+                        sample?.set(1, if (insets == null) -1L else if (imeVisible) 1L else 0L)
+                    }
+                    val root = automation.rootInActiveWindow
+                    sample?.set(2, if (root == null) 0L else 1L)
+                    val nativeSave = find(root) {
+                        it.isVisibleToUser && it.text?.toString() == "保存"
+                    }
+                    sample?.set(3, if (nativeSave == null) 0L else 1L)
+                    val bounds = Rect().also { nativeSave?.getBoundsInScreen(it) }
+                    sample?.set(4, bounds.left.toLong()); sample?.set(5, bounds.top.toLong())
+                    sample?.set(6, bounds.right.toLong()); sample?.set(7, bounds.bottom.toLong())
+                    stableBounds = if (imeVisible &&
+                        !bounds.isEmpty.also { sample?.set(8, if (it) 1L else 0L) } &&
+                        (bounds == previousBounds).also { sample?.set(9, if (it) 1L else 0L) })
+                        stableBounds + 1 else 0
+                    previousBounds = bounds
+                    sample?.set(10, stableBounds.toLong())
+                    (stableBounds >= 2).also {
+                        sample?.set(11, if (it) 1L else 0L)
+                        sample?.set(12, SystemClock.elapsedRealtimeNanos())
+                    }
                 }
-                val nativeSave = find(automation.rootInActiveWindow) {
-                    it.isVisibleToUser && it.text?.toString() == "保存"
-                }
-                val bounds = Rect().also { nativeSave?.getBoundsInScreen(it) }
-                stableBounds = if (imeVisible && !bounds.isEmpty && bounds == previousBounds)
-                    stableBounds + 1 else 0
-                previousBounds = bounds
-                stableBounds >= 2
-            }
+                waitOutcome = "SUCCESS"
+            } catch (failure: Throwable) {
+                waitOutcome = failure.javaClass.simpleName
+                throw failure
+            } finally { boundaries[1] = SystemClock.elapsedRealtimeNanos() }
             nameField.assertTextEquals("変更後")
             composeRule.onNodeWithText("保存").assertIsDisplayed()
             composeRule.onNodeWithText("保存").performClick()
@@ -532,7 +559,23 @@ class BoardListScreenTest {
                     .fetchSemanticsNodes().isEmpty()
             }
             assertEquals(1, calls)
-        } finally { scenario.close() }
+        } finally {
+            boundaries[2] = SystemClock.elapsedRealtimeNanos()
+            try { scenario.close() } finally {
+                boundaries[3] = SystemClock.elapsedRealtimeNanos()
+                try {
+                    val retained = minOf(pollCount, samples.size)
+                    android.util.Log.e("RenameImeWait", "BEGIN outcome=$waitOutcome boottimeNs=${boundaries.joinToString(",")} " +
+                        "polls=$pollCount retained=$retained overflow=${pollCount > samples.size} " +
+                        "fields=startNs,ime,root,save,left,top,right,bottom,empty,equal,stable,result,endNs")
+                    for (index in 0 until retained)
+                        android.util.Log.e("RenameImeWait", "sample=$index values=${samples[index].joinToString(",")}")
+                    android.util.Log.e("RenameImeWait", "END retained=$retained")
+                } catch (_: Throwable) {
+                    // END 欠落は診断不成立。出力 failure は元の test/close exception を置き換えない。
+                }
+            }
+        }
     }
 
     @Test fun duplicateReloadsExactlyOneCopyAfterActivityRecreation() {
