@@ -25,6 +25,7 @@
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#collapsedAndExpandedToolFormerCentersAdmitPersistedInkAndAllowReentry",
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#launcherGeometryRecordIgnoresEqualAndOtherControls",
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#launcherGeometryRecordPreservesStrictBoundsFailure",
+      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#launcherRefreshPreservesStrictPlatformFailures",
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteNativeControlsAndDismissedBoundsRemainActionable",
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteOpeningInvalidatesAdmittedOutsidePointer",
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteOutsideShortTapOnlyDismissesAndNextTapStartsText",
