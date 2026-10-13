@@ -9,8 +9,8 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 
 [初期構築 #1](https://github.com/reitojike/think-canvas/issues/1) と Spec 001〜005 の実装、
 [初期ロードマップ #7](https://github.com/reitojike/think-canvas/issues/7) は完了しています。
-現在は日常利用での検証（dogfooding）と、使い勝手の改善を進める段階です。
-[Roadmap v2 #81](https://github.com/reitojike/think-canvas/issues/81)で、mobile操作と記録の改善を追跡しています。
+[Roadmap v2 #81](https://github.com/reitojike/think-canvas/issues/81) の mobile-first usability / capture wave は完了しました。
+日常利用での検証（dogfooding）は継続し、後続の改善は [#108](https://github.com/reitojike/think-canvas/issues/108)、[#110](https://github.com/reitojike/think-canvas/issues/110)、[#111](https://github.com/reitojike/think-canvas/issues/111) などの独立した Issue で追跡しています。
 
 | 実装済みの仕様 | 対象 Issue | 公開仕様 |
 | --- | --- | --- |
