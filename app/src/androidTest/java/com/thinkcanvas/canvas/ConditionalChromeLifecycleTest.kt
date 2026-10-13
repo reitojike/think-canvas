@@ -14,13 +14,15 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.Lifecycle
+import com.thinkcanvas.BoardSaveAcknowledgement
+import com.thinkcanvas.BoardSaveState
 import com.thinkcanvas.BoardSessionViewModel
 import com.thinkcanvas.MainActivity
 import com.thinkcanvas.data.BoardRow
@@ -28,7 +30,9 @@ import com.thinkcanvas.data.CanvasDatabase
 import com.thinkcanvas.data.SpatialElementRow
 import com.thinkcanvas.data.TextElementRow
 import com.thinkcanvas.data.showBoardOneAtStartup
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
+import java.util.concurrent.atomic.AtomicInteger
 import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -245,6 +249,12 @@ class ConditionalChromeLifecycleTest {
             clickActionable(instrumentation, "囲み: Cluster")
             assertEquals("囲みが選択されている", "選択中",
                 waitForRegionState(instrumentation, "選択中"))
+            lateinit var sessions: BoardSessionViewModel
+            instrumentation.runOnMainSync { sessions = ViewModelProvider(activity)[BoardSessionViewModel::class.java] }
+            val board = sessions.stateFor(1L, BoardSnapshot())
+            val store = com.thinkcanvas.data.CanvasStore.get(context)
+            val before = board.snapshot()
+            val savedBefore = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
 
             val shareButton = waitForActionable(instrumentation, "選択範囲を画像で共有")
             val shareCenter = center(bounds(shareButton))
@@ -266,25 +276,38 @@ class ConditionalChromeLifecycleTest {
             try {
                 tap(instrumentation, shareCenter.first, shareCenter.second)
                 repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
-                assertEquals("confirmed single 前は選択を維持する", "選択中",
+                assertEquals("短い外側tapは選択を変えない", "選択中",
                     waitForRegionState(instrumentation, "選択中"))
+                assertNull("未変更の外側tapでeditorが閉じる",
+                    findExact(instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前"))
                 composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
             } finally {
                 composeRule.mainClock.autoAdvance = true
             }
-            assertEquals("former share Button center から囲み選択が解除される", "未選択",
-                waitForRegionState(instrumentation, "未選択"))
-            assertNotNull("選択解除後も囲み名 editor は active",
-                findExact(instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前"))
+            assertEquals("dismissal tap は別操作を起こさない", "選択中",
+                waitForRegionState(instrumentation, "選択中"))
+            assertEquals("未変更の確定はboardを変更しない", before, board.snapshot())
+            assertEquals("未変更の確定は保存しない", savedBefore,
+                checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+            assertNotNull("閉じたeditorの後でshare actionが戻る",
+                waitForActionable(instrumentation, "選択範囲を画像で共有"))
 
+            val (reopenedRegion, reopenedRename) = waitForRegionRenameAction(instrumentation)
+            assertTrue(reopenedRegion.performAction(reopenedRename.id))
             clickActionable(instrumentation, "完了")
+            waitForGone(instrumentation, "囲みの名前")
+            assertEquals("Doneも未変更内容を保存しない", savedBefore,
+                checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+
+            clickActionable(instrumentation, "囲み: Cluster")
+            assertEquals("別操作による明示解除", "未選択",
+                waitForRegionState(instrumentation, "未選択"))
             waitForGone(instrumentation, "選択範囲を画像で共有")
             clickActionable(instrumentation, "囲み: Cluster")
             assertEquals("再選択後に囲みが選択中", "選択中",
                 waitForRegionState(instrumentation, "選択中"))
             assertNotNull("再選択後に共有 Button が再表示される",
                 waitForActionable(instrumentation, "選択範囲を画像で共有"))
-
         } finally {
             activity.finish()
             instrumentation.waitForIdleSync()
@@ -292,7 +315,7 @@ class ConditionalChromeLifecycleTest {
     }
 
     @Test
-    fun pendingBlankSingleRejectsRegionNameInputChange() {
+    fun staleRegionNameInputAfterOutsideCommitDoesNotReopenEditor() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         seedBoard(context)
@@ -301,30 +324,44 @@ class ConditionalChromeLifecycleTest {
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
         try {
+            lateinit var sessions: BoardSessionViewModel
+            instrumentation.runOnMainSync { sessions = ViewModelProvider(activity)[BoardSessionViewModel::class.java] }
+            val editor = sessions.textEditorFor(1L, BoardSnapshot())
+            val store = com.thinkcanvas.data.CanvasStore.get(context)
+
             clickActionable(instrumentation, "囲み: Cluster")
             val formerPoint = center(bounds(waitForActionable(instrumentation, "選択範囲を画像で共有")))
             val (region, renameAction) = waitForRegionRenameAction(instrumentation)
             assertTrue(region.performAction(renameAction.id))
             waitForGone(instrumentation, "選択範囲を画像で共有")
-            val changeName = checkNotNull(composeRule.onNodeWithContentDescription("囲みの名前")
+            composeRule.onNodeWithContentDescription("囲みの名前").performTextReplacement("Changed")
+            val staleSetText = checkNotNull(composeRule.onNodeWithContentDescription("囲みの名前")
                 .fetchSemanticsNode().config[SemanticsActions.SetText].action)
+
             val configuration = composeRule.onNodeWithContentDescription("キャンバス")
                 .fetchSemanticsNode().layoutInfo.viewConfiguration
             composeRule.mainClock.autoAdvance = false
             try {
                 tap(instrumentation, formerPoint.first, formerPoint.second)
                 repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
-                assertEquals("pending 中は選択を維持する", "選択中",
-                    waitForRegionState(instrumentation, "選択中"))
-                instrumentation.runOnMainSync { assertTrue(changeName(AnnotatedString("Changed"))) }
+                waitForGone(instrumentation, "囲みの名前")
+                assertNull("外側確定後はregion editorを閉じる", editor.regionNameDraft.value)
+                awaitSavedRegionName(store, "chrome-lifecycle-region", "Changed")
+
+                instrumentation.runOnMainSync {
+                    assertTrue(staleSetText(AnnotatedString("Stale callback")))
+                }
                 composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
             } finally {
                 composeRule.mainClock.autoAdvance = true
             }
-            assertEquals("囲み名変更で old single の選択解除を取消す", "選択中",
+
+            assertNull("古いSetText actionでeditorを再生成しない", editor.regionNameDraft.value)
+            assertEquals("確定済みregion名を維持する", "Changed",
+                runBlocking { store.savedBoard(1L)?.snapshot?.shapes?.singleOrNull { it.id == "chrome-lifecycle-region" }?.name })
+            assertEquals("外側tapと古いactionで選択を変えない", "選択中",
                 waitForRegionState(instrumentation, "選択中"))
-            composeRule.onNodeWithContentDescription("囲みの名前").assertTextEquals("Changed")
-            assertNull("old single から text editor を生成しない",
+            assertNull("外側tapからtext editorを生成しない",
                 findExact(instrumentation.uiAutomation.rootInActiveWindow, "新しいテキスト"))
         } finally {
             composeRule.mainClock.autoAdvance = true
@@ -332,6 +369,76 @@ class ConditionalChromeLifecycleTest {
             instrumentation.waitForIdleSync()
         }
     }
+
+
+    @Test
+    fun regionNameOutsideTapRejectsRunningAndFailedSave() =
+        withPaletteBoard(expanded = false) { instrumentation, _, _, sessions ->
+            val board = sessions.stateFor(1L, BoardSnapshot())
+            val editor = sessions.textEditorFor(1L, BoardSnapshot())
+            val store = com.thinkcanvas.data.CanvasStore.get(instrumentation.targetContext)
+            clickActionable(instrumentation, "囲み: Cluster")
+            val blockedShare = center(bounds(waitForActionable(instrumentation, "選択範囲を画像で共有")))
+            val (region, rename) = waitForRegionRenameAction(instrumentation)
+            assertTrue(region.performAction(rename.id))
+            waitForGone(instrumentation, "選択範囲を画像で共有")
+            composeRule.onNodeWithContentDescription("囲みの名前").performTextReplacement("Blocked rename")
+
+            val blockedBefore = board.snapshot()
+            val savedBeforeBlocked = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
+
+            // Pending acknowledgement blocks both Done and outside commit before saveState changes.
+            val pendingAckCompletion = CompletableDeferred<Unit>()
+            val pendingAck = BoardSaveAcknowledgement(1L, Long.MAX_VALUE, pendingAckCompletion)
+            instrumentation.runOnMainSync { editor.pendingDraftAcknowledgement.value = pendingAck }
+            clickActionable(instrumentation, "完了")
+            assertEquals("pending ack中はDoneでregion名を確定しない", "Blocked rename",
+                editor.regionNameDraft.value?.name)
+            assertEquals("pending ack中のDoneはboardを変更しない", blockedBefore, board.snapshot())
+            assertFalse("pending ackを完了させない", pendingAck.isCompleted)
+            nativeGesture(instrumentation, listOf(blockedShare))
+            assertEquals("pending ack中も外側tap後のdraftを保持する", "Blocked rename",
+                editor.regionNameDraft.value?.name)
+            assertEquals("pending ack中の外側tapはboardを変更しない", blockedBefore, board.snapshot())
+            assertFalse("pending ack中の外側tapでもacknowledgementを完了しない", pendingAck.isCompleted)
+            instrumentation.runOnMainSync { editor.pendingDraftAcknowledgement.value = null }
+
+            val blocker = CompletableDeferred<Unit>()
+            val saveCalls = AtomicInteger()
+            sessions.setSaveOperation { _, _ ->
+                saveCalls.incrementAndGet()
+                blocker
+            }
+            lateinit var acknowledgement: BoardSaveAcknowledgement
+            instrumentation.runOnMainSync {
+                acknowledgement = checkNotNull(sessions.requestSave(1L, blockedBefore))
+            }
+            val saveState = sessions.saveStateFor(1L, blockedBefore)
+            composeRule.waitUntil(5_000) { saveState.value is BoardSaveState.Running }
+
+            fun assertBlockedTap(phase: String) {
+                nativeGesture(instrumentation, listOf(blockedShare))
+                assertEquals("$phase中も編集draftを保持する", "Blocked rename",
+                    editor.regionNameDraft.value?.name)
+                assertEquals("$phase中はboardを変更しない", blockedBefore, board.snapshot())
+                assertEquals("$phase中は保存済みboardを変更しない", savedBeforeBlocked,
+                    checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+                assertEquals("$phase中に余分なsave requestを送らない", 1, saveCalls.get())
+                assertFalse("$phase中はacknowledgementを未完了のまま保つ", acknowledgement.isCompleted)
+            }
+
+            assertBlockedTap("Running")
+            blocker.completeExceptionally(IllegalStateException("bounded region-name save failure"))
+            composeRule.waitUntil(5_000) { saveState.value is BoardSaveState.Failed }
+            assertBlockedTap("Failed")
+
+            val successfulRetry = CompletableDeferred<Unit>().also { it.complete(Unit) }
+            sessions.setSaveOperation { _, _ -> successfulRetry }
+            sessions.retrySave(1L)
+            composeRule.waitUntil(5_000) {
+                acknowledgement.isCompleted && saveState.value == BoardSaveState.Idle
+            }
+        }
 
     @PrSmoke
     @Test
@@ -464,27 +571,84 @@ class ConditionalChromeLifecycleTest {
 
     @PrSmoke
     @Test
-    fun paletteRegionNameEditorKeepsOutsidePriority() = withPaletteBoard(expanded = false) { instrumentation, activity, _, _ ->
+    fun paletteRegionNameEditorKeepsOutsidePriority() = withPaletteBoard(expanded = false) { instrumentation, activity, _, sessions ->
+        val board = sessions.stateFor(1L, BoardSnapshot())
+        val editor = sessions.textEditorFor(1L, BoardSnapshot())
+        val navigation = sessions.viewportHistoryFor(1L, BoardSnapshot())
+        val before = board.snapshot()
+        val viewBefore = navigation.viewportState.value
+        val store = com.thinkcanvas.data.CanvasStore.get(instrumentation.targetContext)
+        val savedBefore = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
+        val undoAvailableBefore = board.canUndo
         clickActionable(instrumentation, "囲み: Cluster")
         val formerShare = center(bounds(waitForActionable(instrumentation, "選択範囲を画像で共有")))
         val (region, rename) = waitForRegionRenameAction(instrumentation)
         assertTrue(region.performAction(rename.id))
         waitForGone(instrumentation, "選択範囲を画像で共有", recordPostRenameShareDecision = true)
+        composeRule.onNodeWithContentDescription("囲みの名前")
+            .performTextReplacement("Cluster renamed")
+        val renamed = "Cluster renamed"
+        assertEquals("editorに変更済みのregion名がある", renamed, editor.regionNameDraft.value?.name)
+
         val deadline = SystemClock.uptimeMillis() + 4_000L
         val launcher = waitForActionable(instrumentation, "図形ツールを開く", deadline,
             useAppProcessGeometry = true)
         clickNode(instrumentation, launcher, "図形ツールを開く", activity = activity,
             deadline = deadline, useAppProcessGeometry = true)
         assertPaletteOpen(instrumentation)
+        val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+            .fetchSemanticsNode().layoutInfo.viewConfiguration
+        val secondPoint = (formerShare.first + 64f) to formerShare.second
+        assertPalettePath(instrumentation, activity, listOf(formerShare, secondPoint))
+
+        fun assertUncommitted() {
+            assertEquals("除外gesture後も編集draftを保持する", renamed, editor.regionNameDraft.value?.name)
+            assertEquals("除外gestureはboardを変更しない", before, board.snapshot())
+            assertEquals("除外gestureは保存しない", savedBefore,
+                checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+            assertEquals("除外gestureはpanしない", viewBefore, navigation.viewportState.value)
+            assertPaletteOpen(instrumentation)
+        }
+
+        nativeGesture(instrumentation, listOf(formerShare),
+            holdMillis = configuration.longPressTimeoutMillis + 100L)
+        assertUncommitted()
+        nativeGesture(instrumentation, listOf(formerShare, secondPoint))
+        assertUncommitted()
+        nativePointerPair(instrumentation, formerShare, secondPoint, cancelFirstPointer = false)
+        assertUncommitted()
+        nativePointerPair(instrumentation, formerShare, secondPoint)
+        assertUncommitted()
+        nativeGesture(instrumentation, listOf(formerShare),
+            terminal = MotionEvent.ACTION_CANCEL, flags = MotionEvent.FLAG_CANCELED)
+        assertUncommitted()
+
         nativeGesture(instrumentation, listOf(formerShare))
-        val configuration = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().layoutInfo.viewConfiguration
-        composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
-        assertEquals("palette中もregion outsideの選択解除を保持する", "未選択", waitForRegionState(instrumentation, "未選択"))
-        composeRule.onNodeWithContentDescription("囲みの名前").assertExists()
+        waitForGone(instrumentation, "囲みの名前")
+        assertEquals("外側tapでregion選択を変えない", "選択中",
+            waitForRegionState(instrumentation, "選択中"))
         assertPaletteOpen(instrumentation)
-        clickActionable(instrumentation, "完了")
-        clickActionable(instrumentation, "図形ツールを開く")
+        assertNull("dismissal tapはblank textを作らない", editor.draft.value)
+        assertEquals("変更済み名は1回のmodel更新", renamed,
+            board.snapshot().shapes.single { it.id == "chrome-lifecycle-region" }.name)
+        awaitSavedRegionName(store, "chrome-lifecycle-region", renamed)
+        assertEquals("変更済みのregion名を保存", renamed,
+            runBlocking { store.savedBoard(1L)?.snapshot?.shapes?.singleOrNull { it.id == "chrome-lifecycle-region" }?.name })
+        assertEquals("dismissal tap does not pan or zoom", viewBefore, navigation.viewportState.value)
+
+        assertTrue("region rename adds one undo entry", board.canUndo)
+        assertTrue(board.undo())
+        assertEquals("one undo reverts only the rename", before, board.snapshot())
+        assertEquals("rename contributed one history entry", undoAvailableBefore, board.canUndo)
+        assertTrue(board.redo())
+        assertEquals(renamed, board.snapshot().shapes.single { it.id == "chrome-lifecycle-region" }.name)
+
+        Thread.sleep(configuration.doubleTapTimeoutMillis + 100L)
+        composeRule.waitForIdle()
+        assertNull("dismissal event cannot start text after its timeout", editor.draft.value)
+        nativeGesture(instrumentation, listOf(formerShare))
         assertPaletteClosed(instrumentation)
+
     }
 
     @Test
@@ -506,7 +670,7 @@ class ConditionalChromeLifecycleTest {
         // FLAG_CANCELED belongs to POINTER_UP/CANCEL, never to a single-pointer ACTION_UP.
         val second = (blank.first + 40f) to blank.second
         assertPalettePath(instrumentation, activity, listOf(blank, second))
-        nativeCanceledPointer(instrumentation, blank, second)
+        nativePointerPair(instrumentation, blank, second)
         assertPaletteOpen(instrumentation)
         assertNull(sessions.textEditorFor(1L, BoardSnapshot()).draft.value)
         assertEquals(before, board.snapshot())
@@ -752,9 +916,10 @@ class ConditionalChromeLifecycleTest {
         if (composeRule.mainClock.autoAdvance) composeRule.waitForIdle()
     }
 
-    private fun nativeCanceledPointer(
+    private fun nativePointerPair(
         instrumentation: android.app.Instrumentation,
         first: Pair<Float, Float>, second: Pair<Float, Float>,
+        cancelFirstPointer: Boolean = true,
     ) {
         val downTime = SystemClock.uptimeMillis()
         var previousTime = downTime
@@ -789,8 +954,9 @@ class ConditionalChromeLifecycleTest {
         send(MotionEvent.ACTION_DOWN, listOf(0), listOf(first))
         send(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
             listOf(0, 1), listOf(first, second))
-        // Cancel the original owner (id0/index0), then normally release remaining id1/index0.
-        send(MotionEvent.ACTION_POINTER_UP, listOf(0, 1), listOf(first, second), MotionEvent.FLAG_CANCELED)
+        // Release id0/index0, optionally marking it canceled, then normally release remaining id1/index0.
+        send(MotionEvent.ACTION_POINTER_UP, listOf(0, 1), listOf(first, second),
+            if (cancelFirstPointer) MotionEvent.FLAG_CANCELED else 0)
         send(MotionEvent.ACTION_UP, listOf(1), listOf(second))
         instrumentation.waitForIdleSync()
         composeRule.waitForIdle()
@@ -1335,6 +1501,18 @@ class ConditionalChromeLifecycleTest {
             assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
             event.recycle()
             Thread.sleep(45)
+        }
+    }
+
+    private fun awaitSavedRegionName(
+        store: com.thinkcanvas.data.CanvasStore,
+        regionId: String,
+        name: String,
+    ) {
+        composeRule.waitUntil(5_000) {
+            runBlocking {
+                store.savedBoard(1L)?.snapshot?.shapes?.singleOrNull { it.id == regionId }?.name == name
+            }
         }
     }
 
