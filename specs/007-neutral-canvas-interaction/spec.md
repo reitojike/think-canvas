@@ -80,7 +80,7 @@
 - 共通化は実際にeditor2 family、spatial/ink familyで必要な終了判定・cleanupに限定する。全面的gesture rewrite・toolbar redesign・保存schema変更・新機能は対象外。
 - 明示「やめる」は従来の即時cancelを維持する。今回の確認はBackからの未確定変更破棄に適用する。
 - 囲み名の外側タップによる自動保存は追加しない。既存Doneと新しいBackを使用する。
-- 物理端末のTalkBack・IME製品差・片手操作の評価はRoadmap #81の横断dogfoodingで記録する。
+- Roadmap #81の2026-10-13横断dogfooding受入報告では、複数機能の組み合わせ、小画面、大きい文字で問題なしと記録した。TalkBack個別操作は未確認のまま今回の#81完了対象外とし、IME製品差・片手操作の個別判定はこの報告から推定しない。本仕様のTalkBack操作契約と既存テストは維持する。
 
 ## Issue #112: 展開paletteの外側tap
 

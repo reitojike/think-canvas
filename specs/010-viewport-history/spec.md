@@ -99,4 +99,4 @@
 
 - Issue77のPO決定を実装前のauthorityとする。履歴対象と表示補助は今回の明示承認により追加し、既存Spec004/007/008/009の内容保存とsystem Back規則を維持する。
 - 共通timeline/編集Redoのpanによる破棄/board switching history/永続履歴/schema変更は対象外。
-- compact/large font/TalkBack/物理端末の横断dogfoodingは親81で区別して継続する。
+- 親#81の2026-10-13横断dogfooding受入報告では、複数機能の組み合わせ、小画面、大きい文字で問題なしと記録した。TalkBack個別操作は未確認のまま今回の#81完了対象外とし、本仕様のTalkBack操作契約・既存テストは維持する。
