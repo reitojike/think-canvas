@@ -301,8 +301,14 @@ class ConditionalChromeLifecycleTest {
             assertEquals("Doneも未変更内容を保存しない", savedBefore,
                 checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
 
-            clickActionable(instrumentation, "囲み: Cluster")
-            assertEquals("別操作による明示解除", "未選択",
+            val selectedRegion = waitForActionable(instrumentation, "囲み: Cluster")
+            val deselectAction = selectedRegion.actionList.singleOrNull {
+                it.label?.toString() == "選択から外す"
+            }
+            assertNotNull("選択中の囲みが解除 custom action を公開する", deselectAction)
+            assertTrue("標準の選択解除 custom action を実行する",
+                selectedRegion.performAction(checkNotNull(deselectAction).id))
+            assertEquals("custom action による明示解除", "未選択",
                 waitForRegionState(instrumentation, "未選択"))
             waitForGone(instrumentation, "選択範囲を画像で共有")
             clickActionable(instrumentation, "囲み: Cluster")
@@ -608,16 +614,24 @@ class ConditionalChromeLifecycleTest {
         val renamed = "Renamed"
         assertEquals("editorに変更済みのregion名がある", renamed, editor.regionNameDraft.value?.name)
 
-        val regionForMove = checkNotNull(findExact(
-            instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster"))
-        val regionBoundsForMove = bounds(regionForMove)
-        val regionNameFieldBounds = bounds(checkNotNull(findExact(
-            instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前")))
-        val moveStart = (regionBoundsForMove.left + 30f) to (regionBoundsForMove.top + 30f)
-        assertFalse("長押しdragの開始点はregion名chrome外",
-            regionNameFieldBounds.contains(moveStart.first.toInt(), moveStart.second.toInt()))
+        val moveHandle = waitForActionable(instrumentation, "移動")
+        val moveStart = center(bounds(moveHandle))
+        val regionNameEditorChrome = listOf(
+            bounds(checkNotNull(findExact(
+                instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前"))),
+            bounds(waitForActionable(instrumentation, "完了")),
+        )
+        val moveSafeCanvas = paletteSafeCanvas(instrumentation, activity)
+        val movePaths = listOf(1f, -1f).map { direction ->
+            (0..6).map { (moveStart.first + direction * it * 12f) to moveStart.second }
+        }
+        val movePath = checkNotNull(movePaths.firstOrNull { path ->
+            path.all { (x, y) ->
+                moveSafeCanvas.contains(x.toInt(), y.toInt()) &&
+                    regionNameEditorChrome.none { it.contains(x.toInt(), y.toInt()) }
+            }
+        }) { "live MOVE handle has no path outside region-name editor chrome" }
         val beforeMove = board.snapshot()
-        val movePath = (0..6).map { (moveStart.first + it * 12f) to moveStart.second }
         nativeGesture(instrumentation, movePath, afterDown = {
             Thread.sleep(configuration.longPressTimeoutMillis + 100L)
         })
