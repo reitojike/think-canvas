@@ -107,12 +107,14 @@ Claude Code skills は `.claude/skills/`、共通テンプレートと Python �
 `.specify/` にあります。既定の integration は Codex、両方の script variant は `py` です。
 以前の PowerShell スクリプトも公式 manifest の管理対象として残りますが、両方の skills は
 Python スクリプトを参照します。
+前提不足のエラーで共有スクリプトが `$speckit-...` と案内した場合、Claude Code では
+対応する `/speckit-...` を使います。v1.1.3 の共有スクリプトは既定の Codex 表記で案内します。
 CLI/scaffold の版は `.specify/init-options.json`、導入状態は `.specify/integration.json`
 に記録されています。workflow の版（`.specify/workflows/speckit/workflow.yml`）は別管理です。
 
 Python 3 と `uv` を用意した後、公式タグに固定した一時 CLI で導入状態を確認し、
 既存の連携を更新します。
-Windows では `python --version` が実際の Python 3 を起動することも確認します。
+Windows では `python3 --version` が実際の Python 3 を起動することも確認します。
 管理対象ファイルの手編集が報告されたら、差分を確認して更新を止めてください。
 
 ```powershell
