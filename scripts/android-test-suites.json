@@ -3,7 +3,7 @@
   "authority": {
     "issue": 112,
     "baseline_main": "71849bd94005ce986bcf3a884064e97b0df7b19b",
-    "census_total": 269,
+    "census_total": 271,
     "note": "Issue #118のdated snapshotにIssue #112の独立回帰を追加。scope rebase後のPR代表4・main詳細5、palette長押しhandoffのPR回帰3、palette展開中の画像resize subslop正常UPのPR回帰1 identityを追加。actual discoveryはAndroidJUnitRunnerに委ね、receiptはselector生成に使わない。quarantine/filterは不変。Issue #141のsimulated diagnostic plumbing検証をPR/mainへ1 identity追加。 Issue #148のlauncher geometry記録・strict failure保持・selected-node freshnessの模擬契約検証を同じConditional familyのPR/mainへ3 identity追加。原因再現ではない。"
   },
   "suites": {
@@ -181,6 +181,8 @@
       "com.thinkcanvas.canvas.NeutralInteractionTest#regionNameSessionSurvivesRecreationWithoutAutoCommit",
       "com.thinkcanvas.canvas.NeutralInteractionTest#runningSaveAndPendingAcknowledgementRejectBackWithoutRetryOrNavigation",
       "com.thinkcanvas.canvas.NeutralInteractionTest#staleDiscardConfirmationCannotCancelReplacementSession",
+      "com.thinkcanvas.canvas.NextPanTraceTest#failureKeepsOriginalAndAttachesSecondaryFailures",
+      "com.thinkcanvas.canvas.NextPanTraceTest#successForwardsOnceRestoresOnlyOwnWrapperAndEmitsNothing",
       "com.thinkcanvas.canvas.OffscreenIndicatorsTest#backClearsSelectionAndOldHitAllowsNativePan",
       "com.thinkcanvas.canvas.OffscreenIndicatorsTest#movePreviewSuppressesIndicatorUntilNativeCancelReleasesOwner",
       "com.thinkcanvas.canvas.OffscreenIndicatorsTest#multiSelectionHasOneIndicatorAndRetainsRelativeGeometry",
