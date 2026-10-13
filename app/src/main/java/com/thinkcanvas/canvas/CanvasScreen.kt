@@ -613,7 +613,7 @@ fun CanvasScreen(
 
     fun moveIsLive(owner: MoveDragSession): Boolean = moveOwner === owner &&
         gestureGeneration == owner.generation && !exitBlocked() && owner.hasSameContent(board) &&
-        editorSession.draft.value == null && editorSession.regionNameDraft.value == null &&
+        editorSession.draft.value == null &&
         editorSession.imageDescriptionDraft.value == null && !imagePickerOpen &&
         discardTarget == null && attachmentEditor == null && menuTarget == null && !searchOpen
 
