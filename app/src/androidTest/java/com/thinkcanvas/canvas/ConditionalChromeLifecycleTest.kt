@@ -20,6 +20,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.Lifecycle
 import com.thinkcanvas.BoardSessionViewModel
 import com.thinkcanvas.MainActivity
 import com.thinkcanvas.data.BoardRow
@@ -30,6 +31,7 @@ import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
 import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -101,7 +103,8 @@ class ConditionalChromeLifecycleTest {
             var actions = 0
             assertThrows(AssertionError::class.java) {
                 clickNode(instrumentation, node, label,
-                    refresh = { refreshCalls++; refresh(it) }, click = { actions++ })
+                    refresh = { refreshCalls++; refresh(it) },
+                    click = { beforeOnClick -> beforeOnClick(); actions++ })
             }
             assertEquals(1, refreshCalls)
             assertEquals(0, boundsReads[0])
@@ -129,7 +132,7 @@ class ConditionalChromeLifecycleTest {
                             controlRefreshes++
                             refresh(it)
                         }
-                    }, record = { records++ }, click = { actions++ })
+                    }, record = { records++ }, click = { beforeOnClick -> beforeOnClick(); actions++ })
             }
             assertEquals(1, descriptionRefreshes)
             assertEquals(1, controlRefreshes)
@@ -150,54 +153,66 @@ class ConditionalChromeLifecycleTest {
         }
         assertEquals(2, sameRefreshes)
         assertEquals(4, sameReads[0])
-        val controlRect = Rect(912, 1893, 1038, 2019) // 保存済み820px不一致の値だけを使う負例。
-        val descriptionBefore = Rect(912, 1576, 1038, 1702)
-        val controlBefore = Rect(912, 1123, 1038, 1249)
+        val controlRect = Rect(913, 1073, 1039, 1199)
         val original = assertThrows(AssertionError::class.java) {
-            assertEquals("$label の description と control は同じ bounds", rect, controlRect)
+            assertNonEmptyEqualBounds("Option launcher", rect, controlRect)
         }
-        for (sinkThrows in listOf(false, true)) {
-            val boundsReads = intArrayOf(0)
-            val descriptionCurrent = Rect(descriptionBefore)
-            val controlCurrent = Rect(controlBefore)
-            val control = platformNodeFixture(null, controlCurrent, true, null, boundsReads)
-            val description = platformNodeFixture(label, descriptionCurrent, false, control, boundsReads)
-            var descriptionRefreshes = 0
-            var controlRefreshes = 0
-            val records = mutableListOf<String>()
-            var actions = 0
-            val actual = assertThrows(AssertionError::class.java) {
-                clickNode(instrumentation, description, label,
-                    refresh = {
-                        if (it === description) {
-                            descriptionRefreshes++
-                            descriptionCurrent.set(rect)
-                            it.setBoundsInScreen(rect)
-                        } else {
-                            assertTrue(it === control)
-                            controlRefreshes++
-                            controlCurrent.set(controlRect)
-                            it.setBoundsInScreen(controlRect)
-                        }
-                        true
-                    }, record = {
-                        records += it
-                        if (sinkThrows) throw AssertionError("記録 sink の失敗")
-                    }, click = { actions++ })
-            }
-            assertEquals(original.message, actual.message)
-            assertEquals(1, descriptionRefreshes)
-            assertEquals(1, controlRefreshes)
-            assertEquals(2, boundsReads[0])
-            assertEquals(listOf(
-                "label=$label parentHops=1 description=$rect control=$controlRect" +
-                    " descriptionBefore=$descriptionBefore descriptionAfter=$rect" +
-                    " controlBefore=$controlBefore controlAfter=$controlRect",
-            ), records)
-            assertEquals(0, actions)
+        assertThrows(AssertionError::class.java) {
+            assertNonEmptyEqualBounds("Option launcher", Rect(), Rect())
         }
-    }
+        assertThrows(IllegalStateException::class.java) {
+            uniqueAppDescription(listOf(descriptionForFixture(label, rect), descriptionForFixture(label, rect)))
+        }
+        assertThrows(IllegalStateException::class.java) {
+            assertCurrentAppRoot(true, false, true, 1, 1)
+        }
+        assertThrows(IllegalStateException::class.java) {
+            assertCurrentAppRoot(true, true, true, 2, 1)
+        }
+        val appProcessNode = descriptionForFixture(label, rect).apply {
+            setSource(android.view.View(instrumentation.targetContext), 0)
+        }
+        val externalNode = descriptionForFixture(label, rect).apply {
+            setSource(android.view.View(instrumentation.targetContext), 0)
+        }
+        assertThrows(IllegalStateException::class.java) {
+            assertMappedAppNode(appProcessNode, externalNode, appProcessNode.windowId, "description")
+        }
+        val boundsReads = intArrayOf(0)
+        val control = platformNodeFixture(null, rect, true, null, boundsReads)
+        val description = platformNodeFixture(label, rect, false, control, boundsReads)
+        var refreshCalls = 0
+        var actions = 0
+        val actual = assertThrows(AssertionError::class.java) {
+            clickNode(instrumentation, description, label,
+                refresh = { refreshCalls++; true },
+                useAppProcessGeometry = true,
+                geometryCheck = { assertNonEmptyEqualBounds("Option launcher", rect, controlRect) },
+                click = { beforeOnClick -> beforeOnClick(); actions++ })
+        }
+        assertEquals(original.message, actual.message)
+        assertEquals(2, refreshCalls)
+        assertEquals(0, boundsReads[0])
+        assertEquals(0, actions)
 
+        var dispatchUptime = 0L
+        val dispatchDeadline = 1L
+        val dispatchNode = platformNodeFixture(label, rect, true, null, intArrayOf(0))
+        assertThrows(IllegalStateException::class.java) {
+            clickNode(instrumentation, dispatchNode, label,
+                refresh = { true },
+                useAppProcessGeometry = true,
+                deadline = dispatchDeadline,
+                uptimeMillis = { dispatchUptime },
+                geometryCheck = {},
+                click = { beforeOnClick ->
+                    dispatchUptime = dispatchDeadline
+                    beforeOnClick()
+                    actions++
+                })
+        }
+        assertEquals(0, actions)
+    }
     private fun platformNodeFixture(
         label: String?, rect: Rect, clickable: Boolean,
         parent: AccessibilityNodeInfo?, boundsReads: IntArray,
@@ -212,6 +227,9 @@ class ConditionalChromeLifecycleTest {
         isClickable = clickable
         if (clickable) addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK)
     }
+
+    private fun descriptionForFixture(label: String, rect: Rect): AccessibilityNodeInfo =
+        platformNodeFixture(label, rect, false, null, intArrayOf(0))
 
     @PrSmoke
     @Test
@@ -446,13 +464,17 @@ class ConditionalChromeLifecycleTest {
 
     @PrSmoke
     @Test
-    fun paletteRegionNameEditorKeepsOutsidePriority() = withPaletteBoard(expanded = false) { instrumentation, _, _, _ ->
+    fun paletteRegionNameEditorKeepsOutsidePriority() = withPaletteBoard(expanded = false) { instrumentation, activity, _, _ ->
         clickActionable(instrumentation, "囲み: Cluster")
         val formerShare = center(bounds(waitForActionable(instrumentation, "選択範囲を画像で共有")))
         val (region, rename) = waitForRegionRenameAction(instrumentation)
         assertTrue(region.performAction(rename.id))
         waitForGone(instrumentation, "選択範囲を画像で共有", recordPostRenameShareDecision = true)
-        clickActionable(instrumentation, "図形ツールを開く")
+        val deadline = SystemClock.uptimeMillis() + 4_000L
+        val launcher = waitForActionable(instrumentation, "図形ツールを開く", deadline,
+            useAppProcessGeometry = true)
+        clickNode(instrumentation, launcher, "図形ツールを開く", activity = activity,
+            deadline = deadline, useAppProcessGeometry = true)
         assertPaletteOpen(instrumentation)
         nativeGesture(instrumentation, listOf(formerShare))
         val configuration = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().layoutInfo.viewConfiguration
@@ -899,16 +921,20 @@ class ConditionalChromeLifecycleTest {
         return null
     }
 
-    private fun findActionable(node: AccessibilityNodeInfo?, label: String): AccessibilityNodeInfo? {
+    private fun findActionable(
+        node: AccessibilityNodeInfo?,
+        label: String,
+        useAppProcessGeometry: Boolean = false,
+    ): AccessibilityNodeInfo? {
         if (node == null) return null
         val ownsClick = node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }
         if (node.contentDescription?.toString() == label &&
             (label != "囲み: Cluster" || ownsClick)) {
-            assertPlatformControl(node, label)
+            assertPlatformControl(node, label, checkExternalGeometry = !useAppProcessGeometry)
             return node
         }
         for (index in 0 until node.childCount) {
-            findActionable(node.getChild(index), label)?.let { return it }
+            findActionable(node.getChild(index), label, useAppProcessGeometry)?.let { return it }
         }
         return null
     }
@@ -921,10 +947,11 @@ class ConditionalChromeLifecycleTest {
         label: String,
         refresh: (AccessibilityNodeInfo) -> Boolean = AccessibilityNodeInfo::refresh,
         record: (String) -> Unit = { Log.e("ConditionalGeometry", it) },
+        checkExternalGeometry: Boolean = true,
     ): AccessibilityNodeInfo {
         // 一度とはこの Layer A 検証ごと。取得時と clickNode の直前で各々再検証する。
         val descriptionRefreshBounds = if (label == "図形ツールを開く") {
-            refreshLauncherInfo(description, label, "description", refresh)
+            refreshLauncherInfo(description, label, "description", refresh, checkExternalGeometry)
         } else null
         assertEquals(label, description.contentDescription?.toString())
         assertTrue("$label の description は有効", description.isEnabled)
@@ -937,18 +964,115 @@ class ConditionalChromeLifecycleTest {
         }
         val actionable = checkNotNull(node) { "$label に対応する clickable node がありません" }
         val controlRefreshBounds = if (label == "図形ツールを開く" && actionable !== description) {
-            refreshLauncherInfo(actionable, label, "control", refresh)
+            refreshLauncherInfo(actionable, label, "control", refresh, checkExternalGeometry)
         } else null
         assertTrue("$label の control は有効", actionable.isEnabled)
         assertTrue("$label の control は利用者に見える", actionable.isVisibleToUser)
         assertTrue("$label の control は clickable", actionable.isClickable)
         assertTrue("$label の control は ACTION_CLICK を公開する",
             actionable.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
-        val descriptionBounds = bounds(description)
-        val controlBounds = bounds(actionable)
-        assertControlBounds(label, descriptionBounds, controlBounds, parentHops, record,
-            descriptionRefreshBounds, controlRefreshBounds)
+        if (checkExternalGeometry) {
+            val descriptionBounds = bounds(description)
+            val controlBounds = bounds(actionable)
+            assertControlBounds(label, descriptionBounds, controlBounds, parentHops, record,
+                descriptionRefreshBounds, controlRefreshBounds)
+        }
         return actionable
+    }
+
+    private fun assertLauncherAppProcessBounds(
+        instrumentation: android.app.Instrumentation,
+        activity: MainActivity,
+        externalDescription: AccessibilityNodeInfo,
+        externalControl: AccessibilityNodeInfo,
+        deadline: Long,
+        uptimeMillis: () -> Long = { SystemClock.uptimeMillis() },
+    ) {
+        check(Build.VERSION.SDK_INT >= 34) { "App-process accessibility geometry requires API 34+" }
+        remainingActionableTime(deadline, uptimeMillis)
+        instrumentation.runOnMainSync {
+            remainingActionableTime(deadline, uptimeMillis)
+            val decor = activity.window.decorView
+            val externalWindowId = externalDescription.windowId
+            check(externalWindowId == externalControl.windowId) { "External nodes belong to different windows" }
+            val root = decor.createAccessibilityNodeInfo()
+            assertCurrentAppRoot(
+                activity.lifecycle.currentState == Lifecycle.State.RESUMED,
+                decor.isAttachedToWindow && decor.windowToken != null,
+                decor.hasWindowFocus(),
+                root.windowId,
+                externalWindowId,
+            )
+            root.setQueryFromAppProcessEnabled(decor, true)
+            try {
+
+                val matches = mutableListOf<AccessibilityNodeInfo>()
+                fun visit(node: AccessibilityNodeInfo) {
+                    if (node.contentDescription?.toString() == "図形ツールを開く") matches += node
+                    for (index in 0 until node.childCount) node.getChild(index)?.let(::visit)
+                }
+                visit(root)
+                val appDescription = uniqueAppDescription(matches)
+                assertMappedAppNode(appDescription, externalDescription, externalWindowId, "description")
+                check(appDescription.isEnabled && appDescription.isVisibleToUser) {
+                    "App-process launcher description is disabled or hidden"
+                }
+
+                var appControl: AccessibilityNodeInfo? = appDescription
+                while (appControl != null && !appControl.isClickable) appControl = appControl.parent
+                val matchedControl = checkNotNull(appControl) { "No app-process clickable launcher ancestor" }
+                assertMappedAppNode(matchedControl, externalControl, externalWindowId, "control")
+                check(matchedControl.isEnabled && matchedControl.isVisibleToUser && matchedControl.isClickable &&
+                    matchedControl.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }) {
+                    "App-process launcher control is disabled, hidden, or has no click action"
+                }
+
+                val descriptionBounds = bounds(appDescription)
+                val controlBounds = bounds(matchedControl)
+                assertNonEmptyEqualBounds("Option launcher", descriptionBounds, controlBounds)
+            } finally {
+                root.setQueryFromAppProcessEnabled(decor, false)
+            }
+        }
+        remainingActionableTime(deadline, uptimeMillis)
+    }
+
+    private fun assertCurrentAppRoot(
+        resumed: Boolean,
+        attached: Boolean,
+        focused: Boolean,
+        rootWindowId: Int,
+        externalWindowId: Int,
+    ) {
+        check(resumed) { "MainActivity is not resumed" }
+        check(attached) { "MainActivity decor is detached" }
+        check(focused) { "MainActivity window is not focused" }
+        check(rootWindowId == externalWindowId) { "App-process root belongs to a different window" }
+    }
+
+    private fun uniqueAppDescription(matches: List<AccessibilityNodeInfo>): AccessibilityNodeInfo {
+        check(matches.size == 1) { "Expected one app-process launcher label, found ${matches.size}" }
+        return matches.single()
+    }
+
+    private fun assertMappedAppNode(
+        appNode: AccessibilityNodeInfo,
+        externalNode: AccessibilityNodeInfo,
+        expectedWindowId: Int,
+        role: String,
+    ) {
+        check(appNode.windowId == expectedWindowId && externalNode.windowId == expectedWindowId &&
+            appNode == externalNode) {
+            "App-process launcher $role identity does not match the external node"
+        }
+    }
+
+    private fun assertNonEmptyEqualBounds(label: String, descriptionBounds: Rect, controlBounds: Rect) {
+        assertFalse("$label app-process description bounds must be nonempty: $descriptionBounds",
+            descriptionBounds.isEmpty)
+        assertFalse("$label app-process control bounds must be nonempty: $controlBounds", controlBounds.isEmpty)
+        assertEquals("$label app-process description and control bounds must match",
+            descriptionBounds, controlBounds)
     }
 
     private fun refreshLauncherInfo(
@@ -956,6 +1080,7 @@ class ConditionalChromeLifecycleTest {
         label: String,
         role: String,
         refresh: (AccessibilityNodeInfo) -> Boolean,
+        captureBounds: Boolean,
     ): RefreshBounds? {
         val before = AccessibilityNodeInfo(node)
         assertTrue("$label の $role を一度 refresh できる", refresh(node))
@@ -970,7 +1095,9 @@ class ConditionalChromeLifecycleTest {
             before.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK },
             after.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
         // 既存コピーだけを読む。診断値の取得失敗は元の geometry oracle を妨げない。
-        return try { RefreshBounds(bounds(before), bounds(after)) } catch (_: Throwable) { null }
+        return if (captureBounds) {
+            try { RefreshBounds(bounds(before), bounds(after)) } catch (_: Throwable) { null }
+        } else null
     }
 
     private fun assertControlBounds(
@@ -1003,10 +1130,12 @@ class ConditionalChromeLifecycleTest {
     private fun waitForActionable(
         instrumentation: android.app.Instrumentation,
         label: String,
+        sharedDeadline: Long? = null,
+        useAppProcessGeometry: Boolean = false,
     ): AccessibilityNodeInfo {
         if (label == "図形ツールを開く" || label == "ペン") {
             // Geometry is asserted only after bounded platform idle and a fresh tree.
-            val deadline = SystemClock.uptimeMillis() + 4_000L
+            val deadline = sharedDeadline ?: (SystemClock.uptimeMillis() + 4_000L)
             val automation = instrumentation.uiAutomation
             while (SystemClock.uptimeMillis() < deadline) {
                 composeRule.waitForIdle()
@@ -1018,7 +1147,10 @@ class ConditionalChromeLifecycleTest {
                 val root = automation.rootInActiveWindow
                 if (root?.refresh() == true) {
                     // A geometry assertion failure is never caught or retried.
-                    findActionable(root, label)?.let { return it }
+                    findActionable(root, label, useAppProcessGeometry)?.let {
+                        if (useAppProcessGeometry) remainingActionableTime(deadline)
+                        return it
+                    }
                 }
             }
             error("操作可能なアクセシビリティ要素が見つかりません: $label")
@@ -1100,14 +1232,46 @@ class ConditionalChromeLifecycleTest {
         label: String,
         refresh: (AccessibilityNodeInfo) -> Boolean = AccessibilityNodeInfo::refresh,
         record: (String) -> Unit = { Log.e("ConditionalGeometry", it) },
-        click: () -> Unit = {
+        activity: MainActivity? = null,
+        deadline: Long? = null,
+        uptimeMillis: () -> Long = { SystemClock.uptimeMillis() },
+        useAppProcessGeometry: Boolean = false,
+        geometryCheck: (() -> Unit)? = null,
+        click: (beforeOnClick: () -> Unit) -> Unit = { beforeOnClick ->
             composeRule.onNode(hasContentDescription(label) and hasClickAction())
-                .performSemanticsAction(SemanticsActions.OnClick)
+                .performSemanticsAction(SemanticsActions.OnClick) { onClick ->
+                    beforeOnClick()
+                    onClick()
+                }
         },
     ) {
-        assertPlatformControl(node, label, refresh, record)
+        val acceptanceDeadline = if (label == "図形ツールを開く") {
+            deadline ?: (uptimeMillis() + 4_000L)
+        } else null
+        val actionable = assertPlatformControl(node, label, refresh, record,
+            checkExternalGeometry = !useAppProcessGeometry)
+        if (useAppProcessGeometry) {
+            check(label == "図形ツールを開く") { "App-process geometry is limited to the launcher" }
+            if (geometryCheck != null) {
+                geometryCheck()
+            } else if (Build.VERSION.SDK_INT >= 34) {
+                assertLauncherAppProcessBounds(
+                    instrumentation,
+                    checkNotNull(activity) { "API 34+ launcher geometry requires the resumed MainActivity" },
+                    node,
+                    actionable,
+                    checkNotNull(acceptanceDeadline),
+                    uptimeMillis,
+                )
+            } else {
+                Log.i("ConditionalGeometry", "label=$label appProcessBounds=unavailable api=${Build.VERSION.SDK_INT}")
+            }
+            remainingActionableTime(checkNotNull(acceptanceDeadline), uptimeMillis)
+        }
         // Layer B: Layer A で確認した exact control の OnClick を実行する。
-        click()
+        click {
+            if (useAppProcessGeometry) remainingActionableTime(checkNotNull(acceptanceDeadline), uptimeMillis)
+        }
         composeRule.waitForIdle()
         instrumentation.waitForIdleSync()
     }
@@ -1135,6 +1299,14 @@ class ConditionalChromeLifecycleTest {
     }
 
     private fun bounds(node: AccessibilityNodeInfo): Rect = Rect().also(node::getBoundsInScreen)
+
+    private fun remainingActionableTime(deadline: Long): Long =
+        remainingActionableTime(deadline) { SystemClock.uptimeMillis() }
+
+    private fun remainingActionableTime(deadline: Long, uptimeMillis: () -> Long): Long =
+        (deadline - uptimeMillis()).also {
+            check(it > 0L) { "Launcher acceptance exceeded its shared 4-second deadline" }
+        }
 
     private fun center(rect: Rect): Pair<Float, Float> =
         rect.exactCenterX() to rect.exactCenterY()
