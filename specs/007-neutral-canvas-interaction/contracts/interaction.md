@@ -8,7 +8,9 @@
 | 確認Continue/Back/outside | 確認だけclose、入力保持、forwardなし |
 | 確認Discard | live guard/session一致後に未確定変更だけ破棄 |
 | text outside | Spec 006のfinalize-only |
-| region outside | 既存canvas admission維持、自動renameなし |
+| region outside short touch tap | changed nameはDone相当pathで一度commitしてclose、unchangedは無保存close。同じreleaseだけを消費しselection/create/tool/panを抑止 |
+| region outside drag/long-press/multi-touch/CANCEL/stylus | commitなし。既存canvas routerへ引き渡す |
+| region outside save blocked | tapを二重配送せず、save/ack guardを維持してdraftを開いたままにする |
 | spatial/lasso完了 | tool解除、selection保持、通常tapなし |
 | ink stroke | stroke確定、mode保持 |
 | tool Back/明示exit | preview/pointer continuation取消、古いUPでcommitなし |
