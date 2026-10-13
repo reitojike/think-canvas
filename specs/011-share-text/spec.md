@@ -110,4 +110,4 @@
 - A/AとBはIssue79本文のPO決定をauthorityとする。現行Spec005/006/007の既存保存/編集終了/Back、Spec010のboard別視点authorityを維持する。
 - v1 previewは本文の確認と取り込み先変更を行い、本文の編集は取り込み後の既存text editorで行う。
 - OSが同じtaskを復元する場合の状態と、明示task終了後の新規起動を分ける。一般の編集Undo stackをprocess再起動後に永続復元する要件は追加しない。
-- compact/large font/TalkBackと全機能の実機横断確認は親81で扱う。
+- 親#81の2026-10-13横断dogfooding受入報告では、複数機能の組み合わせ、小画面、大きい文字で問題なしと記録した。TalkBack個別操作は未確認のまま今回の#81完了対象外とし、本仕様の読み上げ要件と既存テストは維持する。
