@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
@@ -285,9 +286,10 @@ class ImageCanvasInteractionTest {
 
     @Test fun pendingBlankSingleCannotStartTextAfterImageDescriptionAction() = withBoard {
         val describe = actions().first { it.label == "代替テキストを編集" }
-        val canvas = compose.onNodeWithContentDescription("キャンバス").fetchSemanticsNode()
+        val canvasNode = compose.onNodeWithContentDescription("キャンバス")
+        val canvas = canvasNode.fetchSemanticsNode()
         val configuration = canvas.layoutInfo.viewConfiguration
-        val location = canvas.boundsInWindow.let { Offset(it.left + it.width * .1f, it.top + it.height * .23f) }
+        val location = Offset(canvas.boundsInWindow.width * .1f, canvas.boundsInWindow.height * .23f)
         val editor = sessions.textEditorFor(1, board.snapshot())
         val before = board.snapshot()
         val clock = compose.mainClock
@@ -295,16 +297,9 @@ class ImageCanvasInteractionTest {
         val started = clock.currentTime
         try {
             clock.autoAdvance = false
-            val instrumentation = InstrumentationRegistry.getInstrumentation()
-            val origin = IntArray(2)
-            scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
-            val down = SystemClock.uptimeMillis()
-            for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
-                val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action,
-                    location.x + origin[0], location.y + origin[1], 0)
-                event.source = InputDevice.SOURCE_TOUCHSCREEN
-                try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
-                finally { event.recycle() }
+            canvasNode.performTouchInput {
+                down(location)
+                up()
             }
             repeat(3) { clock.advanceTimeByFrame() }
             clock.advanceTimeBy(configuration.doubleTapTimeoutMillis - (clock.currentTime - started) - 1,
