@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.Window
 import android.view.WindowInsets
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -108,7 +109,8 @@ class OffscreenIndicatorsTest {
             assertFalse(board.canUndo)
             assertFalse(board.canRedo)
         }
-        fun event(action: Int, points: List<Offset>, downTime: Long) {
+        fun event(action: Int, points: List<Offset>, downTime: Long,
+                  onInject: ((MotionEvent, IntArray) -> Unit)? = null) {
             val origin = IntArray(2)
             scenario.onActivity { it.window.decorView.getLocationOnScreen(origin) }
             val properties = Array(points.size) { index -> MotionEvent.PointerProperties().apply {
@@ -119,20 +121,26 @@ class OffscreenIndicatorsTest {
             } }
             val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, points.size,
                 properties, coordinates, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
-            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
+            try {
+                onInject?.invoke(event, origin)
+                // true は注入の受理だけを示す。camera の結果は呼び出し元の位置判定で確かめる。
+                assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
+            }
             finally { event.recycle() }
         }
         fun pan(delta: Offset, start: Offset = Offset(canvas.left + canvas.width * .2f,
-                                                       canvas.top + canvas.height * .72f)) {
+                                                       canvas.top + canvas.height * .72f),
+                onInject: ((MotionEvent, IntArray) -> Unit)? = null) {
             val time = SystemClock.uptimeMillis()
             try {
-                event(MotionEvent.ACTION_DOWN, listOf(start), time)
-                event(MotionEvent.ACTION_MOVE, listOf(start + delta), time)
+                event(MotionEvent.ACTION_DOWN, listOf(start), time, onInject)
+                event(MotionEvent.ACTION_MOVE, listOf(start + delta), time, onInject)
                 // 精密panの停止位置を確認する。高速releaseの慣性はFlingGestureTestで扱う。
                 Thread.sleep(180L)
-                event(MotionEvent.ACTION_UP, listOf(start + delta), time)
+                event(MotionEvent.ACTION_UP, listOf(start + delta), time, onInject)
             } catch (failure: Throwable) {
-                event(MotionEvent.ACTION_CANCEL, listOf(start + delta), time)
+                try { event(MotionEvent.ACTION_CANCEL, listOf(start + delta), time, onInject) }
+                catch (cancel: Throwable) { if (cancel !== failure) failure.addSuppressed(cancel) }
                 throw failure
             }
             composeRule.waitForIdle()
@@ -181,7 +189,7 @@ class OffscreenIndicatorsTest {
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             composeRule.waitForIdle()
         }
-        fun nextPanAt(point: Offset) {
+        fun nextPanAt(point: Offset, trace: NextPanTrace? = null) {
             var previousBounds: Rect? = null
             var previousFocus: ViewportFocus? = null
             var previousPosition: Offset? = null
@@ -204,12 +212,37 @@ class OffscreenIndicatorsTest {
                 stable >= 2
             }
             composeRule.waitForIdle()
-            assertTrue("The old indicator point must remain inside the current canvas", canvas.contains(point))
+            val canvasBefore = canvas
+            assertTrue("The old indicator point must remain inside the current canvas", canvasBefore.contains(point))
             val before = position(reference.text)
-            pan(Offset(90f, 25f), point)
-            val after = position(reference.text)
-            assertEquals(before.x + 90f, after.x, 2f)
-            assertEquals(before.y + 25f, after.y, 2f)
+            fun panAndAssert(onInject: ((MotionEvent, IntArray) -> Unit)?) {
+                pan(Offset(90f, 25f), point, onInject)
+                val after = position(reference.text)
+                trace?.note { "after(read before assertion) camera=${navigation.viewportState.value} reference=$after" }
+                assertEquals(before.x + 90f, after.x, 2f)
+                assertEquals(before.y + 25f, after.y, 2f)
+            }
+            if (trace == null) return panAndAssert(null)
+            trace.note { "before camera=${navigation.viewportState.value} canvas=$canvasBefore reference=$before" }
+            var window: Window? = null
+            trace.recording {
+                scenario.onActivity { activity ->
+                    val target = activity.window
+                    window = target
+                    target.callback = trace.wrap(target.callback) {
+                        IntArray(2).also { target.decorView.getLocationOnScreen(it) }
+                    }
+                }
+            }
+            trace.run(block = { panAndAssert(trace::injected) }, later = { line ->
+                line("camera=${navigation.viewportState.value}")
+                line("canvas=$canvas")
+                line("reference=${position(reference.text)}")
+            }, cleanup = {
+                window?.let { target ->
+                    composeRule.runOnUiThread { trace.restore(target.callback) { target.callback = it } }
+                }
+            })
         }
     }
 
@@ -279,7 +312,7 @@ class OffscreenIndicatorsTest {
         val old = marker("現在の検索結果、").boundsInWindow.center
         click("検索を閉じる")
         assertEquals(0, indicators().size)
-        nextPanAt(old)
+        nextPanAt(old, NextPanTrace(emit = { android.util.Log.i("NextPan165", it) }))
         unchanged()
     }
 
