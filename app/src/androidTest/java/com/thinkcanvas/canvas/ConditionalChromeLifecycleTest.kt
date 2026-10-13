@@ -272,9 +272,28 @@ class ConditionalChromeLifecycleTest {
 
             val configuration = composeRule.onNodeWithContentDescription("キャンバス")
                 .fetchSemanticsNode().layoutInfo.viewConfiguration
+            val canvasActivity = activity as MainActivity
+            val safeCanvas = paletteSafeCanvas(instrumentation, canvasActivity)
+            val activeRoot = instrumentation.uiAutomation.rootInActiveWindow
+            val activeNameBounds = bounds(checkNotNull(findExact(activeRoot, "囲みの名前")))
+            val activeDoneBounds = findExact(activeRoot, "完了")?.let(::bounds)
+            val activeRegionBounds = bounds(checkNotNull(findExact(activeRoot, "囲み: Cluster")))
+            val candidateTaps = listOf(
+                shareCenter,
+                (safeCanvas.left + safeCanvas.width() * .15f) to (safeCanvas.top + safeCanvas.height() * .55f),
+                (safeCanvas.left + safeCanvas.width() * .85f) to (safeCanvas.top + safeCanvas.height() * .55f),
+                (safeCanvas.left + safeCanvas.width() * .15f) to (safeCanvas.top + safeCanvas.height() * .78f),
+                (safeCanvas.left + safeCanvas.width() * .85f) to (safeCanvas.top + safeCanvas.height() * .78f),
+            )
+            val outsideTap = candidateTaps.firstOrNull { (x, y) ->
+                safeCanvas.contains(x.toInt(), y.toInt()) &&
+                    !activeNameBounds.contains(x.toInt(), y.toInt()) &&
+                    activeDoneBounds?.contains(x.toInt(), y.toInt()) != true &&
+                    !activeRegionBounds.contains(x.toInt(), y.toInt())
+            } ?: error("囲み/名前欄/Done外のlive canvas点が見つかりません")
             composeRule.mainClock.autoAdvance = false
             try {
-                tap(instrumentation, shareCenter.first, shareCenter.second)
+                tap(instrumentation, outsideTap.first, outsideTap.second)
                 repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
                 assertEquals("短い外側tapは選択を変えない", "選択中",
                     waitForRegionState(instrumentation, "選択中"))
@@ -575,12 +594,8 @@ class ConditionalChromeLifecycleTest {
         val board = sessions.stateFor(1L, BoardSnapshot())
         val editor = sessions.textEditorFor(1L, BoardSnapshot())
         val navigation = sessions.viewportHistoryFor(1L, BoardSnapshot())
-        val before = board.snapshot()
         val store = com.thinkcanvas.data.CanvasStore.get(instrumentation.targetContext)
-        val savedBefore = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
-        val undoAvailableBefore = board.canUndo
         clickActionable(instrumentation, "囲み: Cluster")
-        val formerShare = center(bounds(waitForActionable(instrumentation, "選択範囲を画像で共有")))
         val (region, rename) = waitForRegionRenameAction(instrumentation)
         assertTrue(region.performAction(rename.id))
         waitForGone(instrumentation, "選択範囲を画像で共有", recordPostRenameShareDecision = true)
@@ -589,17 +604,51 @@ class ConditionalChromeLifecycleTest {
         val renamed = "Renamed"
         assertEquals("editorに変更済みのregion名がある", renamed, editor.regionNameDraft.value?.name)
 
+        val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+            .fetchSemanticsNode().layoutInfo.viewConfiguration
+        val regionForMove = checkNotNull(findExact(
+            instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster"))
+        val regionBoundsForMove = bounds(regionForMove)
+        val regionNameFieldBounds = bounds(checkNotNull(findExact(
+            instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前")))
+        val moveStart = (regionBoundsForMove.left + 30f) to (regionBoundsForMove.top + 30f)
+        assertFalse("長押しdragの開始点はregion名chrome外",
+            regionNameFieldBounds.contains(moveStart.first.toInt(), moveStart.second.toInt()))
+        val beforeMove = board.snapshot()
+        val movePath = (0..6).map { (moveStart.first + it * 12f) to moveStart.second }
+        nativeGesture(instrumentation, movePath, afterDown = {
+            Thread.sleep(configuration.longPressTimeoutMillis + 100L)
+        })
+        composeRule.waitForIdle()
+        val movedRegion = board.snapshot().shapes.single { it.id == "chrome-lifecycle-region" }
+        assertTrue("region editor中でも長押しdragを既存move ownerへ渡す",
+            movedRegion.x != beforeMove.shapes.single { it.id == movedRegion.id }.x ||
+                movedRegion.y != beforeMove.shapes.single { it.id == movedRegion.id }.y)
+        assertEquals("要素dragは未確定region名をcommitしない", "Cluster", movedRegion.name)
+        assertEquals("要素drag後もregion editor draftを保持する", renamed,
+            editor.regionNameDraft.value?.name)
+        composeRule.waitUntil(5_000) {
+            runBlocking {
+                store.savedBoard(1L)?.snapshot?.let { saved ->
+                    saved.shapes.singleOrNull { it.id == "chrome-lifecycle-region" }?.let {
+                        it.x == movedRegion.x && it.y == movedRegion.y && it.name == "Cluster"
+                    } == true
+                } == true
+            }
+        }
+        val before = board.snapshot()
+        val savedBefore = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
+        val undoAvailableBefore = board.canUndo
+
         val deadline = SystemClock.uptimeMillis() + 4_000L
         val launcher = waitForActionable(instrumentation, "図形ツールを開く", deadline,
             useAppProcessGeometry = true)
         clickNode(instrumentation, launcher, "図形ツールを開く", activity = activity,
             deadline = deadline, useAppProcessGeometry = true)
         assertPaletteOpen(instrumentation)
-        val configuration = composeRule.onNodeWithContentDescription("キャンバス")
-            .fetchSemanticsNode().layoutInfo.viewConfiguration
-        val secondPoint = (formerShare.first + 64f) to formerShare.second
-        assertPalettePath(instrumentation, activity, listOf(formerShare, secondPoint))
-        val blank = paletteCanvasPoint(instrumentation, activity)
+        val blank = paletteCanvasPoint(instrumentation, activity, verifyPaletteChrome = false)
+        val secondPoint = (blank.first + 64f) to blank.second
+        assertSafeCanvasPath(instrumentation, activity, listOf(blank, secondPoint))
 
         fun assertUncommitted() {
             assertEquals("除外gesture後も編集draftを保持する", renamed, editor.regionNameDraft.value?.name)
@@ -614,7 +663,7 @@ class ConditionalChromeLifecycleTest {
         assertUncommitted()
 
         val dragPath = (0..6).map { (blank.first + 80f - it * 20f) to blank.second }
-        assertPalettePath(instrumentation, activity, dragPath)
+        assertSafeCanvasPath(instrumentation, activity, dragPath)
         val beforeDrag = navigation.viewportState.value
         nativeGesture(instrumentation, dragPath, holdMillis = 180L)
         assertUncommitted()
@@ -622,8 +671,8 @@ class ConditionalChromeLifecycleTest {
             beforeDrag != navigation.viewportState.value)
         assertEquals("dragはzoomを変えない", beforeDrag.scale, navigation.viewportState.value.scale)
 
-        val pinchPoint = paletteCanvasPoint(instrumentation, activity)
-        assertPalettePath(instrumentation, activity, listOf(
+        val pinchPoint = paletteCanvasPoint(instrumentation, activity, verifyPaletteChrome = false)
+        assertSafeCanvasPath(instrumentation, activity, listOf(
             (pinchPoint.first - 70f) to pinchPoint.second,
             (pinchPoint.first + 70f) to pinchPoint.second,
         ))
@@ -633,16 +682,16 @@ class ConditionalChromeLifecycleTest {
         assertTrue("region editor外のmulti-touchは既存pinchへ渡す",
             navigation.viewportState.value.scale > beforePinch)
 
-        nativePointerPair(instrumentation, formerShare, secondPoint, cancelFirstPointer = false)
+        nativePointerPair(instrumentation, blank, secondPoint, cancelFirstPointer = false)
         assertUncommitted()
-        nativePointerPair(instrumentation, formerShare, secondPoint)
+        nativePointerPair(instrumentation, blank, secondPoint)
         assertUncommitted()
         nativeGesture(instrumentation, listOf(blank),
             terminal = MotionEvent.ACTION_CANCEL, flags = MotionEvent.FLAG_CANCELED)
         assertUncommitted()
 
         val viewportBeforeCommit = navigation.viewportState.value
-        nativeGesture(instrumentation, listOf(formerShare))
+        nativeGesture(instrumentation, listOf(blank))
         waitForGone(instrumentation, "囲みの名前")
         assertEquals("外側tapでregion選択を変えない", "選択中",
             waitForRegionState(instrumentation, "選択中"))
@@ -666,7 +715,7 @@ class ConditionalChromeLifecycleTest {
         assertTrue(regionForStylus.performAction(renameForStylus.id))
         assertEquals("stylus操作前にregion editorを開く", renamed,
             editor.regionNameDraft.value?.name)
-        assertPaletteStylusStroke(instrumentation, activity, database, sessions)
+        assertPaletteStylusStroke(instrumentation, activity, database, sessions, verifyPaletteChrome = false)
         assertEquals("stylusはoutside finalize扱いにならずeditorを保持", renamed,
             editor.regionNameDraft.value?.name)
         clickActionable(instrumentation, "完了")
@@ -675,8 +724,10 @@ class ConditionalChromeLifecycleTest {
         Thread.sleep(configuration.doubleTapTimeoutMillis + 100L)
         composeRule.waitForIdle()
         assertNull("dismissal event cannot start text after its timeout", editor.draft.value)
-        nativeGesture(instrumentation, listOf(formerShare))
+        val nextCanvasTap = paletteCanvasPoint(instrumentation, activity, verifyPaletteChrome = false)
+        nativeGesture(instrumentation, listOf(nextCanvasTap))
         assertPaletteClosed(instrumentation)
+        assertNull("次の独立したcanvas tapも新しいtext editorを作らない", editor.draft.value)
 
     }
 
@@ -875,12 +926,17 @@ class ConditionalChromeLifecycleTest {
         return rectangles
     }
 
-    private fun paletteCanvasPoint(instrumentation: android.app.Instrumentation, activity: MainActivity): Pair<Float, Float> {
+    private fun paletteCanvasPoint(
+        instrumentation: android.app.Instrumentation,
+        activity: MainActivity,
+        verifyPaletteChrome: Boolean = true,
+    ): Pair<Float, Float> {
         val safe = paletteSafeCanvas(instrumentation, activity)
         val canvas = bounds(checkNotNull(findExact(instrumentation.uiAutomation.rootInActiveWindow, "キャンバス")))
         val point = (canvas.left + canvas.width() * .20f) to (canvas.top + canvas.height() * .55f)
         assertTrue("normal fixture point excludes system gestures: $point / $safe", safe.contains(point.first.toInt(), point.second.toInt()))
-        assertPalettePath(instrumentation, activity, listOf(point))
+        if (verifyPaletteChrome) assertPalettePath(instrumentation, activity, listOf(point))
+        else assertSafeCanvasPath(instrumentation, activity, listOf(point))
         return point
     }
 
@@ -893,13 +949,28 @@ class ConditionalChromeLifecycleTest {
         }
     }
 
-    private fun assertPaletteStylusStroke(instrumentation: android.app.Instrumentation, activity: MainActivity, database: CanvasDatabase, sessions: BoardSessionViewModel) {
+    private fun assertSafeCanvasPath(instrumentation: android.app.Instrumentation, activity: MainActivity, path: List<Pair<Float, Float>>) {
+        val safe = paletteSafeCanvas(instrumentation, activity)
+        path.forEach { (x, y) ->
+            assertTrue("input must remain in live app-owned canvas: ($x,$y) / $safe",
+                safe.contains(x.toInt(), y.toInt()))
+        }
+    }
+
+    private fun assertPaletteStylusStroke(
+        instrumentation: android.app.Instrumentation,
+        activity: MainActivity,
+        database: CanvasDatabase,
+        sessions: BoardSessionViewModel,
+        verifyPaletteChrome: Boolean = true,
+    ) {
         val board = sessions.stateFor(1L, BoardSnapshot())
         val before = runBlocking { database.canvasDao().inkStrokes(1).size }
         val modelBefore = board.snapshot().ink.sumOf { it.strokes.size }
-        val blank = paletteCanvasPoint(instrumentation, activity)
+        val blank = paletteCanvasPoint(instrumentation, activity, verifyPaletteChrome)
         val path = listOf(blank, (blank.first + 30f) to blank.second, (blank.first + 60f) to blank.second)
-        assertPalettePath(instrumentation, activity, path)
+        if (verifyPaletteChrome) assertPalettePath(instrumentation, activity, path)
+        else assertSafeCanvasPath(instrumentation, activity, path)
         nativeGesture(instrumentation, path, toolType = MotionEvent.TOOL_TYPE_STYLUS)
         awaitInkCount(database, before + 1)
         assertEquals("normal native stylus UP commits exactly one model stroke", modelBefore + 1, board.snapshot().ink.sumOf { it.strokes.size })
