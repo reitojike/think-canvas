@@ -26,7 +26,7 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 | Spec 010: Viewport History | [#77](https://github.com/reitojike/think-canvas/issues/77) | [spec](specs/010-viewport-history/spec.md) |
 | Spec 011: Android Share Target | [#79](https://github.com/reitojike/think-canvas/issues/79) | [spec](specs/011-share-text/spec.md) |
 | Spec 012: Blank Tap Arbitration | [#67](https://github.com/reitojike/think-canvas/issues/67) | [spec](specs/012-blank-tap-arbitration/spec.md) |
-| Spec 013: Image Element | [#80](https://github.com/reitojike/think-canvas/issues/80)（代表実機確認済み） | [spec](specs/013-image-element/spec.md) |
+| Spec 013: Image Element | [#80](https://github.com/reitojike/think-canvas/issues/80)（実機：小画面・大きい文字は問題なし／TalkBackは未確認・#81今回の完了対象外） | [spec](specs/013-image-element/spec.md) |
 
 ## 利用できる主な機能
 
