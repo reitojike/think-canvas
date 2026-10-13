@@ -1315,50 +1315,74 @@ fun CanvasScreen(
                     val activeDraft = editorSession.draft.value
                     val activeRegion = editorSession.regionNameDraft.value
                     if (activeDraft == null && activeRegion == null) return@awaitEachGesture
-                    val fieldBounds = if (activeDraft != null) textEditorBounds else chromeBounds["regionName"]
-                    if (fieldBounds == null) {
-                        if (activeRegion != null) down.consume()
-                        return@awaitEachGesture
-                    }
-                    val toolbarBounds = if (activeDraft != null) editorToolbarBounds
-                        ?: return@awaitEachGesture else null
-                    if (fieldBounds.contains(down.position) || toolbarBounds?.contains(down.position) == true)
-                        return@awaitEachGesture
-                    // Finalize-only: keep this whole gesture away from children and canvas tools.
-                    down.consume()
-                    var isTap = true
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        if (gestureGeneration != admittedGeneration) {
-                            event.changes.forEach { it.consume() }
-                            break
-                        }
-                        val active = event.changes.firstOrNull { it.id == down.id }
-                        if (event.changes.size != 1 || active == null ||
-                            (active.position - down.position).getDistance() > touchSlop ||
-                            active.uptimeMillis - down.uptimeMillis >= longPressMillis ||
-                            active.position.x !in 0f..size.width.toFloat() ||
-                            active.position.y !in 0f..size.height.toFloat()) isTap = false
-                        event.changes.forEach { it.consume() }
-                        if (event.changes.none { it.pressed }) {
-                            // Compose cancellation can synthesize a release without a native event.
-                            // Android also marks canceled pointer-up events with FLAG_CANCELED.
-                            val nativeEvent = event.motionEvent
-                            val cancelled = nativeEvent == null ||
-                                nativeEvent.actionMasked == MotionEvent.ACTION_CANCEL ||
-                                nativeEvent.flags and MotionEvent.FLAG_CANCELED != 0
-                            if (isTap && !cancelled && event.type == PointerEventType.Release &&
-                                active?.previousPressed == true) {
-                                when {
-                                    activeDraft != null &&
-                                        editorSession.draft.value?.sessionId == activeDraft.sessionId ->
-                                        latestFinalizeDraft.value()
-                                    activeRegion != null && !exitBlocked() &&
-                                        editorSession.regionNameDraft.value?.sessionId == activeRegion.sessionId ->
-                                        latestCommitRegionName.value(activeRegion.sessionId)
-                                }
+                    if (activeDraft != null) {
+                        val fieldBounds = textEditorBounds ?: return@awaitEachGesture
+                        val toolbarBounds = editorToolbarBounds ?: return@awaitEachGesture
+                        if (fieldBounds.contains(down.position) || toolbarBounds.contains(down.position))
+                            return@awaitEachGesture
+                        // Keep the established text-editor finalize-only ownership unchanged.
+                        down.consume()
+                        var isTap = true
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (gestureGeneration != admittedGeneration) {
+                                event.changes.forEach { it.consume() }
+                                break
                             }
-                            break
+                            val active = event.changes.firstOrNull { it.id == down.id }
+                            if (event.changes.size != 1 || active == null ||
+                                (active.position - down.position).getDistance() > touchSlop ||
+                                active.uptimeMillis - down.uptimeMillis >= longPressMillis ||
+                                active.position.x !in 0f..size.width.toFloat() ||
+                                active.position.y !in 0f..size.height.toFloat()) isTap = false
+                            event.changes.forEach { it.consume() }
+                            if (event.changes.none { it.pressed }) {
+                                // Compose cancellation can synthesize a release without a native event.
+                                // Android also marks canceled pointer-up events with FLAG_CANCELED.
+                                val nativeEvent = event.motionEvent
+                                val cancelled = nativeEvent == null ||
+                                    nativeEvent.actionMasked == MotionEvent.ACTION_CANCEL ||
+                                    nativeEvent.flags and MotionEvent.FLAG_CANCELED != 0
+                                if (isTap && !cancelled && event.type == PointerEventType.Release &&
+                                    active?.previousPressed == true &&
+                                    editorSession.draft.value?.sessionId == activeDraft.sessionId)
+                                    latestFinalizeDraft.value()
+                                break
+                            }
+                        }
+                    } else {
+                        val region = checkNotNull(activeRegion)
+                        // A region outside dismissal is a finger tap. Stylus remains owned by ink.
+                        if (down.type != PointerType.Touch) return@awaitEachGesture
+                        val regionBounds = chromeBounds["regionName"] ?: return@awaitEachGesture
+                        if (regionBounds.contains(down.position)) return@awaitEachGesture
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (gestureGeneration != admittedGeneration) return@awaitEachGesture
+                            val active = event.changes.singleOrNull()?.takeIf { it.id == down.id }
+                            if (active == null ||
+                                (active.position - down.position).getDistance() > touchSlop ||
+                                active.uptimeMillis - down.uptimeMillis >= longPressMillis ||
+                                active.position.x !in 0f..size.width.toFloat() ||
+                                active.position.y !in 0f..size.height.toFloat()) {
+                                // Leave drag, long press, additional pointers, and cancellation to the canvas router.
+                                return@awaitEachGesture
+                            }
+                            if (event.changes.none { it.pressed }) {
+                                val nativeEvent = event.motionEvent
+                                val cancelled = nativeEvent == null ||
+                                    nativeEvent.actionMasked == MotionEvent.ACTION_CANCEL ||
+                                    nativeEvent.flags and MotionEvent.FLAG_CANCELED != 0
+                                if (!cancelled && event.type == PointerEventType.Release &&
+                                    active.previousPressed &&
+                                    editorSession.regionNameDraft.value?.sessionId == region.sessionId) {
+                                    // Consume only the qualifying release; the later canvas router suppresses
+                                    // this same release while retaining ownership of every non-tap gesture.
+                                    active.consume()
+                                    latestCommitRegionName.value(region.sessionId)
+                                }
+                                break
+                            }
                         }
                     }
                 }
@@ -1367,6 +1391,7 @@ fun CanvasScreen(
                 var gestureMove: MoveDragSession? = null
                 try {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                val regionSessionAtDown = editorSession.regionNameDraft.value?.sessionId
                 manualGestureActive = true
                 if (latestExternalBlock.value()) return@awaitEachGesture
                 if (imageDraft != null || imagePickerOpen) return@awaitEachGesture
@@ -1375,8 +1400,7 @@ fun CanvasScreen(
                     down.consume()
                     return@awaitEachGesture
                 }
-                if (editorSession.draft.value != null || editorSession.regionNameDraft.value != null)
-                    return@awaitEachGesture
+                if (editorSession.draft.value != null) return@awaitEachGesture
                 val requestedInk = down.type == PointerType.Stylus || latestInkTool.value != null
                 if (chromeContains(down.position)) { cancelBlankTap(); return@awaitEachGesture }
                 // Only a neutral, single-touch short release belongs to palette dismissal.
@@ -1392,7 +1416,11 @@ fun CanvasScreen(
                 stopViewportAnimation()
                 pendingHistoryFocus = null
                 val previousBlankTap = blankTapBoundary.pending
-                if (previousBlankTap != null) {
+                if (regionSessionAtDown != null) {
+                    // The region editor owns the in-flight outside gesture; discard a stale blank-tap
+                    // candidate so it cannot turn this pointer-down into a delayed create or zoom.
+                    cancelBlankTap()
+                } else if (previousBlankTap != null) {
                     if (!blankTapIsLive(previousBlankTap) || requestedInk) cancelBlankTap()
                     else if (previousBlankTap.matchesSecondDown(down.uptimeMillis, down.position,
                         doubleTapMinTimeMillis, doubleTapTimeoutMillis, doubleTapSlop) &&
@@ -1537,6 +1565,12 @@ fun CanvasScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         continue
                     }
+                    val regionOutsideRelease = regionSessionAtDown != null &&
+                        event.type == PointerEventType.Release &&
+                        event.changes.any { change ->
+                            change.id == down.id && change.previousPressed && !change.pressed && change.isConsumed
+                        }
+                    if (regionOutsideRelease) break
                     val pressed = event.changes.filter { it.pressed }
                     val activeReleased = mode == "ink" && event.changes.any { it.id == drawingPointer && !it.pressed }
                     if (pressed.isEmpty() || activeReleased) {
