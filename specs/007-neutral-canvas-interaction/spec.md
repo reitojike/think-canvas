@@ -79,13 +79,19 @@
 
 - 共通化は実際にeditor2 family、spatial/ink familyで必要な終了判定・cleanupに限定する。全面的gesture rewrite・toolbar redesign・保存schema変更・新機能は対象外。
 - 明示「やめる」は従来の即時cancelを維持する。今回の確認はBackからの未確定変更破棄に適用する。
-- 囲み名の外側タップによる自動保存は追加しない。既存Doneと新しいBackを使用する。
+- Issue #110: 囲み名editor外で始まる1本指の短い静止tapは、変更ありなら既存Doneと同じRegionNameDraft / BoardState / saveSnapshot経路で一度だけ確定して閉じ、変更なしなら無保存で閉じる。確定tapは同じreleaseでselection・create・tool action・panを発生させない。slop超過drag、long-press、追加pointer、CANCEL / FLAG_CANCELED、stylusは確定せず既存canvas gesture ownerへ渡す。save / acknowledgement guard、session、focus / IME / chrome bounds / lifecycle契約を維持し、focus loss・Activity再生成を確定理由にしない。
 - 物理端末のTalkBack・IME製品差・片手操作の評価はRoadmap #81の横断dogfoodingで記録する。
+
+## Issue #110: 囲み名editorの外側tap
+
+- 外側で始まる短いstationaryな1本指Touch tapを囲み名editorの終了操作として扱う。変更があればDoneと同じregion commit pathで一度だけ保存し、変更がなければ保存せず閉じる。確定tapはselection・text creation・tool action・panへ配送しない。
+- drag、long-press、multi-touch、CANCEL / FLAG_CANCELED、stylusはregion editorを確定せず、既存canvas routerへ渡す。保存・acknowledgement guard、stale session guard、focus / IME / chrome cleanupを維持する。window focus lossやActivity recreationだけでは確定しない。
+- 既存Doneのアクセシビリティ操作を保持する。外側tapで閉じた後も通常のcanvas操作へ戻れることをnative instrumentationで確認する。
 
 ## Issue #112: 展開paletteの外側tap
 
 - palette/launcherと他のchrome controlは既存actionを保持する。canvas上の外側で始まる通常tap候補の1本指stationary short tapはpaletteだけ閉じ、同じtapからtext作成・選択・要素action・panを発火しない。明示handle/gripのownerは通常tap候補へ上書きせず、slop内でも既存の微調整・release・保存契約を保持する。
 - short tapは標準touchSlop以内、longPressTimeout未満の正常native UPとする。長押し・CANCEL・FLAG_CANCELED・領域外releaseはdismissしない。通常tap相当の候補は展開中も既存の長押し成立・pickup・一回の振動を維持し、要素のreleaseはmenu/選択追加、要素dragはmove、空白dragはgapへ渡す。timeout前のdragは既存pan、明示grip/handleは既存admission、追加指は既存pinch、stylusは既存inkへ渡し、paletteをdismissしない。
-- text outsideのfinalize-only、regionの既存outside admission、image editor・picker・標準modal、保存/ack guardを優先する。これらがactiveならpalette dismissalをadmitしない。Backの終了順は変更しない。
+- text outsideのfinalize-only、region outsideのIssue #110 finalization、image editor・picker・標準modal、保存/ack guardを優先する。これらがactiveならpalette dismissalをadmitしない。Backの終了順は変更しない。
 - 展開開始とdismissalではpending blank singleを取消し、dismissalをdouble-tapの第一tapに数えない。次の独立gestureとlauncherのaccessibility open/closeを維持する。閉じたpaletteのboundsは即時解放し、launcher/history/boundsのIssue #107 contractを保持する。
 - native instrumentationに外側blank/要素tap、長押し/取消、drag/pinch/stylus、次のtap、旧palette位置、native launcher/buttonとaccessibility操作の回帰を追加する。representative real-deviceの証拠が揃うまではIssue #112を完了にしない。
