@@ -1546,6 +1546,10 @@ fun CanvasScreen(
                         event?.changes?.forEach { it.consume() }
                         break
                     }
+                    if (editorSession.regionNameDraft.value?.sessionId != regionSessionAtDown) {
+                        event?.changes?.forEach { it.consume() }
+                        break
+                    }
                     if (gestureMove?.let { !moveIsLive(it) } == true) {
                         gestureMove?.let(::cancelMove)
                         event?.changes?.forEach { it.consume() }

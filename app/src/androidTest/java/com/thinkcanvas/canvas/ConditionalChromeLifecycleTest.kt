@@ -276,7 +276,7 @@ class ConditionalChromeLifecycleTest {
             assertSafeCanvasPath(instrumentation, canvasActivity, listOf(outsideTap))
             composeRule.mainClock.autoAdvance = false
             try {
-                tap(instrumentation, outsideTap.first, outsideTap.second)
+                nativeGesture(instrumentation, listOf(outsideTap))
                 repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
                 assertEquals("短い外側tapは選択を変えない", "選択中",
                     waitForRegionState(instrumentation, "選択中"))
@@ -344,7 +344,7 @@ class ConditionalChromeLifecycleTest {
                 .fetchSemanticsNode().layoutInfo.viewConfiguration
             composeRule.mainClock.autoAdvance = false
             try {
-                tap(instrumentation, formerPoint.first, formerPoint.second)
+                nativeGesture(instrumentation, listOf(formerPoint))
                 repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
                 waitForGone(instrumentation, "囲みの名前")
                 assertNull("外側確定後はregion editorを閉じる", editor.regionNameDraft.value)
