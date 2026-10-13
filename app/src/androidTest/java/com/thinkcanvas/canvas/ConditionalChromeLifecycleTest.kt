@@ -571,12 +571,11 @@ class ConditionalChromeLifecycleTest {
 
     @PrSmoke
     @Test
-    fun paletteRegionNameEditorKeepsOutsidePriority() = withPaletteBoard(expanded = false) { instrumentation, activity, _, sessions ->
+    fun paletteRegionNameEditorKeepsOutsidePriority() = withPaletteBoard(expanded = false) { instrumentation, activity, database, sessions ->
         val board = sessions.stateFor(1L, BoardSnapshot())
         val editor = sessions.textEditorFor(1L, BoardSnapshot())
         val navigation = sessions.viewportHistoryFor(1L, BoardSnapshot())
         val before = board.snapshot()
-        val viewBefore = navigation.viewportState.value
         val store = com.thinkcanvas.data.CanvasStore.get(instrumentation.targetContext)
         val savedBefore = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
         val undoAvailableBefore = board.canUndo
@@ -586,8 +585,8 @@ class ConditionalChromeLifecycleTest {
         assertTrue(region.performAction(rename.id))
         waitForGone(instrumentation, "選択範囲を画像で共有", recordPostRenameShareDecision = true)
         composeRule.onNodeWithContentDescription("囲みの名前")
-            .performTextReplacement("Cluster renamed")
-        val renamed = "Cluster renamed"
+            .performTextReplacement("Renamed")
+        val renamed = "Renamed"
         assertEquals("editorに変更済みのregion名がある", renamed, editor.regionNameDraft.value?.name)
 
         val deadline = SystemClock.uptimeMillis() + 4_000L
@@ -600,29 +599,49 @@ class ConditionalChromeLifecycleTest {
             .fetchSemanticsNode().layoutInfo.viewConfiguration
         val secondPoint = (formerShare.first + 64f) to formerShare.second
         assertPalettePath(instrumentation, activity, listOf(formerShare, secondPoint))
+        val blank = paletteCanvasPoint(instrumentation, activity)
 
         fun assertUncommitted() {
             assertEquals("除外gesture後も編集draftを保持する", renamed, editor.regionNameDraft.value?.name)
             assertEquals("除外gestureはboardを変更しない", before, board.snapshot())
             assertEquals("除外gestureは保存しない", savedBefore,
                 checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
-            assertEquals("除外gestureはpanしない", viewBefore, navigation.viewportState.value)
             assertPaletteOpen(instrumentation)
         }
 
-        nativeGesture(instrumentation, listOf(formerShare),
+        nativeGesture(instrumentation, listOf(blank),
             holdMillis = configuration.longPressTimeoutMillis + 100L)
         assertUncommitted()
-        nativeGesture(instrumentation, listOf(formerShare, secondPoint))
+
+        val dragPath = (0..6).map { (blank.first + 80f - it * 20f) to blank.second }
+        assertPalettePath(instrumentation, activity, dragPath)
+        val beforeDrag = navigation.viewportState.value
+        nativeGesture(instrumentation, dragPath, holdMillis = 180L)
         assertUncommitted()
+        assertTrue("region editor外のdragは既存canvas panへ渡す",
+            beforeDrag != navigation.viewportState.value)
+        assertEquals("dragはzoomを変えない", beforeDrag.scale, navigation.viewportState.value.scale)
+
+        val pinchPoint = paletteCanvasPoint(instrumentation, activity)
+        assertPalettePath(instrumentation, activity, listOf(
+            (pinchPoint.first - 70f) to pinchPoint.second,
+            (pinchPoint.first + 70f) to pinchPoint.second,
+        ))
+        val beforePinch = navigation.viewportState.value.scale
+        nativePinch(instrumentation, pinchPoint.first, pinchPoint.second)
+        assertUncommitted()
+        assertTrue("region editor外のmulti-touchは既存pinchへ渡す",
+            navigation.viewportState.value.scale > beforePinch)
+
         nativePointerPair(instrumentation, formerShare, secondPoint, cancelFirstPointer = false)
         assertUncommitted()
         nativePointerPair(instrumentation, formerShare, secondPoint)
         assertUncommitted()
-        nativeGesture(instrumentation, listOf(formerShare),
+        nativeGesture(instrumentation, listOf(blank),
             terminal = MotionEvent.ACTION_CANCEL, flags = MotionEvent.FLAG_CANCELED)
         assertUncommitted()
 
+        val viewportBeforeCommit = navigation.viewportState.value
         nativeGesture(instrumentation, listOf(formerShare))
         waitForGone(instrumentation, "囲みの名前")
         assertEquals("外側tapでregion選択を変えない", "選択中",
@@ -634,7 +653,7 @@ class ConditionalChromeLifecycleTest {
         awaitSavedRegionName(store, "chrome-lifecycle-region", renamed)
         assertEquals("変更済みのregion名を保存", renamed,
             runBlocking { store.savedBoard(1L)?.snapshot?.shapes?.singleOrNull { it.id == "chrome-lifecycle-region" }?.name })
-        assertEquals("dismissal tap does not pan or zoom", viewBefore, navigation.viewportState.value)
+        assertEquals("dismissal tap does not pan or zoom", viewportBeforeCommit, navigation.viewportState.value)
 
         assertTrue("region rename adds one undo entry", board.canUndo)
         assertTrue(board.undo())
@@ -642,6 +661,16 @@ class ConditionalChromeLifecycleTest {
         assertEquals("rename contributed one history entry", undoAvailableBefore, board.canUndo)
         assertTrue(board.redo())
         assertEquals(renamed, board.snapshot().shapes.single { it.id == "chrome-lifecycle-region" }.name)
+
+        val (regionForStylus, renameForStylus) = waitForRegionRenameAction(instrumentation)
+        assertTrue(regionForStylus.performAction(renameForStylus.id))
+        assertEquals("stylus操作前にregion editorを開く", renamed,
+            editor.regionNameDraft.value?.name)
+        assertPaletteStylusStroke(instrumentation, activity, database, sessions)
+        assertEquals("stylusはoutside finalize扱いにならずeditorを保持", renamed,
+            editor.regionNameDraft.value?.name)
+        clickActionable(instrumentation, "完了")
+        waitForGone(instrumentation, "囲みの名前")
 
         Thread.sleep(configuration.doubleTapTimeoutMillis + 100L)
         composeRule.waitForIdle()
