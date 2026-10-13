@@ -13,8 +13,10 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.hasContentDescription
@@ -30,6 +32,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.waitUntilExactlyOneExists
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.core.app.ActivityScenario
@@ -274,13 +277,26 @@ class BoardListScreenTest {
         } finally { scenario.close() }
     }
 
+    @OptIn(ExperimentalTestApi::class)
     @Test fun guideAppearsOnlyOnInitialEmptyBoardAndCanBeReplayed() {
         seed(listOf(BoardRow(1, "最初のボード", 10)))
         assertTrue(context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
             .edit().putLong("lastOpenedBoardId", 1).putLong("guideEligibleBoardId", 1)
             .putBoolean("guideDismissed", false).commit())
-        val scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
+        val (queueStarted, release) = blockCanvasStoreQueue()
+        var scenario: ActivityScenario<MainActivity>? = null
         try {
+            runBlocking { withTimeout(5_000) { queueStarted.await() } }
+            scenario = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java))
+            composeRule.waitUntilExactlyOneExists(
+                hasText(context.getString(com.thinkcanvas.R.string.loading_board)),
+                timeoutMillis = 5_000L,
+            )
+            assertTrue(composeRule.onAllNodesWithText("‹ 最初のボード").fetchSemanticsNodes().isEmpty())
+            assertTrue(composeRule.onAllNodesWithText("基本の操作").fetchSemanticsNodes().isEmpty())
+
+            release.complete(Unit)
+            composeRule.waitUntilExactlyOneExists(hasText("‹ 最初のボード"), timeoutMillis = 5_000L)
             composeRule.onNodeWithText("基本の操作").assertIsDisplayed()
             composeRule.onNodeWithText("はじめる").performClick()
             composeRule.waitUntil(5_000) {
@@ -296,7 +312,10 @@ class BoardListScreenTest {
             awaitDescription("無題のボード、", substring = true)
             composeRule.onNodeWithText("使い方").performClick()
             composeRule.onNodeWithText("基本の操作").assertIsDisplayed()
-        } finally { scenario.close() }
+        } finally {
+            release.complete(Unit)
+            scenario?.close()
+        }
     }
 
     @PrSmoke
