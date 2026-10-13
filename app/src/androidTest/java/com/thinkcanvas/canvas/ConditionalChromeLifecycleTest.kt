@@ -6,13 +6,20 @@ import android.graphics.Rect
 import android.os.Build
 import android.os.SystemClock
 import android.util.Log
+import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.InputDevice
+import android.view.View
+import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.performSemanticsAction
@@ -30,6 +37,7 @@ import com.thinkcanvas.data.showBoardOneAtStartup
 import kotlinx.coroutines.runBlocking
 import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -37,6 +45,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.concurrent.atomic.AtomicLong
 
 @RunWith(AndroidJUnit4::class)
 class ConditionalChromeLifecycleTest {
@@ -91,6 +100,17 @@ class ConditionalChromeLifecycleTest {
     @PrSmoke
     @Test
     fun launcherRefreshPreservesStrictPlatformFailures() {
+        // #148 の caller readiness: callback 未配送の再読と key 変化は完了にならない。
+        val readiness = RenameReadiness()
+        val layout = RenameLayout(ComposeRect(0f, 0f, 100f, 200f), 883)
+        val changed = layout.copy(canvas = ComposeRect(0f, 0f, 100f, 201f))
+        assertFalse(readiness.accept(0, layout))
+        assertFalse(readiness.accept(1, layout))
+        repeat(3) { assertFalse(readiness.accept(1, layout)) }
+        assertFalse(readiness.accept(2, changed))
+        assertFalse(readiness.accept(3, null))
+        assertFalse(readiness.accept(4, changed))
+        assertTrue(readiness.accept(5, changed))
         val label = "図形ツールを開く"
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val rect = Rect(912, 1073, 1038, 1199)
@@ -446,13 +466,16 @@ class ConditionalChromeLifecycleTest {
 
     @PrSmoke
     @Test
-    fun paletteRegionNameEditorKeepsOutsidePriority() = withPaletteBoard(expanded = false) { instrumentation, _, _, _ ->
+    fun paletteRegionNameEditorKeepsOutsidePriority() = withPaletteBoard(expanded = false) { instrumentation, activity, _, _ ->
         clickActionable(instrumentation, "囲み: Cluster")
         val formerShare = center(bounds(waitForActionable(instrumentation, "選択範囲を画像で共有")))
         val (region, rename) = waitForRegionRenameAction(instrumentation)
         assertTrue(region.performAction(rename.id))
         waitForGone(instrumentation, "選択範囲を画像で共有", recordPostRenameShareDecision = true)
-        clickActionable(instrumentation, "図形ツールを開く")
+        // editor 準備後の outside priority。自然遷移直後の coverage は減り、#148 の原因は UNKNOWN。
+        val deadline = SystemClock.uptimeMillis() + 4_000L
+        awaitRenameLayout(instrumentation, activity, deadline)
+        clickNode(instrumentation, waitForActionable(instrumentation, "図形ツールを開く", deadline), "図形ツールを開く")
         assertPaletteOpen(instrumentation)
         nativeGesture(instrumentation, listOf(formerShare))
         val configuration = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().layoutInfo.viewConfiguration
@@ -1000,13 +1023,80 @@ class ConditionalChromeLifecycleTest {
             descriptionBounds, controlBounds)
     }
 
+    private data class RenameLayout(val canvas: ComposeRect, val imeBottom: Int)
+
+    private class RenameReadiness {
+        var frame = 0L
+            private set
+        private var previous: RenameLayout? = null
+        fun accept(frame: Long, current: RenameLayout?): Boolean {
+            if (frame <= this.frame) return false
+            val ready = current != null && current == previous
+            previous = current
+            this.frame = frame
+            return ready
+        }
+    }
+
+    private fun renameLayout(instrumentation: android.app.Instrumentation, activity: MainActivity): RenameLayout? {
+        val field = composeRule.onAllNodesWithContentDescription("囲みの名前").fetchSemanticsNodes(false).singleOrNull()
+        val canvas = composeRule.onAllNodesWithContentDescription("キャンバス").fetchSemanticsNodes(false).singleOrNull()
+        if (field?.config?.getOrNull(SemanticsProperties.Focused) != true || canvas == null) return null
+        var layout: RenameLayout? = null
+        instrumentation.runOnMainSync {
+            val decor = activity.window.decorView
+            val root = decor.findViewById<View>(android.R.id.content)
+            val insets = decor.rootWindowInsets
+            if (decor.hasWindowFocus() && insets?.isVisible(WindowInsets.Type.ime()) == true) {
+                val bottom = insets.getInsets(WindowInsets.Type.ime()).bottom
+                val safe = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout() or WindowInsets.Type.ime())
+                val origin = IntArray(2).also(root::getLocationInWindow)
+                val native = ComposeRect((origin[0] + safe.left).toFloat(), (origin[1] + safe.top).toFloat(),
+                    (origin[0] + root.width - safe.right).toFloat(), (origin[1] + root.height - safe.bottom).toFloat())
+                val bounds = canvas.boundsInWindow
+                if (bottom > 0 && !bounds.isEmpty && bounds == native) layout = RenameLayout(bounds, bottom)
+            }
+        }
+        return layout
+    }
+
+    private fun remainingActionableTime(deadline: Long): Long = (deadline - SystemClock.uptimeMillis()).also {
+        check(it > 0L) { "操作準備・取得の4秒予算を超えました" }
+    }
+
+    private fun awaitRenameLayout(instrumentation: android.app.Instrumentation, activity: MainActivity, deadline: Long) {
+        val readiness = RenameReadiness()
+        val delivered = AtomicLong(0L)
+        val callback = Choreographer.FrameCallback { delivered.set(it) }
+        lateinit var choreographer: Choreographer
+        instrumentation.runOnMainSync { choreographer = Choreographer.getInstance() }
+        try {
+            instrumentation.runOnMainSync { choreographer.postFrameCallback(callback) }
+            composeRule.waitUntil("囲み名 editor の focus・actual IME・layout が別 frame 機会で安定する", remainingActionableTime(deadline)) {
+                remainingActionableTime(deadline)
+                val frame = delivered.get()
+                if (frame <= readiness.frame) false else {
+                    val current = renameLayout(instrumentation, activity)
+                    remainingActionableTime(deadline)
+                    val ready = readiness.accept(frame, current)
+                    // 読了後の一回限り callback。atomic snapshot / IME animation 終了は保証しない。
+                    if (!ready) instrumentation.runOnMainSync { choreographer.postFrameCallback(callback) }
+                    ready
+                }
+            }
+        } finally {
+            instrumentation.runOnMainSync { choreographer.removeFrameCallback(callback) }
+        }
+    }
+
     private fun waitForActionable(
         instrumentation: android.app.Instrumentation,
         label: String,
+        sharedDeadline: Long? = null,
     ): AccessibilityNodeInfo {
         if (label == "図形ツールを開く" || label == "ペン") {
             // Geometry is asserted only after bounded platform idle and a fresh tree.
-            val deadline = SystemClock.uptimeMillis() + 4_000L
+            val deadline = sharedDeadline ?: (SystemClock.uptimeMillis() + 4_000L)
             val automation = instrumentation.uiAutomation
             while (SystemClock.uptimeMillis() < deadline) {
                 composeRule.waitForIdle()
@@ -1018,7 +1108,7 @@ class ConditionalChromeLifecycleTest {
                 val root = automation.rootInActiveWindow
                 if (root?.refresh() == true) {
                     // A geometry assertion failure is never caught or retried.
-                    findActionable(root, label)?.let { return it }
+                    findActionable(root, label)?.let { sharedDeadline?.let(::remainingActionableTime); return it }
                 }
             }
             error("操作可能なアクセシビリティ要素が見つかりません: $label")
