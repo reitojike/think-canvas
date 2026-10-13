@@ -842,6 +842,14 @@ fun CanvasScreen(
         if (closeDraft) pendingDraftAcknowledgement = acknowledgement
     }
 
+    fun commitRegionName(expectedSessionId: String) {
+        if (exitBlocked()) return
+        val current = editorSession.regionNameDraft.value ?: return
+        if (current.sessionId != expectedSessionId) return
+        if (board.updateShape(current.id, name = current.name)) saveSnapshot()
+        closeRegionName()
+    }
+
     fun editHistory(redo: Boolean) {
         if (exitBlocked() || !(if (redo) board.canRedo else board.canUndo)) return
         stopViewportAnimation()
@@ -1145,6 +1153,7 @@ fun CanvasScreen(
         else commitDraft()
     }
     val latestFinalizeDraft = rememberUpdatedState({ finalizeDraft() })
+    val latestCommitRegionName = rememberUpdatedState({ sessionId: String -> commitRegionName(sessionId) })
 
     suspend fun focusEditorInput(requester: FocusRequester, isCurrent: () -> Boolean) {
         if (!isCurrent()) return
@@ -1303,10 +1312,17 @@ fun CanvasScreen(
                         down.consume()
                         return@awaitEachGesture
                     }
-                    val activeDraft = editorSession.draft.value ?: return@awaitEachGesture
-                    val fieldBounds = textEditorBounds ?: return@awaitEachGesture
-                    val toolbarBounds = editorToolbarBounds ?: return@awaitEachGesture
-                    if (fieldBounds.contains(down.position) || toolbarBounds.contains(down.position))
+                    val activeDraft = editorSession.draft.value
+                    val activeRegion = editorSession.regionNameDraft.value
+                    if (activeDraft == null && activeRegion == null) return@awaitEachGesture
+                    val fieldBounds = if (activeDraft != null) textEditorBounds else chromeBounds["regionName"]
+                    if (fieldBounds == null) {
+                        if (activeRegion != null) down.consume()
+                        return@awaitEachGesture
+                    }
+                    val toolbarBounds = if (activeDraft != null) editorToolbarBounds
+                        ?: return@awaitEachGesture else null
+                    if (fieldBounds.contains(down.position) || toolbarBounds?.contains(down.position) == true)
                         return@awaitEachGesture
                     // Finalize-only: keep this whole gesture away from children and canvas tools.
                     down.consume()
@@ -1332,8 +1348,16 @@ fun CanvasScreen(
                                 nativeEvent.actionMasked == MotionEvent.ACTION_CANCEL ||
                                 nativeEvent.flags and MotionEvent.FLAG_CANCELED != 0
                             if (isTap && !cancelled && event.type == PointerEventType.Release &&
-                                active?.previousPressed == true &&
-                                editorSession.draft.value?.sessionId == activeDraft.sessionId) latestFinalizeDraft.value()
+                                active?.previousPressed == true) {
+                                when {
+                                    activeDraft != null &&
+                                        editorSession.draft.value?.sessionId == activeDraft.sessionId ->
+                                        latestFinalizeDraft.value()
+                                    activeRegion != null && !exitBlocked() &&
+                                        editorSession.regionNameDraft.value?.sessionId == activeRegion.sessionId ->
+                                        latestCommitRegionName.value(activeRegion.sessionId)
+                                }
+                            }
                             break
                         }
                     }
@@ -1351,7 +1375,8 @@ fun CanvasScreen(
                     down.consume()
                     return@awaitEachGesture
                 }
-                if (editorSession.draft.value != null) return@awaitEachGesture
+                if (editorSession.draft.value != null || editorSession.regionNameDraft.value != null)
+                    return@awaitEachGesture
                 val requestedInk = down.type == PointerType.Stylus || latestInkTool.value != null
                 if (chromeContains(down.position)) { cancelBlankTap(); return@awaitEachGesture }
                 // Only a neutral, single-touch short release belongs to palette dismissal.
@@ -2581,8 +2606,7 @@ fun CanvasScreen(
                         })
                     EditorOption(stringResource(R.string.done), false, true, enabled = !saveBlocked()) {
                         if (saveBlocked()) return@EditorOption
-                        if (board.updateShape(editingRegionId, name = regionName)) saveSnapshot()
-                        closeRegionName()
+                        regionDraft?.let { commitRegionName(it.sessionId) }
                     }
                 }
             }
