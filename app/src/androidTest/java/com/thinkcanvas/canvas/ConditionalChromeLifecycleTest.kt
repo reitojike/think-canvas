@@ -19,7 +19,6 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.performSemanticsAction
@@ -1039,8 +1038,12 @@ class ConditionalChromeLifecycleTest {
     }
 
     private fun renameLayout(instrumentation: android.app.Instrumentation, activity: MainActivity): RenameLayout? {
-        val field = composeRule.onAllNodesWithContentDescription("囲みの名前").fetchSemanticsNodes(false).singleOrNull()
-        val canvas = composeRule.onAllNodesWithContentDescription("キャンバス").fetchSemanticsNodes(false).singleOrNull()
+        val fieldMatcher = hasContentDescription("囲みの名前")
+        val canvasMatcher = hasContentDescription("キャンバス")
+        val nodes = composeRule.onAllNodes(fieldMatcher or canvasMatcher, useUnmergedTree = false)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        val field = nodes.singleOrNull { fieldMatcher.matches(it) }
+        val canvas = nodes.singleOrNull { canvasMatcher.matches(it) }
         if (field?.config?.getOrNull(SemanticsProperties.Focused) != true || canvas == null) return null
         var layout: RenameLayout? = null
         instrumentation.runOnMainSync {
