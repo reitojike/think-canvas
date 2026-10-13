@@ -250,7 +250,7 @@ class ConditionalChromeLifecycleTest {
             assertEquals("囲みが選択されている", "選択中",
                 waitForRegionState(instrumentation, "選択中"))
             lateinit var sessions: BoardSessionViewModel
-            instrumentation.runOnMainSync { sessions = ViewModelProvider(activity)[BoardSessionViewModel::class.java] }
+            instrumentation.runOnMainSync { sessions = ViewModelProvider(activity as MainActivity)[BoardSessionViewModel::class.java] }
             val board = sessions.stateFor(1L, BoardSnapshot())
             val store = com.thinkcanvas.data.CanvasStore.get(context)
             val before = board.snapshot()
@@ -325,7 +325,7 @@ class ConditionalChromeLifecycleTest {
         )
         try {
             lateinit var sessions: BoardSessionViewModel
-            instrumentation.runOnMainSync { sessions = ViewModelProvider(activity)[BoardSessionViewModel::class.java] }
+            instrumentation.runOnMainSync { sessions = ViewModelProvider(activity as MainActivity)[BoardSessionViewModel::class.java] }
             val editor = sessions.textEditorFor(1L, BoardSnapshot())
             val store = com.thinkcanvas.data.CanvasStore.get(context)
 
@@ -418,13 +418,13 @@ class ConditionalChromeLifecycleTest {
 
             fun assertBlockedTap(phase: String) {
                 nativeGesture(instrumentation, listOf(blockedShare))
-                assertEquals("$phase中も編集draftを保持する", "Blocked rename",
+                assertEquals("${phase}中も編集draftを保持する", "Blocked rename",
                     editor.regionNameDraft.value?.name)
-                assertEquals("$phase中はboardを変更しない", blockedBefore, board.snapshot())
-                assertEquals("$phase中は保存済みboardを変更しない", savedBeforeBlocked,
+                assertEquals("${phase}中はboardを変更しない", blockedBefore, board.snapshot())
+                assertEquals("${phase}中は保存済みboardを変更しない", savedBeforeBlocked,
                     checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
-                assertEquals("$phase中に余分なsave requestを送らない", 1, saveCalls.get())
-                assertFalse("$phase中はacknowledgementを未完了のまま保つ", acknowledgement.isCompleted)
+                assertEquals("${phase}中に余分なsave requestを送らない", 1, saveCalls.get())
+                assertFalse("${phase}中はacknowledgementを未完了のまま保つ", acknowledgement.isCompleted)
             }
 
             assertBlockedTap("Running")
