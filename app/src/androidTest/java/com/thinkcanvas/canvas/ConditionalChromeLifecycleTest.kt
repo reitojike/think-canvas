@@ -256,8 +256,7 @@ class ConditionalChromeLifecycleTest {
             val before = board.snapshot()
             val savedBefore = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
 
-            val shareButton = waitForActionable(instrumentation, "選択範囲を画像で共有")
-            val shareCenter = center(bounds(shareButton))
+            waitForActionable(instrumentation, "選択範囲を画像で共有")
 
             val (region, renameAction) = waitForRegionRenameAction(instrumentation)
             assertTrue("囲み名編集のアクセシビリティ操作を実行できる",
@@ -273,24 +272,8 @@ class ConditionalChromeLifecycleTest {
             val configuration = composeRule.onNodeWithContentDescription("キャンバス")
                 .fetchSemanticsNode().layoutInfo.viewConfiguration
             val canvasActivity = activity as MainActivity
-            val safeCanvas = paletteSafeCanvas(instrumentation, canvasActivity)
-            val activeRoot = instrumentation.uiAutomation.rootInActiveWindow
-            val activeNameBounds = bounds(checkNotNull(findExact(activeRoot, "囲みの名前")))
-            val activeDoneBounds = findExact(activeRoot, "完了")?.let(::bounds)
-            val activeRegionBounds = bounds(checkNotNull(findExact(activeRoot, "囲み: Cluster")))
-            val candidateTaps = listOf(
-                shareCenter,
-                (safeCanvas.left + safeCanvas.width() * .15f) to (safeCanvas.top + safeCanvas.height() * .55f),
-                (safeCanvas.left + safeCanvas.width() * .85f) to (safeCanvas.top + safeCanvas.height() * .55f),
-                (safeCanvas.left + safeCanvas.width() * .15f) to (safeCanvas.top + safeCanvas.height() * .78f),
-                (safeCanvas.left + safeCanvas.width() * .85f) to (safeCanvas.top + safeCanvas.height() * .78f),
-            )
-            val outsideTap = candidateTaps.firstOrNull { (x, y) ->
-                safeCanvas.contains(x.toInt(), y.toInt()) &&
-                    !activeNameBounds.contains(x.toInt(), y.toInt()) &&
-                    activeDoneBounds?.contains(x.toInt(), y.toInt()) != true &&
-                    !activeRegionBounds.contains(x.toInt(), y.toInt())
-            } ?: error("囲み/名前欄/Done外のlive canvas点が見つかりません")
+            val outsideTap = liveCanvasPointOutsideTouchTargets(instrumentation, canvasActivity)
+            assertSafeCanvasPath(instrumentation, canvasActivity, listOf(outsideTap))
             composeRule.mainClock.autoAdvance = false
             try {
                 tap(instrumentation, outsideTap.first, outsideTap.second)
@@ -597,15 +580,34 @@ class ConditionalChromeLifecycleTest {
         val store = com.thinkcanvas.data.CanvasStore.get(instrumentation.targetContext)
         clickActionable(instrumentation, "囲み: Cluster")
         val (region, rename) = waitForRegionRenameAction(instrumentation)
-        assertTrue(region.performAction(rename.id))
+        val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+            .fetchSemanticsNode().layoutInfo.viewConfiguration
+        val safeCanvas = paletteSafeCanvas(instrumentation, activity)
+        val regionBoundsBeforeEditor = bounds(region)
+        val neutralDown = (regionBoundsBeforeEditor.left + 30f) to (regionBoundsBeforeEditor.top + 30f)
+        assertTrue("neutral DOWNはlive canvas内", safeCanvas.contains(neutralDown.first.toInt(), neutralDown.second.toInt()))
+        assertNull("neutral DOWN前は囲み名editorがない", editor.regionNameDraft.value)
+        val beforeNeutralMove = board.snapshot()
+        val savedBeforeNeutralMove = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
+        val neutralMovePath = (0..6).map { (neutralDown.first + it * 12f) to neutralDown.second }
+        nativeGesture(instrumentation, neutralMovePath, afterDown = {
+            assertTrue("DOWN中に囲み名editorを開く", region.performAction(rename.id))
+            Thread.sleep(configuration.longPressTimeoutMillis + 100L)
+        })
+        composeRule.waitForIdle()
+        assertEquals("editor開始前のDOWNは要素を移動しない", beforeNeutralMove, board.snapshot())
+        assertEquals("editor開始前のDOWNは保存もしない", savedBeforeNeutralMove,
+            checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+        assertEquals("中断された長押し後も囲みは選択中", "選択中",
+            waitForRegionState(instrumentation, "選択中"))
+        assertEquals("DOWN後に開いたeditorは元の囲み名を保持", "Cluster",
+            editor.regionNameDraft.value?.name)
         waitForGone(instrumentation, "選択範囲を画像で共有", recordPostRenameShareDecision = true)
         composeRule.onNodeWithContentDescription("囲みの名前")
             .performTextReplacement("Renamed")
         val renamed = "Renamed"
         assertEquals("editorに変更済みのregion名がある", renamed, editor.regionNameDraft.value?.name)
 
-        val configuration = composeRule.onNodeWithContentDescription("キャンバス")
-            .fetchSemanticsNode().layoutInfo.viewConfiguration
         val regionForMove = checkNotNull(findExact(
             instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster"))
         val regionBoundsForMove = bounds(regionForMove)
@@ -647,8 +649,10 @@ class ConditionalChromeLifecycleTest {
             deadline = deadline, useAppProcessGeometry = true)
         assertPaletteOpen(instrumentation)
         val blank = paletteCanvasPoint(instrumentation, activity, verifyPaletteChrome = false)
-        val secondPoint = (blank.first + 64f) to blank.second
-        assertSafeCanvasPath(instrumentation, activity, listOf(blank, secondPoint))
+        val pairOffsets = listOf(0f to 0f, 64f to 0f)
+        val pairStart = liveCanvasPointOutsideTouchTargets(instrumentation, activity, pairOffsets)
+        val secondPoint = (pairStart.first + 64f) to pairStart.second
+        assertSafeCanvasPath(instrumentation, activity, listOf(pairStart, secondPoint))
 
         fun assertUncommitted() {
             assertEquals("除外gesture後も編集draftを保持する", renamed, editor.regionNameDraft.value?.name)
@@ -662,7 +666,9 @@ class ConditionalChromeLifecycleTest {
             holdMillis = configuration.longPressTimeoutMillis + 100L)
         assertUncommitted()
 
-        val dragPath = (0..6).map { (blank.first + 80f - it * 20f) to blank.second }
+        val dragOffsets = (0..6).map { (80f - it * 20f) to 0f }
+        val dragStart = liveCanvasPointOutsideTouchTargets(instrumentation, activity, dragOffsets)
+        val dragPath = dragOffsets.map { (dragStart.first + it.first) to dragStart.second }
         assertSafeCanvasPath(instrumentation, activity, dragPath)
         val beforeDrag = navigation.viewportState.value
         nativeGesture(instrumentation, dragPath, holdMillis = 180L)
@@ -671,7 +677,8 @@ class ConditionalChromeLifecycleTest {
             beforeDrag != navigation.viewportState.value)
         assertEquals("dragはzoomを変えない", beforeDrag.scale, navigation.viewportState.value.scale)
 
-        val pinchPoint = paletteCanvasPoint(instrumentation, activity, verifyPaletteChrome = false)
+        val pinchOffsets = listOf(-70f to 0f, 70f to 0f)
+        val pinchPoint = liveCanvasPointOutsideTouchTargets(instrumentation, activity, pinchOffsets)
         assertSafeCanvasPath(instrumentation, activity, listOf(
             (pinchPoint.first - 70f) to pinchPoint.second,
             (pinchPoint.first + 70f) to pinchPoint.second,
@@ -682,9 +689,9 @@ class ConditionalChromeLifecycleTest {
         assertTrue("region editor外のmulti-touchは既存pinchへ渡す",
             navigation.viewportState.value.scale > beforePinch)
 
-        nativePointerPair(instrumentation, blank, secondPoint, cancelFirstPointer = false)
+        nativePointerPair(instrumentation, pairStart, secondPoint, cancelFirstPointer = false)
         assertUncommitted()
-        nativePointerPair(instrumentation, blank, secondPoint)
+        nativePointerPair(instrumentation, pairStart, secondPoint)
         assertUncommitted()
         nativeGesture(instrumentation, listOf(blank),
             terminal = MotionEvent.ACTION_CANCEL, flags = MotionEvent.FLAG_CANCELED)
@@ -899,6 +906,60 @@ class ConditionalChromeLifecycleTest {
         return canvas
     }
 
+    private fun accessibleTouchTargetBounds(instrumentation: android.app.Instrumentation): List<Rect> {
+        if (Build.VERSION.SDK_INT >= 34) instrumentation.uiAutomation.clearCache()
+        val root = checkNotNull(instrumentation.uiAutomation.rootInActiveWindow) {
+            "accessibility hit target lookup requires the active window root"
+        }
+        val canvasNode = checkNotNull(findExact(root, "キャンバス")) {
+            "accessibility hit target lookup requires the active canvas node"
+        }
+        check(canvasNode.isVisibleToUser) { "active canvas node is not visible" }
+        val targets = mutableListOf<Rect>()
+        var canvasNodeCount = 0
+        fun collect(node: AccessibilityNodeInfo?) {
+            if (node == null) return
+            val label = node.contentDescription?.toString()
+            val isCanvasNode = label == "キャンバス"
+            if (isCanvasNode) canvasNodeCount++
+            val hasTapAction = node.isClickable || node.isLongClickable ||
+                node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }
+            if (node.isVisibleToUser && !isCanvasNode &&
+                (hasTapAction || label == "囲みの名前")) {
+                val rect = bounds(node)
+                if (!rect.isEmpty) targets += rect
+            }
+            for (index in 0 until node.childCount) collect(node.getChild(index))
+        }
+        collect(root)
+        check(canvasNodeCount == 1) {
+            "expected one actual canvas node in the active window, found $canvasNodeCount"
+        }
+        return targets.distinct()
+    }
+
+    private fun liveCanvasPointOutsideTouchTargets(
+        instrumentation: android.app.Instrumentation,
+        activity: MainActivity,
+        offsets: List<Pair<Float, Float>> = listOf(0f to 0f),
+    ): Pair<Float, Float> {
+        val safe = paletteSafeCanvas(instrumentation, activity)
+        val targets = accessibleTouchTargetBounds(instrumentation)
+        val candidates = listOf(
+            (safe.left + safe.width() * .15f) to (safe.top + safe.height() * .55f),
+            (safe.left + safe.width() * .85f) to (safe.top + safe.height() * .55f),
+            (safe.left + safe.width() * .15f) to (safe.top + safe.height() * .78f),
+            (safe.left + safe.width() * .85f) to (safe.top + safe.height() * .78f),
+        )
+        return checkNotNull(candidates.firstOrNull { (x, y) ->
+            offsets.all { (dx, dy) ->
+                val px = (x + dx).toInt()
+                val py = (y + dy).toInt()
+                safe.contains(px, py) && targets.none { it.contains(px, py) }
+            }
+        }) { "fixed live canvas candidates all hit a target or leave the safe canvas: safe=$safe targets=$targets" }
+    }
+
     private fun paletteChromeBounds(instrumentation: android.app.Instrumentation): List<Rect> {
         val root = instrumentation.uiAutomation.rootInActiveWindow
         val labels = setOf("画像を追加", "ペン", "マーカー", "まとめて選ぶ", "囲み", "矢印", "丸", "四角")
@@ -930,11 +991,15 @@ class ConditionalChromeLifecycleTest {
         instrumentation: android.app.Instrumentation,
         activity: MainActivity,
         verifyPaletteChrome: Boolean = true,
+        offsets: List<Pair<Float, Float>> = listOf(0f to 0f),
     ): Pair<Float, Float> {
         val safe = paletteSafeCanvas(instrumentation, activity)
-        val canvas = bounds(checkNotNull(findExact(instrumentation.uiAutomation.rootInActiveWindow, "キャンバス")))
-        val point = (canvas.left + canvas.width() * .20f) to (canvas.top + canvas.height() * .55f)
-        assertTrue("normal fixture point excludes system gestures: $point / $safe", safe.contains(point.first.toInt(), point.second.toInt()))
+        val point = if (verifyPaletteChrome) {
+            val canvas = bounds(checkNotNull(findExact(instrumentation.uiAutomation.rootInActiveWindow, "キャンバス")))
+            (canvas.left + canvas.width() * .20f) to (canvas.top + canvas.height() * .55f)
+        } else liveCanvasPointOutsideTouchTargets(instrumentation, activity, offsets)
+        assertTrue("normal fixture point excludes system gestures: $point / $safe",
+            safe.contains(point.first.toInt(), point.second.toInt()))
         if (verifyPaletteChrome) assertPalettePath(instrumentation, activity, listOf(point))
         else assertSafeCanvasPath(instrumentation, activity, listOf(point))
         return point
@@ -951,9 +1016,12 @@ class ConditionalChromeLifecycleTest {
 
     private fun assertSafeCanvasPath(instrumentation: android.app.Instrumentation, activity: MainActivity, path: List<Pair<Float, Float>>) {
         val safe = paletteSafeCanvas(instrumentation, activity)
+        val targets = accessibleTouchTargetBounds(instrumentation)
         path.forEach { (x, y) ->
             assertTrue("input must remain in live app-owned canvas: ($x,$y) / $safe",
                 safe.contains(x.toInt(), y.toInt()))
+            assertTrue("input must avoid live accessibility hit targets: ($x,$y) / $targets",
+                targets.none { it.contains(x.toInt(), y.toInt()) })
         }
     }
 
@@ -967,7 +1035,8 @@ class ConditionalChromeLifecycleTest {
         val board = sessions.stateFor(1L, BoardSnapshot())
         val before = runBlocking { database.canvasDao().inkStrokes(1).size }
         val modelBefore = board.snapshot().ink.sumOf { it.strokes.size }
-        val blank = paletteCanvasPoint(instrumentation, activity, verifyPaletteChrome)
+        val strokeOffsets = listOf(0f to 0f, 30f to 0f, 60f to 0f)
+        val blank = paletteCanvasPoint(instrumentation, activity, verifyPaletteChrome, strokeOffsets)
         val path = listOf(blank, (blank.first + 30f) to blank.second, (blank.first + 60f) to blank.second)
         if (verifyPaletteChrome) assertPalettePath(instrumentation, activity, path)
         else assertSafeCanvasPath(instrumentation, activity, path)

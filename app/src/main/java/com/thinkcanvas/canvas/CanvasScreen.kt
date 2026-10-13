@@ -612,7 +612,9 @@ fun CanvasScreen(
     }
 
     fun moveIsLive(owner: MoveDragSession): Boolean = moveOwner === owner &&
-        gestureGeneration == owner.generation && !exitBlocked() && owner.hasSameContent(board) &&
+        gestureGeneration == owner.generation &&
+        editorSession.regionNameDraft.value?.sessionId == owner.regionSessionIdAtDown &&
+        !exitBlocked() && owner.hasSameContent(board) &&
         editorSession.draft.value == null &&
         editorSession.imageDescriptionDraft.value == null && !imagePickerOpen &&
         discardTarget == null && attachmentEditor == null && menuTarget == null && !searchOpen
@@ -1524,7 +1526,7 @@ fun CanvasScreen(
                         return
                     }
                     val owner = gestureMove ?: MoveDragSession(moveIds, startWorld, admittedGeneration,
-                        gestureSnapshot, pointer).also { gestureMove = it; moveOwner = it }
+                        regionSessionAtDown, gestureSnapshot, pointer).also { gestureMove = it; moveOwner = it }
                     if (moveIsLive(owner)) {
                         owner.pointer = pointer
                         movePreview = owner.ids to worldDragDelta(viewport, owner.anchor, pointer)
