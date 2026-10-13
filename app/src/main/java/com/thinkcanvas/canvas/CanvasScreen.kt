@@ -81,7 +81,9 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -221,6 +223,7 @@ fun CanvasScreen(
     var pendingDraftAcknowledgement by editorSession.pendingDraftAcknowledgement
     val currentSaveState by saveState.collectAsState()
     val latestExternalBlock = rememberUpdatedState(externalInteractionBlocked)
+    val inputView = LocalView.current
     fun traceDismissal(event: String, capturedSession: String? = null) {
         editorSession.dismissalTrace?.let { trace ->
             trace("$event owner=${System.identityHashCode(editorSession)} session=${draft?.sessionId} " +
@@ -256,6 +259,36 @@ fun CanvasScreen(
             ?: coordinates.boundsInParent()
     var textEditorBounds by remember { mutableStateOf<Rect?>(null) }
     var editorToolbarBounds by remember { mutableStateOf<Rect?>(null) }
+    val dismissalCancelBounds = remember { arrayOfNulls<Rect>(1) }
+    fun traceDismissalInputDown(change: PointerInputChange, generationRejected: Boolean) {
+        if (editorSession.dismissalTrace == null) return
+        val externalBlocked = latestExternalBlock.value()
+        val enabledNow = saveState.value == BoardSaveState.Idle && !externalBlocked
+        traceDismissal("input:down type=Press nativeAction=unavailableAtAwaitFirstDown pointer=${change.id} " +
+            "position=${change.position} previous=${change.previousPosition} " +
+            "pressed=${change.previousPressed}->${change.pressed} uptime=${change.uptimeMillis} " +
+            "generationRejected=$generationRejected targetBounds=${dismissalCancelBounds[0]} " +
+            "inputHost=${System.identityHashCode(inputView)} " +
+            "canvasBox=${canvasLayout[0]?.let { System.identityHashCode(it) }} " +
+            "externalBlocked=$externalBlocked enabledNow=$enabledNow")
+    }
+    fun traceDismissalInput(pass: String, event: PointerEvent) {
+        if (editorSession.dismissalTrace == null) return
+        val motionEvent = event.motionEvent
+        val externalBlocked = latestExternalBlock.value()
+        val enabledNow = saveState.value == BoardSaveState.Idle && !externalBlocked
+        val changes = event.changes.joinToString { change ->
+            "${change.id}:${change.previousPosition}->${change.position}/" +
+                "${change.previousPressed}->${change.pressed}"
+        }
+        traceDismissal("input:pass=$pass type=${event.type} " +
+            "nativeAction=${motionEvent?.actionMasked ?: "unavailable"} " +
+            "nativeFlags=${motionEvent?.flags ?: "unavailable"} changes=[$changes] " +
+            "targetBounds=${dismissalCancelBounds[0]} " +
+            "inputHost=${System.identityHashCode(inputView)} " +
+            "canvasBox=${canvasLayout[0]?.let { System.identityHashCode(it) }} " +
+            "externalBlocked=$externalBlocked enabledNow=$enabledNow")
+    }
     val uiScope = rememberCoroutineScope()
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -265,7 +298,6 @@ fun CanvasScreen(
     val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
     val windowInfo = LocalWindowInfo.current
-    val inputView = LocalView.current
     val regionNameFocusRequester = remember { FocusRequester() }
     val canvasTextStyle = LocalTextStyle.current
     val regionLabelStyle = canvasTextStyle.copy(fontSize = DetailedRenderFacts.REGION_LABEL_SIZE_SP.sp)
@@ -1275,6 +1307,7 @@ fun CanvasScreen(
     }
 
     val pointerGeneration = gestureGeneration
+    // This Box is an ancestor of the editor toolbar in the Compose hit-test path.
     Box(
         modifier = Modifier.fillMaxSize().background(paper).safeDrawingPadding()
             .onSizeChanged { canvasSize = it }.onPlaced { canvasLayout[0] = it }.clipToBounds()
@@ -1299,20 +1332,33 @@ fun CanvasScreen(
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     stopFling()
                     val admittedGeneration = gestureGeneration
+                    traceDismissalInputDown(down, admittedGeneration != pointerGeneration)
                     if (admittedGeneration != pointerGeneration) {
                         down.consume()
                         return@awaitEachGesture
                     }
                     val activeDraft = editorSession.draft.value ?: return@awaitEachGesture
-                    val fieldBounds = textEditorBounds ?: return@awaitEachGesture
-                    val toolbarBounds = editorToolbarBounds ?: return@awaitEachGesture
-                    if (fieldBounds.contains(down.position) || toolbarBounds.contains(down.position))
+                    val fieldBounds = textEditorBounds
+                    val toolbarBounds = editorToolbarBounds
+                    val insideEditor = fieldBounds?.contains(down.position) == true ||
+                        toolbarBounds?.contains(down.position) == true
+                    if (fieldBounds == null || toolbarBounds == null || insideEditor) {
+                        if (editorSession.dismissalTrace != null) {
+                            // Observe only this gesture's remaining events; do not consume them.
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                traceDismissalInput("Initial", event)
+                                if (event.changes.none { it.pressed }) break
+                            }
+                        }
                         return@awaitEachGesture
+                    }
                     // Finalize-only: keep this whole gesture away from children and canvas tools.
                     down.consume()
                     var isTap = true
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
+                        traceDismissalInput("Initial", event)
                         if (gestureGeneration != admittedGeneration) {
                             event.changes.forEach { it.consume() }
                             break
@@ -2608,7 +2654,17 @@ fun CanvasScreen(
                         color = if (draft?.color == TextColor.VERMILION) TextColor.INK else TextColor.VERMILION,
                     ))
                 }
-                EditorOption(stringResource(R.string.cancel_short), false, false, enabled = editingEnabled) {
+                EditorOption(
+                    stringResource(R.string.cancel_short), false, false, enabled = editingEnabled,
+                    onDiagnosticLayout = if (editorSession.dismissalTrace != null) { coordinates ->
+                        dismissalCancelBounds[0] = canvasBounds(coordinates)
+                        traceDismissal("input:target enabled=$editingEnabled " +
+                            "bounds=${dismissalCancelBounds[0]} " +
+                            "inputHost=${System.identityHashCode(inputView)} " +
+                            "canvasBox=${canvasLayout[0]?.let { System.identityHashCode(it) }} " +
+                            "externalBlocked=${latestExternalBlock.value()}")
+                    } else null,
+                ) {
                     traceDismissal("cancel.toolbarCallback")
                     cancelDraft()
                 }
@@ -2779,10 +2835,18 @@ private fun CanvasZoomControl(
 }
 
 @Composable
-private fun EditorOption(label: String, active: Boolean, accent: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun EditorOption(
+    label: String,
+    active: Boolean,
+    accent: Boolean,
+    enabled: Boolean,
+    onDiagnosticLayout: ((LayoutCoordinates) -> Unit)? = null,
+    onClick: () -> Unit,
+) {
     Box(
         modifier = Modifier.size(width = if (label.length > 2) 64.dp else 48.dp, height = 48.dp)
             .clip(RoundedCornerShape(8.dp))
+            .then(onDiagnosticLayout?.let { Modifier.onGloballyPositioned(it) } ?: Modifier)
             .background(if (active) if (accent) vermilion else ink else Color.Transparent)
             .clickable(enabled = enabled, onClick = onClick)
             .semantics {

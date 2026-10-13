@@ -49,6 +49,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertSame
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Rule
 import org.junit.Test
@@ -489,8 +490,19 @@ class TextEditorDismissalTest {
     @Test fun emptyDraftOutsideTapClosesWithoutCreatingAndNextTapStartsDraft() = withBoard {
         val observedEditor = editor
         val observation = DismissalObservation { android.util.Log.i("Dismissal141", it) }
+        val captureSecondCancelInput = AtomicBoolean(false)
+        var secondCancelTargetRecorded = false
         dismissalObservation = observation
-        observedEditor.dismissalTrace = observation::event
+        observedEditor.dismissalTrace = { event ->
+            if (event.startsWith("input:target")) {
+                if (captureSecondCancelInput.get() && !secondCancelTargetRecorded) {
+                    secondCancelTargetRecorded = true
+                    observation.event(event)
+                }
+            } else if (!event.startsWith("input:") || captureSecondCancelInput.get()) {
+                observation.event(event)
+            }
+        }
         fun mark(event: String) = observation.event("test:$event owner=${System.identityHashCode(observedEditor)} " +
             "session=${observedEditor.draft.value?.sessionId}")
         observation.run(block = {
@@ -508,7 +520,13 @@ class TextEditorDismissalTest {
             assertUnchanged(expectedRedo = true)
             startNew()
             mark("secondStarted")
-            composeRule.onNodeWithText("やめる").performClick()
+            secondCancelTargetRecorded = false
+            captureSecondCancelInput.set(true)
+            try {
+                composeRule.onNodeWithText("やめる").performClick()
+            } finally {
+                captureSecondCancelInput.set(false)
+            }
             mark("performClickReturned")
             assertClosed()
             mark("secondClosed")
