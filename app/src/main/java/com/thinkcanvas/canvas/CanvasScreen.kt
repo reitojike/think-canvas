@@ -157,6 +157,35 @@ private val textEditorWidth = 166.dp
 private val textEditorMaxHeight = 150.dp
 private val editorToolbarHeight = 54.dp
 
+// Temporary, single-gesture Issue #110 probe. The test emits it only after input and assertions.
+internal class Issue110OutsideTapProbe {
+    companion object {
+        @Volatile var current: Issue110OutsideTapProbe? = null
+    }
+
+    var screenX = Float.NaN
+    var screenY = Float.NaN
+    var nativeDownTime = -1L
+    var nativeDownEventTime = -1L
+    var nativeUpEventTime = -1L
+    var downInjectStart = -1L
+    var downInjectEnd = -1L
+    var upInjectStart = -1L
+    var upInjectEnd = -1L
+    var testLongPressMillis = -1L
+    @Volatile var gateReceived = false
+    var gateDownPosition: Offset? = null
+    var gateCanvasSize: IntSize? = null
+    var gateRegionBounds: Rect? = null
+    var gateImeBottom = -1
+    var gateDownUptime = -1L
+    @Volatile var gateLastUptime = -1L
+    var gateLongPressMillis = -1L
+    var gateTouchSlop = -1f
+    @Volatile var gateLastPointerCount = -1
+    @Volatile var gateOutcome = "not_received"
+}
+
 private class BlankTapBoundary {
     var active = true
     var pending: BlankTap? = null
@@ -1310,14 +1339,31 @@ fun CanvasScreen(
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     stopFling()
                     val admittedGeneration = gestureGeneration
+                    val issue110Probe = Issue110OutsideTapProbe.current
+                        ?.takeIf { it.nativeDownEventTime == down.uptimeMillis }
+                    issue110Probe?.let {
+                        it.gateDownPosition = down.position
+                        it.gateCanvasSize = size
+                        it.gateImeBottom = imeBottom
+                        it.gateDownUptime = down.uptimeMillis
+                        it.gateLongPressMillis = longPressMillis
+                        it.gateTouchSlop = touchSlop
+                        it.gateReceived = true
+                        it.gateOutcome = "awaiting_gate"
+                    }
                     if (admittedGeneration != pointerGeneration) {
+                        issue110Probe?.gateOutcome = "generation_changed_at_down"
                         down.consume()
                         return@awaitEachGesture
                     }
                     val activeDraft = editorSession.draft.value
                     val activeRegion = editorSession.regionNameDraft.value
-                    if (activeDraft == null && activeRegion == null) return@awaitEachGesture
+                    if (activeDraft == null && activeRegion == null) {
+                        issue110Probe?.gateOutcome = "no_editor"
+                        return@awaitEachGesture
+                    }
                     if (activeDraft != null) {
+                        issue110Probe?.gateOutcome = "text_owner"
                         val fieldBounds = textEditorBounds ?: return@awaitEachGesture
                         val toolbarBounds = editorToolbarBounds ?: return@awaitEachGesture
                         if (fieldBounds.contains(down.position) || toolbarBounds.contains(down.position))
@@ -1355,19 +1401,44 @@ fun CanvasScreen(
                     } else {
                         val region = checkNotNull(activeRegion)
                         // A region outside dismissal is a finger tap. Stylus remains owned by ink.
-                        if (down.type != PointerType.Touch) return@awaitEachGesture
-                        val regionBounds = chromeBounds["regionName"] ?: return@awaitEachGesture
-                        if (regionBounds.contains(down.position)) return@awaitEachGesture
+                        if (down.type != PointerType.Touch) {
+                            issue110Probe?.gateOutcome = "not_touch"
+                            return@awaitEachGesture
+                        }
+                        val regionBounds = chromeBounds["regionName"] ?: run {
+                            issue110Probe?.gateOutcome = "region_bounds_missing"
+                            return@awaitEachGesture
+                        }
+                        issue110Probe?.gateRegionBounds = regionBounds
+                        if (regionBounds.contains(down.position)) {
+                            issue110Probe?.gateOutcome = "inside_region_chrome"
+                            return@awaitEachGesture
+                        }
+                        issue110Probe?.gateOutcome = "awaiting_release"
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
-                            if (gestureGeneration != admittedGeneration) return@awaitEachGesture
+                            if (gestureGeneration != admittedGeneration) {
+                                issue110Probe?.gateOutcome = "generation_changed_during_gesture"
+                                return@awaitEachGesture
+                            }
                             val active = event.changes.singleOrNull()?.takeIf { it.id == down.id }
+                            issue110Probe?.gateLastPointerCount = event.changes.size
                             if (active == null ||
-                                (active.position - down.position).getDistance() > touchSlop ||
-                                active.uptimeMillis - down.uptimeMillis >= longPressMillis ||
-                                active.position.x !in 0f..size.width.toFloat() ||
-                                active.position.y !in 0f..size.height.toFloat()) {
+                                ((active.position - down.position).getDistance() > touchSlop).also {
+                                    if (it) issue110Probe?.gateOutcome = "touch_slop"
+                                } ||
+                                (active.uptimeMillis - down.uptimeMillis >= longPressMillis).also {
+                                    issue110Probe?.gateLastUptime = active.uptimeMillis
+                                    if (it) issue110Probe?.gateOutcome = "long_press"
+                                } ||
+                                (active.position.x !in 0f..size.width.toFloat()).also {
+                                    if (it) issue110Probe?.gateOutcome = "outside_canvas_x"
+                                } ||
+                                (active.position.y !in 0f..size.height.toFloat()).also {
+                                    if (it) issue110Probe?.gateOutcome = "outside_canvas_y"
+                                }) {
                                 // Leave drag, long press, additional pointers, and cancellation to the canvas router.
+                                if (active == null) issue110Probe?.gateOutcome = "pointer_count_or_id"
                                 return@awaitEachGesture
                             }
                             if (event.changes.none { it.pressed }) {
@@ -1375,9 +1446,16 @@ fun CanvasScreen(
                                 val cancelled = nativeEvent == null ||
                                     nativeEvent.actionMasked == MotionEvent.ACTION_CANCEL ||
                                     nativeEvent.flags and MotionEvent.FLAG_CANCELED != 0
-                                if (!cancelled && event.type == PointerEventType.Release &&
-                                    active.previousPressed &&
-                                    editorSession.regionNameDraft.value?.sessionId == region.sessionId) {
+                                if ((!cancelled).also {
+                                        if (!it) issue110Probe?.gateOutcome = "cancelled_release"
+                                    } && (event.type == PointerEventType.Release).also {
+                                        if (!it) issue110Probe?.gateOutcome = "not_release"
+                                    } && active.previousPressed.also {
+                                        if (!it) issue110Probe?.gateOutcome = "not_previous_pressed"
+                                    } && (editorSession.regionNameDraft.value?.sessionId == region.sessionId).also {
+                                        if (!it) issue110Probe?.gateOutcome = "session_changed"
+                                    }) {
+                                    issue110Probe?.gateOutcome = "accepted_release"
                                     // Consume only the qualifying release; the later canvas router suppresses
                                     // this same release while retaining ownership of every non-tap gesture.
                                     active.consume()

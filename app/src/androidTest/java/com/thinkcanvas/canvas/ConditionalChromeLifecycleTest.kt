@@ -48,6 +48,8 @@ import org.junit.runner.RunWith
 class ConditionalChromeLifecycleTest {
     @get:Rule val composeRule = createEmptyComposeRule()
 
+    private var issue110GeometryPhase: String? = null
+    private val issue110GeometryRecords = mutableListOf<String>()
 
     @PrSmoke
     @Test
@@ -245,6 +247,7 @@ class ConditionalChromeLifecycleTest {
         val activity = instrumentation.startActivitySync(
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
+        val issue110Probe = Issue110OutsideTapProbe()
         try {
             clickActionable(instrumentation, "囲み: Cluster")
             assertEquals("囲みが選択されている", "選択中",
@@ -279,15 +282,25 @@ class ConditionalChromeLifecycleTest {
             val configuration = composeRule.onNodeWithContentDescription("キャンバス")
                 .fetchSemanticsNode().layoutInfo.viewConfiguration
             val canvasActivity = activity as MainActivity
+            issue110GeometryPhase = "candidate"
             val outsideTap = liveCanvasPointOutsideTouchTargets(instrumentation, canvasActivity)
+            issue110GeometryPhase = "validation"
             assertSafeCanvasPath(instrumentation, canvasActivity, listOf(outsideTap))
+            issue110GeometryPhase = null
+            issue110Probe.screenX = outsideTap.first
+            issue110Probe.screenY = outsideTap.second
+            issue110Probe.testLongPressMillis = configuration.longPressTimeoutMillis
             composeRule.mainClock.autoAdvance = false
             var draftPresentAfterNativeGestureReturn = false
             var sameSessionAfterNativeGestureReturn = false
             var draftPresentAtThreeFramesAfterRegionStateCheck = false
             var sameSessionAtThreeFramesAfterRegionStateCheck = false
             try {
-                nativeGesture(instrumentation, listOf(outsideTap))
+                try {
+                    nativeGesture(instrumentation, listOf(outsideTap), issue110Probe = issue110Probe)
+                } finally {
+                    Issue110OutsideTapProbe.current = null
+                }
                 instrumentation.runOnMainSync {
                     val sessionIdAfterNativeGestureReturn =
                         editor.regionNameDraft.value?.sessionId
@@ -387,8 +400,28 @@ class ConditionalChromeLifecycleTest {
             assertNotNull("再選択後に共有 Button が再表示される",
                 waitForActionable(instrumentation, "選択範囲を画像で共有"))
         } finally {
+            issue110GeometryPhase = null
+            Issue110OutsideTapProbe.current = null
+            val gateOutcome = issue110Probe.gateOutcome
+            val gateSnapshot = "checkpoint=before_teardown gateReceived=${issue110Probe.gateReceived} outcome=$gateOutcome " +
+                "downLocal=${issue110Probe.gateDownPosition} canvasSize=${issue110Probe.gateCanvasSize} " +
+                "regionBounds=${issue110Probe.gateRegionBounds} imeBottom=${issue110Probe.gateImeBottom} " +
+                "downUptime=${issue110Probe.gateDownUptime} lastUptime=${issue110Probe.gateLastUptime} " +
+                "longPressMillis=${issue110Probe.gateLongPressMillis} touchSlop=${issue110Probe.gateTouchSlop} " +
+                "lastPointerCount=${issue110Probe.gateLastPointerCount}"
+            val eventElapsed = if (issue110Probe.nativeDownEventTime >= 0 && issue110Probe.nativeUpEventTime >= 0)
+                issue110Probe.nativeUpEventTime - issue110Probe.nativeDownEventTime else null
             activity.finish()
             instrumentation.waitForIdleSync()
+            Log.i("Issue110Outside", "screen=(${issue110Probe.screenX},${issue110Probe.screenY}) " +
+                "nativeDownTime=${issue110Probe.nativeDownTime} " +
+                "downEventTime=${issue110Probe.nativeDownEventTime} upEventTime=${issue110Probe.nativeUpEventTime} " +
+                "eventElapsed=$eventElapsed " +
+                "downInjectStart=${issue110Probe.downInjectStart} downInjectEnd=${issue110Probe.downInjectEnd} " +
+                "upInjectStart=${issue110Probe.upInjectStart} upInjectEnd=${issue110Probe.upInjectEnd} " +
+                "testLongPressMillis=${issue110Probe.testLongPressMillis}")
+            Log.i("Issue110Outside", gateSnapshot)
+            issue110GeometryRecords.forEach { Log.i("Issue110Outside", it) }
         }
     }
 
@@ -975,25 +1008,40 @@ class ConditionalChromeLifecycleTest {
         instrumentation.waitForIdleSync()
         if (Build.VERSION.SDK_INT >= 34) instrumentation.uiAutomation.clearCache()
         val canvas = bounds(checkNotNull(findExact(instrumentation.uiAutomation.rootInActiveWindow, "キャンバス")))
+        val issue110Phase = issue110GeometryPhase
+        val rawCanvas = if (issue110Phase != null) Rect(canvas) else null
+        var decorGeometry: String? = null
+        var imeGeometry: String? = null
         val display = Rect()
         instrumentation.runOnMainSync {
             val decor = activity.window.decorView
             val origin = IntArray(2).also(decor::getLocationOnScreen)
             display.set(origin[0], origin[1], origin[0] + decor.width, origin[1] + decor.height)
+            if (issue110Phase != null) decorGeometry = display.toShortString()
             if (Build.VERSION.SDK_INT >= 30) {
-                val insets = checkNotNull(decor.rootWindowInsets).getInsets(android.view.WindowInsets.Type.systemGestures())
+                val rootInsets = checkNotNull(decor.rootWindowInsets)
+                val insets = rootInsets.getInsets(android.view.WindowInsets.Type.systemGestures())
                 display.left += insets.left; display.top += insets.top
                 display.right -= insets.right; display.bottom -= insets.bottom
+                if (issue110Phase != null) {
+                    imeGeometry = "visible=${rootInsets.isVisible(android.view.WindowInsets.Type.ime())} " +
+                        "insets=${rootInsets.getInsets(android.view.WindowInsets.Type.ime())}"
+                }
             }
         }
         assertTrue("live canvas intersects app-owned screen: $canvas / $display", canvas.intersect(display))
         val margin = (8f * instrumentation.targetContext.resources.displayMetrics.density).toInt()
         canvas.inset(margin, margin)
         assertTrue("app-owned canvas is not empty", !canvas.isEmpty)
+        if (issue110Phase != null) {
+            issue110GeometryRecords += "phase=$issue110Phase canvas=${rawCanvas?.toShortString()} " +
+                "safe=${canvas.toShortString()} decor=$decorGeometry ime=$imeGeometry"
+        }
         return canvas
     }
 
     private fun accessibleTouchTargetBounds(instrumentation: android.app.Instrumentation): List<Rect> {
+        val issue110Phase = issue110GeometryPhase
         if (Build.VERSION.SDK_INT >= 34) instrumentation.uiAutomation.clearCache()
         val root = checkNotNull(instrumentation.uiAutomation.rootInActiveWindow) {
             "accessibility hit target lookup requires the active window root"
@@ -1015,6 +1063,10 @@ class ConditionalChromeLifecycleTest {
                 (hasTapAction || label == "囲みの名前")) {
                 val rect = bounds(node)
                 if (!rect.isEmpty) targets += rect
+                if (issue110Phase != null && label == "囲みの名前") {
+                    issue110GeometryRecords += "phase=$issue110Phase editor=${rect.toShortString()} " +
+                        "windowId=${node.windowId}"
+                }
             }
             for (index in 0 until node.childCount) collect(node.getChild(index))
         }
@@ -1147,6 +1199,7 @@ class ConditionalChromeLifecycleTest {
         holdMillis: Long = 0,
         toolType: Int = MotionEvent.TOOL_TYPE_FINGER,
         afterDown: (() -> Unit)? = null,
+        issue110Probe: Issue110OutsideTapProbe? = null,
     ) {
         require(flags and MotionEvent.FLAG_CANCELED == 0 || terminal == MotionEvent.ACTION_CANCEL) {
             "Single-pointer FLAG_CANCELED requires ACTION_CANCEL"
@@ -1163,8 +1216,30 @@ class ConditionalChromeLifecycleTest {
                 0, 0, 1f, 1f, 0, 0,
                 if (toolType == MotionEvent.TOOL_TYPE_STYLUS) InputDevice.SOURCE_STYLUS else InputDevice.SOURCE_TOUCHSCREEN,
                 if (index == samples.lastIndex) flags else 0)
+            if (issue110Probe != null) {
+                if (index == 0) {
+                    issue110Probe.nativeDownTime = event.downTime
+                    issue110Probe.nativeDownEventTime = event.eventTime
+                    Issue110OutsideTapProbe.current = issue110Probe
+                } else if (index == samples.lastIndex) {
+                    issue110Probe.nativeUpEventTime = event.eventTime
+                }
+            }
+            val injectStart = if (issue110Probe != null) SystemClock.uptimeMillis() else -1L
             try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
-            finally { event.recycle() }
+            finally {
+                if (issue110Probe != null) {
+                    val injectEnd = SystemClock.uptimeMillis()
+                    if (index == 0) {
+                        issue110Probe.downInjectStart = injectStart
+                        issue110Probe.downInjectEnd = injectEnd
+                    } else if (index == samples.lastIndex) {
+                        issue110Probe.upInjectStart = injectStart
+                        issue110Probe.upInjectEnd = injectEnd
+                    }
+                }
+                event.recycle()
+            }
             if (index == 0) afterDown?.invoke()
             Thread.sleep(35)
         }
