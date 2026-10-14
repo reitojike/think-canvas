@@ -80,3 +80,16 @@ T019の修正後は同じnative終了回帰に同位置session置換を含め1/0
 - 既存確認/IME Backのpending取消回帰はfocused1/0/0/0、run `20261004T064252Z-83ccaf21c0f04234b76ae36e2fd5bcaf`、XML `A2F2E209FB83C5DE6E509C97BD0C2CA294DDCFD2BAD8528F75FD8BA123C49D31`。両focusedともownershipPassed/sourceUnchanged=true、manualInterventions=0。初回native fixtureはKotlinのlocal変数参照のコンパイルエラーでfresh XMLなし・未実行だったため、成功証跡には使わない。
 - lint/unit123/0/0/0/debug/androidTest build、公開境界200候補、diff check/schema不変を確認した。API37 nativeとlegacy単体adapterを区別し、API26〜29 native実行は未実施。native source censusは144 identities。
 - Spec007再converge: FR10/SC3/US scenario11、plan設計5、Constitution原則5、既存23 tasksの結果を照合し、buildable missing/partial/contradicts/unrequestedは0。追加taskなし。reviewer-owned exit-uxの8未査読markerは保持し、既存実装許可に従う。T023の有限補正は完了、T017/T020〜T022のfinal deliveryは新headの両CI/full census/canonical/base/thread/merge/最新ACまでpending。旧headのgreen/reviewを最終gateへ再利用しない。
+
+## Issue #110: Pixel 9a / Android 17の短い受入手順
+
+2026-10-14承認仕様。変更candidateの配布・実機確認は未実施。通常のtext editorと同じく、囲み名編集中の指gestureは編集を優先する。
+
+1. 囲みを選択して名前編集を開き、名前を変更する。入力欄とDoneの外のcanvasを短く静止tapする。名前が確定し、editor/IMEが閉じ、囲みは選択中のまま。戻って名前を開くと変更後の名前になり、Undo/Redoで一回の名前変更として戻せる。
+2. 名前を変えず同じ外側tapを行う。editorだけ閉じ、囲み選択は保持する。不要な保存・content history追加はnative instrumentationのunchanged回帰で確認する。
+3. 別要素上・空白・plusに相当する位置への閉じるtapで、選択解除・別要素選択・新規text・plus表示・panが同時に起きない。次の独立tap/dragでは通常の選択・作成・panが行える。
+4. 名前を変更した編集中に、外側で短drag、長押し、長押しdrag、二本指pinchを行う。名前は未確定、draft/入力/囲み選択を保持し、要素もcanvasも動かずpalette等の追加操作も発火しない。CANCEL/FLAG_CANCELEDは既存native instrumentationで同じ不変条件を確認する。
+5. editor内の文字選択・カーソル操作とDoneでの確定が使える。TalkBackで名前欄と「完了」を操作できる。Stylusで始まる既存ink入力は使え、囲み名を勝手に確定しない。
+6. BackのIME hide/破棄確認、保存中・失敗・pending acknowledgementのguardを既存回帰と照合する。閉じたeditorが画面再生成や遅いfocus復帰で再表示しない。
+
+保存回数・native CANCEL・stale DOWN/sessionの証明は手順の目視結果へ読み替えず、採用headのnative回帰結果と対応付ける。

@@ -340,6 +340,7 @@ class ConditionalChromeLifecycleTest {
         }
     }
 
+    @OptIn(ExperimentalTestApi::class)
     @Test
     fun staleRegionNameInputAfterOutsideCommitDoesNotReopenEditor() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -350,13 +351,17 @@ class ConditionalChromeLifecycleTest {
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
         try {
+            composeRule.waitUntilAtLeastOneExists(
+                matcher = hasContentDescription("囲み: Cluster") and hasClickAction(),
+                timeoutMillis = 4_000L,
+            )
             lateinit var sessions: BoardSessionViewModel
             instrumentation.runOnMainSync { sessions = ViewModelProvider(activity as MainActivity)[BoardSessionViewModel::class.java] }
             val editor = sessions.textEditorFor(1L, BoardSnapshot())
             val store = com.thinkcanvas.data.CanvasStore.get(context)
 
             clickActionable(instrumentation, "囲み: Cluster")
-            val formerPoint = center(bounds(waitForActionable(instrumentation, "選択範囲を画像で共有")))
+            waitForActionable(instrumentation, "選択範囲を画像で共有")
             val (region, renameAction) = waitForRegionRenameAction(instrumentation)
             assertTrue(region.performAction(renameAction.id))
             waitForGone(instrumentation, "選択範囲を画像で共有")
@@ -366,9 +371,15 @@ class ConditionalChromeLifecycleTest {
 
             val configuration = composeRule.onNodeWithContentDescription("キャンバス")
                 .fetchSemanticsNode().layoutInfo.viewConfiguration
+            val canvasActivity = activity as MainActivity
+            val outsideTap = liveCanvasPointOutsideTouchTargets(instrumentation, canvasActivity)
+            assertSafeCanvasPath(instrumentation, canvasActivity, listOf(outsideTap))
             composeRule.mainClock.autoAdvance = false
             try {
-                nativeGesture(instrumentation, listOf(formerPoint))
+                val outsideTapElapsed = nativeGesture(instrumentation, listOf(outsideTap),
+                    asyncStationaryFingerTap = true)
+                assertTrue("Stationary native tap duration is below long-press threshold: $outsideTapElapsed",
+                    outsideTapElapsed >= 0 && outsideTapElapsed < configuration.longPressTimeoutMillis)
                 repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
                 waitForGone(instrumentation, "囲みの名前")
                 assertNull("外側確定後はregion editorを閉じる", editor.regionNameDraft.value)
@@ -386,7 +397,7 @@ class ConditionalChromeLifecycleTest {
             assertEquals("確定済みregion名を維持する", "Changed",
                 runBlocking { store.savedBoard(1L)?.snapshot?.shapes?.singleOrNull { it.id == "chrome-lifecycle-region" }?.name })
             assertEquals("外側tapと古いactionで選択を変えない", "選択中",
-                waitForRegionState(instrumentation, "選択中"))
+                waitForRegionState(instrumentation, "選択中", regionLabel = "囲み: Changed"))
             assertNull("外側tapからtext editorを生成しない",
                 findExact(instrumentation.uiAutomation.rootInActiveWindow, "新しいテキスト"))
         } finally {
@@ -399,16 +410,25 @@ class ConditionalChromeLifecycleTest {
 
     @Test
     fun regionNameOutsideTapRejectsRunningAndFailedSave() =
-        withPaletteBoard(expanded = false) { instrumentation, _, _, sessions ->
+        withPaletteBoard(expanded = false, awaitSavedRegion = true) { instrumentation, activity, _, sessions ->
             val board = sessions.stateFor(1L, BoardSnapshot())
             val editor = sessions.textEditorFor(1L, BoardSnapshot())
             val store = com.thinkcanvas.data.CanvasStore.get(instrumentation.targetContext)
             clickActionable(instrumentation, "囲み: Cluster")
-            val blockedShare = center(bounds(waitForActionable(instrumentation, "選択範囲を画像で共有")))
+            waitForActionable(instrumentation, "選択範囲を画像で共有")
             val (region, rename) = waitForRegionRenameAction(instrumentation)
             assertTrue(region.performAction(rename.id))
             waitForGone(instrumentation, "選択範囲を画像で共有")
             composeRule.onNodeWithContentDescription("囲みの名前").performTextReplacement("Blocked rename")
+            val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+                .fetchSemanticsNode().layoutInfo.viewConfiguration
+            fun tapWhileSaveBlocked() {
+                val point = liveCanvasPointOutsideTouchTargets(instrumentation, activity)
+                assertSafeCanvasPath(instrumentation, activity, listOf(point))
+                val elapsed = nativeGesture(instrumentation, listOf(point), asyncStationaryFingerTap = true)
+                assertTrue("Stationary native tap duration is below long-press threshold: $elapsed",
+                    elapsed >= 0 && elapsed < configuration.longPressTimeoutMillis)
+            }
 
             val blockedBefore = board.snapshot()
             val savedBeforeBlocked = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
@@ -422,7 +442,7 @@ class ConditionalChromeLifecycleTest {
                 editor.regionNameDraft.value?.name)
             assertEquals("pending ack中のDoneはboardを変更しない", blockedBefore, board.snapshot())
             assertFalse("pending ackを完了させない", pendingAck.isCompleted)
-            nativeGesture(instrumentation, listOf(blockedShare))
+            tapWhileSaveBlocked()
             assertEquals("pending ack中も外側tap後のdraftを保持する", "Blocked rename",
                 editor.regionNameDraft.value?.name)
             assertEquals("pending ack中の外側tapはboardを変更しない", blockedBefore, board.snapshot())
@@ -443,7 +463,7 @@ class ConditionalChromeLifecycleTest {
             composeRule.waitUntil(5_000) { saveState.value is BoardSaveState.Running }
 
             fun assertBlockedTap(phase: String) {
-                nativeGesture(instrumentation, listOf(blockedShare))
+                tapWhileSaveBlocked()
                 assertEquals("${phase}中も編集draftを保持する", "Blocked rename",
                     editor.regionNameDraft.value?.name)
                 assertEquals("${phase}中はboardを変更しない", blockedBefore, board.snapshot())
@@ -653,26 +673,24 @@ class ConditionalChromeLifecycleTest {
             }
         }) { "live MOVE handle has no path outside region-name editor chrome" }
         val beforeMove = board.snapshot()
+        val savedBeforeMove = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
+        val viewportBeforeMove = navigation.viewportState.value
+        val undoAvailableBeforeMove = board.canUndo
         nativeGesture(instrumentation, movePath, afterDown = {
             Thread.sleep(configuration.longPressTimeoutMillis + 100L)
         })
         composeRule.waitForIdle()
         val movedRegion = board.snapshot().shapes.single { it.id == "chrome-lifecycle-region" }
-        assertTrue("region editor中でも長押しdragを既存move ownerへ渡す",
-            movedRegion.x != beforeMove.shapes.single { it.id == movedRegion.id }.x ||
-                movedRegion.y != beforeMove.shapes.single { it.id == movedRegion.id }.y)
+        assertEquals("region editor中の長押しdragは要素を移動しない", beforeMove, board.snapshot())
         assertEquals("要素dragは未確定region名をcommitしない", "Cluster", movedRegion.name)
         assertEquals("要素drag後もregion editor draftを保持する", renamed,
             editor.regionNameDraft.value?.name)
-        composeRule.waitUntil(5_000) {
-            runBlocking {
-                store.savedBoard(1L)?.snapshot?.let { saved ->
-                    saved.shapes.singleOrNull { it.id == "chrome-lifecycle-region" }?.let {
-                        it.x == movedRegion.x && it.y == movedRegion.y && it.name == "Cluster"
-                    } == true
-                } == true
-            }
-        }
+        assertEquals("編集中の長押しdragは保存済みboardを変えない", savedBeforeMove,
+            checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+        assertEquals("編集中の長押しdragはviewportを変えない", viewportBeforeMove, navigation.viewportState.value)
+        assertEquals("編集中の長押しdragは履歴を追加しない", undoAvailableBeforeMove, board.canUndo)
+        assertEquals("編集中の長押しdrag後も囲みは選択中", "選択中",
+            waitForRegionState(instrumentation, "選択中"))
         val before = board.snapshot()
         val savedBefore = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
         val undoAvailableBefore = board.canUndo
@@ -689,11 +707,25 @@ class ConditionalChromeLifecycleTest {
         val secondPoint = (pairStart.first + 64f) to pairStart.second
         assertSafeCanvasPath(instrumentation, activity, listOf(pairStart, secondPoint))
 
+        fun regionSelectionState(regionLabel: String, checkpoint: String): String {
+            val node = composeRule.onNode(hasContentDescription(regionLabel) and hasClickAction())
+                .fetchSemanticsNode("$checkpoint: expected one clickable $regionLabel node")
+            assertTrue("$checkpoint: $regionLabel exposes StateDescription",
+                SemanticsProperties.StateDescription in node.config)
+            return node.config[SemanticsProperties.StateDescription]
+        }
+
+        val viewportBeforeExcludedGestures = navigation.viewportState.value
         fun assertUncommitted() {
             assertEquals("除外gesture後も編集draftを保持する", renamed, editor.regionNameDraft.value?.name)
             assertEquals("除外gestureはboardを変更しない", before, board.snapshot())
             assertEquals("除外gestureは保存しない", savedBefore,
                 checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+            assertEquals("除外gestureはviewportを変えない", viewportBeforeExcludedGestures, navigation.viewportState.value)
+            assertEquals("除外gesture後も囲みは選択中", "選択中",
+                regionSelectionState("囲み: Cluster", "after excluded finger gesture"))
+            assertEquals("除外gestureは履歴を追加しない", undoAvailableBefore, board.canUndo)
+            assertNull("除外gestureはtext editorを作らない", editor.draft.value)
             assertPaletteOpen(instrumentation)
         }
 
@@ -708,8 +740,7 @@ class ConditionalChromeLifecycleTest {
         val beforeDrag = navigation.viewportState.value
         nativeGesture(instrumentation, dragPath, holdMillis = 180L)
         assertUncommitted()
-        assertTrue("region editor外のdragは既存canvas panへ渡す",
-            beforeDrag != navigation.viewportState.value)
+        assertEquals("region editor外のdragはcanvasをpanしない", beforeDrag, navigation.viewportState.value)
         assertEquals("dragはzoomを変えない", beforeDrag.scale, navigation.viewportState.value.scale)
 
         val pinchOffsets = listOf(-70f to 0f, 70f to 0f)
@@ -718,11 +749,10 @@ class ConditionalChromeLifecycleTest {
             (pinchPoint.first - 70f) to pinchPoint.second,
             (pinchPoint.first + 70f) to pinchPoint.second,
         ))
-        val beforePinch = navigation.viewportState.value.scale
+        val beforePinch = navigation.viewportState.value
         nativePinch(instrumentation, pinchPoint.first, pinchPoint.second)
         assertUncommitted()
-        assertTrue("region editor外のmulti-touchは既存pinchへ渡す",
-            navigation.viewportState.value.scale > beforePinch)
+        assertEquals("region editor外のmulti-touchはcanvasをpinchしない", beforePinch, navigation.viewportState.value)
 
         nativePointerPair(instrumentation, pairStart, secondPoint, cancelFirstPointer = false)
         assertUncommitted()
@@ -731,14 +761,6 @@ class ConditionalChromeLifecycleTest {
         nativeGesture(instrumentation, listOf(blank),
             terminal = MotionEvent.ACTION_CANCEL, flags = MotionEvent.FLAG_CANCELED)
         assertUncommitted()
-
-        fun regionSelectionState(regionLabel: String, checkpoint: String): String {
-            val node = composeRule.onNode(hasContentDescription(regionLabel) and hasClickAction())
-                .fetchSemanticsNode("$checkpoint: expected one clickable $regionLabel node")
-            assertTrue("$checkpoint: $regionLabel exposes StateDescription",
-                SemanticsProperties.StateDescription in node.config)
-            return node.config[SemanticsProperties.StateDescription]
-        }
 
         val viewportBeforeCommit = navigation.viewportState.value
         val regionStateBeforeCommit = regionSelectionState("囲み: Cluster", "before outside tap")

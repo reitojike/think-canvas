@@ -76,3 +76,13 @@ PR smokeはoutside短tap/次tap、palette展開時の世代、region editor prio
 ## Canonical review後の技術補正
 
 全CI成功後も、[P1 review](https://github.com/reitojike/think-canvas/pull/86#discussion_r4173360329)でrecomposition前のqueued Releaseが確定できる不足を確認した。gestureの内容・保存authorityは変えず、DOWN admissionと単一event loopの同期世代guardで全確定familyを保護する。BackとUPを同じUI turnでActivityのtouch dispatcherへ送り、frame待ちで競合を隠さない回帰にする。
+
+## Issue #110: 囲み名編集中の指sequence ownership（2026-10-14承認）
+
+text editorの既存Initial-pass所有方式に合わせ、囲み名editor外のTouch DOWNと後続eventを標準Compose `consume`で受け持つ。short / slop / pointer数 / 正常native UP / FLAG_CANCELED / DOWN世代 / live sessionを照合し、正常short UPだけが既存`commitRegionName`を呼ぶ。drag・long-press・multi-touch・CANCELでは下書きと選択を保持し、canvas操作を発生させない。
+
+main routerは`awaitFirstDown(requireUnconsumed = false)`を維持するため、active region sessionで始まるTouchを明示的に除外する。editor内field/Doneは子controlの経路を保持し、Stylusで始まる入力は既存inkへ渡す。releaseのみの旧consume bridgeを除く。text recognizer・save authority・focus/IME・Back/lifecycleの実装は変えない。
+
+`ConditionalChromeLifecycleTest.kt`の既存identityとnative fixtureを再利用し、編集中の移動期待をboard/保存/履歴/viewport/下書き/選択不変へ置き換える。changed/unchanged positive、persist/reopen、Undo/Redo、同じtapの抑止と次のgesture、stale DOWN/session、CANCEL、save blockを維持する。短tapの前提は現在のIME/chromeから安全な座標を求め、正常native eventと実測durationで確認する。診断hookや共通harness/save基盤の再設計を追加しない。
+
+今回の停止条件は仕様更新・実装・実行可能なlocal確認・独立レビュー・CI計画の報告。Android CIは開始せず、過去のbranch/run/artifactを保持する。過去CIの成功を新しい製品契約の証明とせず、採用candidateのAndroid compile/native CI・canonical review・実機受入は未実施として扱う。
