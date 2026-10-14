@@ -697,11 +697,70 @@ class ConditionalChromeLifecycleTest {
         assertWorldFocusAndHistoryUnchanged(beforeEditor, settledCamera(shown = true))
         val moveHandle = waitForActionable(instrumentation, "移動")
         val moveStart = center(bounds(moveHandle))
-        val regionNameEditorChrome = listOf(
-            bounds(checkNotNull(findExact(
-                instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前"))),
-            bounds(waitForActionable(instrumentation, "完了")),
-        )
+        // This gesture scenario uses the whole editor Row in the current Compose root.
+        // Strict platform description/control geometry remains in the other Done callers.
+        val regionSessionBeforeMove = checkNotNull(editor.regionNameDraft.value).sessionId
+        val canvasNode = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode()
+        val composeRoot = checkNotNull(canvasNode.root)
+        val rootLayoutInfo = generateSequence(canvasNode.layoutInfo) { it.parentInfo }.last()
+        val fieldNode = composeRule.onNodeWithContentDescription("囲みの名前").fetchSemanticsNode()
+        val doneNode = composeRule.onNode(hasContentDescription("完了") and hasClickAction()).fetchSemanticsNode()
+        assertTrue("editor field and Done use the current canvas root",
+            composeRoot === fieldNode.root && composeRoot === doneNode.root)
+        assertTrue("Done is enabled", SemanticsProperties.Disabled !in doneNode.config)
+        assertNotNull("Done exposes an action", doneNode.config[SemanticsActions.OnClick].action)
+        val fieldAncestors = generateSequence(fieldNode.layoutInfo) { it.parentInfo }.toList()
+        val editorRow = generateSequence(doneNode.layoutInfo) { it.parentInfo }
+            .first { ancestor -> fieldAncestors.any { it === ancestor } }
+        assertTrue("editor Row is below the canvas root",
+            editorRow !== rootLayoutInfo && editorRow !== canvasNode.layoutInfo)
+        lateinit var editorRowScreen: androidx.compose.ui.geometry.Rect
+        lateinit var canvasScreen: androidx.compose.ui.geometry.Rect
+        instrumentation.runOnMainSync {
+            val decor = activity.window.decorView
+            val screenOrigin = IntArray(2).also(decor::getLocationOnScreen)
+            val windowOrigin = IntArray(2).also(decor::getLocationInWindow)
+            val windowToScreen = androidx.compose.ui.geometry.Offset(
+                (screenOrigin[0] - windowOrigin[0]).toFloat(),
+                (screenOrigin[1] - windowOrigin[1]).toFloat(),
+            )
+            val rootCoordinates = rootLayoutInfo.coordinates
+            val inner = editorRow.coordinates
+            assertTrue("editor Row coordinates are attached", inner.isAttached)
+            val outer = checkNotNull(inner.parentCoordinates)
+            assertTrue("outer Row includes its padding rather than the parent layout",
+                outer.isAttached && outer !== inner.parentLayoutCoordinates)
+            val row = rootCoordinates.localBoundingBoxOf(outer, clipBounds = false)
+            val content = rootCoordinates.localBoundingBoxOf(inner, clipBounds = false)
+            val canvas = canvasNode.boundsInRoot
+            assertTrue("the whole editor Row is inside the current canvas",
+                !row.isEmpty && row.left >= canvas.left && row.top >= canvas.top &&
+                    row.right <= canvas.right && row.bottom <= canvas.bottom)
+            for (control in listOf(content, fieldNode.boundsInRoot, doneNode.boundsInRoot)) {
+                assertTrue("outer editor Row contains its content, field and Done",
+                    row.left <= control.left && row.top <= control.top &&
+                        row.right >= control.right && row.bottom >= control.bottom)
+            }
+            editorRowScreen = androidx.compose.ui.geometry.Rect(
+                rootCoordinates.localToWindow(row.topLeft) + windowToScreen,
+                rootCoordinates.localToWindow(row.bottomRight) + windowToScreen,
+            )
+            canvasScreen = androidx.compose.ui.geometry.Rect(
+                rootCoordinates.localToWindow(canvas.topLeft) + windowToScreen,
+                rootCoordinates.localToWindow(canvas.bottomRight) + windowToScreen,
+            )
+        }
+        val appRoot = checkNotNull(instrumentation.uiAutomation.rootInActiveWindow)
+        assertEquals("editor geometry belongs to the active app window",
+            instrumentation.targetContext.packageName, appRoot.packageName?.toString())
+        val nativeCanvasNode = checkNotNull(findExact(appRoot, "キャンバス"))
+        assertEquals(appRoot.windowId, nativeCanvasNode.windowId)
+        val nativeCanvas = bounds(nativeCanvasNode)
+        assertEquals("Compose canvas maps exactly to native screen bounds", canvasScreen,
+            androidx.compose.ui.geometry.Rect(nativeCanvas.left.toFloat(), nativeCanvas.top.toFloat(),
+                nativeCanvas.right.toFloat(), nativeCanvas.bottom.toFloat()))
+        assertEquals("Row observation retains the region session", regionSessionBeforeMove,
+            editor.regionNameDraft.value?.sessionId)
         val moveSafeCanvas = paletteSafeCanvas(instrumentation, activity)
         val movePaths = listOf(1f, -1f).map { direction ->
             (0..6).map { (moveStart.first + direction * it * 12f) to moveStart.second }
@@ -709,7 +768,8 @@ class ConditionalChromeLifecycleTest {
         val movePath = checkNotNull(movePaths.firstOrNull { path ->
             path.all { (x, y) ->
                 moveSafeCanvas.contains(x.toInt(), y.toInt()) &&
-                    regionNameEditorChrome.none { it.contains(x.toInt(), y.toInt()) }
+                    (x < editorRowScreen.left || x > editorRowScreen.right ||
+                        y < editorRowScreen.top || y > editorRowScreen.bottom)
             }
         }) { "live MOVE handle has no path outside region-name editor chrome" }
         val beforeMove = board.snapshot()
@@ -868,8 +928,23 @@ class ConditionalChromeLifecycleTest {
         assertPaletteStylusStroke(instrumentation, activity, database, sessions, verifyPaletteChrome = false)
         assertEquals("stylusはoutside finalize扱いにならずeditorを保持", renamed,
             editor.regionNameDraft.value?.name)
-        clickActionable(instrumentation, "完了")
+        val sessionForDone = checkNotNull(editor.regionNameDraft.value).sessionId
+        val done = composeRule.onNode(hasContentDescription("完了") and hasClickAction())
+        val currentDone = done.fetchSemanticsNode()
+        val currentField = composeRule.onNodeWithContentDescription("囲みの名前").fetchSemanticsNode()
+        val currentCanvas = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode()
+        val doneRoot = checkNotNull(currentCanvas.root)
+        assertTrue("Done acts in the current editor root",
+            doneRoot === currentField.root && doneRoot === currentDone.root)
+        assertTrue("Done remains enabled", SemanticsProperties.Disabled !in currentDone.config)
+        assertNotNull("Done retains its action", currentDone.config[SemanticsActions.OnClick].action)
+        done.performSemanticsAction(SemanticsActions.OnClick) { onClick ->
+            assertEquals("Done acts on the live region session", sessionForDone,
+                editor.regionNameDraft.value?.sessionId)
+            assertTrue("Done action is accepted", onClick())
+        }
         waitForGone(instrumentation, "囲みの名前")
+        assertNull("Done closes the region draft", editor.regionNameDraft.value)
 
         Thread.sleep(configuration.doubleTapTimeoutMillis + 100L)
         composeRule.waitForIdle()
