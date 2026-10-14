@@ -252,6 +252,7 @@ class ConditionalChromeLifecycleTest {
             lateinit var sessions: BoardSessionViewModel
             instrumentation.runOnMainSync { sessions = ViewModelProvider(activity as MainActivity)[BoardSessionViewModel::class.java] }
             val board = sessions.stateFor(1L, BoardSnapshot())
+            val editor = sessions.textEditorFor(1L, BoardSnapshot())
             val store = com.thinkcanvas.data.CanvasStore.get(context)
             val before = board.snapshot()
             val savedBefore = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
@@ -268,6 +269,8 @@ class ConditionalChromeLifecycleTest {
                 findExact(instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前"))
             assertEquals("former point tap 前も囲みは選択中", "選択中",
                 waitForRegionState(instrumentation, "選択中"))
+            val appPackageName = instrumentation.targetContext.packageName
+            val appWindowIdBeforeOutsideTap = region.windowId
 
             val configuration = composeRule.onNodeWithContentDescription("キャンバス")
                 .fetchSemanticsNode().layoutInfo.viewConfiguration
@@ -276,12 +279,24 @@ class ConditionalChromeLifecycleTest {
             assertSafeCanvasPath(instrumentation, canvasActivity, listOf(outsideTap))
             composeRule.mainClock.autoAdvance = false
             try {
-                nativeGesture(instrumentation, listOf(outsideTap))
+                val outsideTapEventElapsed = nativeGesture(instrumentation, listOf(outsideTap),
+                    asyncStationaryFingerTap = true)
+                assertTrue("Stationary tap duration is below long-press threshold: $outsideTapEventElapsed",
+                    outsideTapEventElapsed >= 0 && outsideTapEventElapsed < configuration.longPressTimeoutMillis)
                 repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
                 assertEquals("短い外側tapは選択を変えない", "選択中",
                     waitForRegionState(instrumentation, "選択中"))
+                if (Build.VERSION.SDK_INT >= 34) instrumentation.uiAutomation.clearCache()
+                val appRootAfterOutsideTap = instrumentation.uiAutomation.rootInActiveWindow
+                assertTrue("Editor absence uses the same valid app window",
+                    appRootAfterOutsideTap != null &&
+                        appRootAfterOutsideTap.packageName?.toString() == appPackageName &&
+                        appRootAfterOutsideTap.windowId == appWindowIdBeforeOutsideTap)
+                instrumentation.runOnMainSync {
+                    assertNull("Outside tap closes the region-name model draft", editor.regionNameDraft.value)
+                }
                 assertNull("未変更の外側tapでeditorが閉じる",
-                    findExact(instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前"))
+                    findExact(appRootAfterOutsideTap, "囲みの名前"))
                 composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
             } finally {
                 composeRule.mainClock.autoAdvance = true
@@ -712,10 +727,13 @@ class ConditionalChromeLifecycleTest {
         assertUncommitted()
 
         val viewportBeforeCommit = navigation.viewportState.value
-        nativeGesture(instrumentation, listOf(blank))
+        val commitTapEventElapsed = nativeGesture(instrumentation, listOf(blank),
+            asyncStationaryFingerTap = true)
+        assertTrue("Stationary tap duration is below long-press threshold: $commitTapEventElapsed",
+            commitTapEventElapsed >= 0 && commitTapEventElapsed < configuration.longPressTimeoutMillis)
         waitForGone(instrumentation, "囲みの名前")
         assertEquals("外側tapでregion選択を変えない", "選択中",
-            waitForRegionState(instrumentation, "選択中"))
+            waitForRegionState(instrumentation, "選択中", regionLabel = "囲み: Renamed"))
         assertPaletteOpen(instrumentation)
         assertNull("dismissal tapはblank textを作らない", editor.draft.value)
         assertEquals("変更済み名は1回のmodel更新", renamed,
@@ -732,7 +750,10 @@ class ConditionalChromeLifecycleTest {
         assertTrue(board.redo())
         assertEquals(renamed, board.snapshot().shapes.single { it.id == "chrome-lifecycle-region" }.name)
 
-        val (regionForStylus, renameForStylus) = waitForRegionRenameAction(instrumentation)
+        val (regionForStylus, renameForStylus) = waitForRegionRenameAction(
+            instrumentation,
+            regionLabel = "囲み: Renamed",
+        )
         assertTrue(regionForStylus.performAction(renameForStylus.id))
         assertEquals("stylus操作前にregion editorを開く", renamed,
             editor.regionNameDraft.value?.name)
@@ -1074,11 +1095,19 @@ class ConditionalChromeLifecycleTest {
         holdMillis: Long = 0,
         toolType: Int = MotionEvent.TOOL_TYPE_FINGER,
         afterDown: (() -> Unit)? = null,
-    ) {
+        asyncStationaryFingerTap: Boolean = false,
+    ): Long {
         require(flags and MotionEvent.FLAG_CANCELED == 0 || terminal == MotionEvent.ACTION_CANCEL) {
             "Single-pointer FLAG_CANCELED requires ACTION_CANCEL"
         }
+        require(!asyncStationaryFingerTap || (points.size == 1 && terminal == MotionEvent.ACTION_UP &&
+            flags == 0 && holdMillis == 0L && toolType == MotionEvent.TOOL_TYPE_FINGER &&
+            afterDown == null)) {
+            "Asynchronous injection is limited to a stationary single-finger DOWN/UP tap"
+        }
         val down = SystemClock.uptimeMillis()
+        var downEventTime = down
+        var terminalEventTime = down
         val samples = if (points.size == 1) points + points else points
         samples.forEachIndexed { index, (x, y) ->
             if (index == samples.lastIndex && holdMillis > 0) Thread.sleep(holdMillis)
@@ -1090,13 +1119,16 @@ class ConditionalChromeLifecycleTest {
                 0, 0, 1f, 1f, 0, 0,
                 if (toolType == MotionEvent.TOOL_TYPE_STYLUS) InputDevice.SOURCE_STYLUS else InputDevice.SOURCE_TOUCHSCREEN,
                 if (index == samples.lastIndex) flags else 0)
-            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
+            if (index == 0) downEventTime = event.eventTime
+            if (index == samples.lastIndex) terminalEventTime = event.eventTime
+            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, !asyncStationaryFingerTap)) }
             finally { event.recycle() }
             if (index == 0) afterDown?.invoke()
             Thread.sleep(35)
         }
         instrumentation.waitForIdleSync()
         if (composeRule.mainClock.autoAdvance) composeRule.waitForIdle()
+        return terminalEventTime - downEventTime
     }
 
     private fun nativePointerPair(
@@ -1278,7 +1310,7 @@ class ConditionalChromeLifecycleTest {
         if (node == null) return null
         val ownsClick = node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }
         if (node.contentDescription?.toString() == label &&
-            (label != "囲み: Cluster" || ownsClick)) {
+            (!label.startsWith("囲み: ") || ownsClick)) {
             assertPlatformControl(node, label, checkExternalGeometry = !useAppProcessGeometry)
             return node
         }
@@ -1538,15 +1570,16 @@ class ConditionalChromeLifecycleTest {
     private fun waitForRegionState(
         instrumentation: android.app.Instrumentation,
         expected: String,
+        regionLabel: String = "囲み: Cluster",
     ): String {
         var matchedState: String? = null
         composeRule.waitUntil(
-            conditionDescription = "囲みの stateDescription が $expected になりません",
+            conditionDescription = "$regionLabel の stateDescription が $expected になりません",
             timeoutMillis = 4_000L,
         ) {
             composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
-            matchedState = findActionable(instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster")
+            matchedState = findActionable(instrumentation.uiAutomation.rootInActiveWindow, regionLabel)
                 ?.stateDescription?.toString()
             matchedState == expected
         }
@@ -1555,15 +1588,16 @@ class ConditionalChromeLifecycleTest {
 
     private fun waitForRegionRenameAction(
         instrumentation: android.app.Instrumentation,
+        regionLabel: String = "囲み: Cluster",
     ): Pair<AccessibilityNodeInfo, AccessibilityNodeInfo.AccessibilityAction> {
         var matchedAction: Pair<AccessibilityNodeInfo, AccessibilityNodeInfo.AccessibilityAction>? = null
         composeRule.waitUntil(
-            conditionDescription = "囲み: Cluster の名前編集 accessibility action が見つかりません",
+            conditionDescription = "$regionLabel の名前編集 accessibility action が見つかりません",
             timeoutMillis = 4_000L,
         ) {
             composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
-            val region = findActionable(instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster")
+            val region = findActionable(instrumentation.uiAutomation.rootInActiveWindow, regionLabel)
             val action = region?.actionList?.firstOrNull { it.label?.toString() == "囲みの名前を編集" }
             matchedAction = if (region != null && action != null) region to action else null
             matchedAction != null
