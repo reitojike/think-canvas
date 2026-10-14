@@ -19,6 +19,7 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -366,20 +367,17 @@ class ConditionalChromeLifecycleTest {
             assertTrue(region.performAction(renameAction.id))
             waitForGone(instrumentation, "選択範囲を画像で共有")
             composeRule.onNodeWithContentDescription("囲みの名前").performTextReplacement("Changed")
+            val canvasActivity = activity as MainActivity
+            val regionSession = checkNotNull(editor.regionNameDraft.value).sessionId
+            awaitRegionNameComposeReady(instrumentation, canvasActivity, editor, regionSession)
             val staleSetText = checkNotNull(composeRule.onNodeWithContentDescription("囲みの名前")
                 .fetchSemanticsNode().config[SemanticsActions.SetText].action)
 
             val configuration = composeRule.onNodeWithContentDescription("キャンバス")
                 .fetchSemanticsNode().layoutInfo.viewConfiguration
-            val canvasActivity = activity as MainActivity
-            val outsideTap = liveCanvasPointOutsideTouchTargets(instrumentation, canvasActivity)
-            assertSafeCanvasPath(instrumentation, canvasActivity, listOf(outsideTap))
             composeRule.mainClock.autoAdvance = false
             try {
-                val outsideTapElapsed = nativeGesture(instrumentation, listOf(outsideTap),
-                    asyncStationaryFingerTap = true)
-                assertTrue("Stationary native tap duration is below long-press threshold: $outsideTapElapsed",
-                    outsideTapElapsed >= 0 && outsideTapElapsed < configuration.longPressTimeoutMillis)
+                composeRegionNameOutsideTap(instrumentation, canvasActivity, editor, regionSession)
                 repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
                 waitForGone(instrumentation, "囲みの名前")
                 assertNull("外側確定後はregion editorを閉じる", editor.regionNameDraft.value)
@@ -420,14 +418,11 @@ class ConditionalChromeLifecycleTest {
             assertTrue(region.performAction(rename.id))
             waitForGone(instrumentation, "選択範囲を画像で共有")
             composeRule.onNodeWithContentDescription("囲みの名前").performTextReplacement("Blocked rename")
-            val configuration = composeRule.onNodeWithContentDescription("キャンバス")
-                .fetchSemanticsNode().layoutInfo.viewConfiguration
+            val regionSession = checkNotNull(editor.regionNameDraft.value).sessionId
+            // Prepare editable input before acknowledgement/Running/Failed makes the field readonly.
+            awaitRegionNameComposeReady(instrumentation, activity, editor, regionSession)
             fun tapWhileSaveBlocked() {
-                val point = liveCanvasPointOutsideTouchTargets(instrumentation, activity)
-                assertSafeCanvasPath(instrumentation, activity, listOf(point))
-                val elapsed = nativeGesture(instrumentation, listOf(point), asyncStationaryFingerTap = true)
-                assertTrue("Stationary native tap duration is below long-press threshold: $elapsed",
-                    elapsed >= 0 && elapsed < configuration.longPressTimeoutMillis)
+                composeRegionNameOutsideTap(instrumentation, activity, editor, regionSession)
             }
 
             val blockedBefore = board.snapshot()
@@ -1207,6 +1202,87 @@ class ConditionalChromeLifecycleTest {
         assertEquals("STYLUS", runBlocking { database.canvasDao().inkStrokes(1).last().inputType })
         assertPaletteOpen(instrumentation)
         assertNull(sessions.textEditorFor(1L, BoardSnapshot()).draft.value)
+    }
+
+    // These two callers verify Compose pointer ownership, not OS input/window routing.
+    private fun awaitRegionNameComposeReady(
+        instrumentation: android.app.Instrumentation, activity: MainActivity,
+        editor: TextEditorSession, sessionId: String,
+    ) {
+        var previous: Pair<androidx.compose.ui.geometry.Rect, Int?>? = null
+        var stable = 0
+        composeRule.waitUntil(5_000) {
+            val field = composeRule.onNodeWithContentDescription("囲みの名前").fetchSemanticsNode()
+            val canvas = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode()
+            lateinit var native: ImeTestObservation
+            lateinit var nativeCanvas: androidx.compose.ui.geometry.Rect
+            instrumentation.runOnMainSync {
+                val decor = activity.window.decorView
+                val root = decor.findViewById<android.view.View>(android.R.id.content)
+                val origin = IntArray(2).also(root::getLocationInWindow)
+                val insets = checkNotNull(androidx.core.view.ViewCompat.getRootWindowInsets(decor))
+                val view = decor.findFocus()
+                val input = activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                native = ImeTestObservation(decor.hasWindowFocus(), view?.javaClass?.simpleName,
+                    view?.let { input.isActive(it) }, input.isAcceptingText,
+                    insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()),
+                    insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom)
+                val safe = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                    androidx.core.view.WindowInsetsCompat.Type.displayCutout() or androidx.core.view.WindowInsetsCompat.Type.ime())
+                nativeCanvas = androidx.compose.ui.geometry.Rect((origin[0] + safe.left).toFloat(), (origin[1] + safe.top).toFloat(),
+                    (origin[0] + root.width - safe.right).toFloat(), (origin[1] + root.height - safe.bottom).toFloat())
+            }
+            val current = canvas.boundsInWindow to native.imeBottom
+            val ready = field.root === canvas.root && SemanticsProperties.Focused in field.config &&
+                field.config[SemanticsProperties.Focused] && native.inputReady && native.actualVisible &&
+                canvas.boundsInWindow == nativeCanvas && editor.regionNameDraft.value?.sessionId == sessionId
+            stable = if (ready && current == previous) stable + 1 else 0
+            previous = current
+            stable >= 2
+        }
+    }
+
+    private fun composeRegionNameOutsideTap(
+        instrumentation: android.app.Instrumentation, activity: MainActivity,
+        editor: TextEditorSession, sessionId: String,
+    ) {
+        assertEquals("outside input uses the current region session", sessionId, editor.regionNameDraft.value?.sessionId)
+        val canvas = composeRule.onNodeWithContentDescription("キャンバス")
+        val before = canvas.fetchSemanticsNode()
+        val field = composeRule.onNodeWithContentDescription("囲みの名前").fetchSemanticsNode()
+        assertTrue("canvas and editor use the current Compose root", before.root === field.root)
+        val point = liveCanvasPointOutsideTouchTargets(instrumentation, activity)
+        assertSafeCanvasPath(instrumentation, activity, listOf(point))
+        val root = checkNotNull(instrumentation.uiAutomation.rootInActiveWindow)
+        assertEquals("outside input uses the app window", instrumentation.targetContext.packageName, root.packageName?.toString())
+        val nativeCanvas = checkNotNull(findExact(root, "キャンバス"))
+        val nativeEditor = checkNotNull(findExact(root, "囲みの名前"))
+        assertEquals(root.windowId, nativeCanvas.windowId)
+        assertEquals(root.windowId, nativeEditor.windowId)
+        val screen = bounds(nativeCanvas)
+        val current = canvas.fetchSemanticsNode()
+        assertTrue("outside input retains the Compose root", before.root === current.root)
+        assertEquals(screen.width().toFloat(), current.boundsInWindow.width)
+        assertEquals(screen.height().toFloat(), current.boundsInWindow.height)
+        val local = androidx.compose.ui.geometry.Offset(point.first - screen.left, point.second - screen.top)
+        assertTrue("outside point is canvas-local", local.x in 0f..current.boundsInWindow.width &&
+            local.y in 0f..current.boundsInWindow.height)
+        val rootPoint = local + current.boundsInRoot.topLeft
+        val done = composeRule.onNodeWithContentDescription("完了").fetchSemanticsNode()
+        assertTrue("outside point excludes current editor and Done",
+            !field.boundsInRoot.contains(rootPoint) && !done.boundsInRoot.contains(rootPoint))
+        assertEquals("outside input retains the region session", sessionId, editor.regionNameDraft.value?.sessionId)
+        val duration = 35L
+        assertTrue("Compose event-time advance is below long-press threshold",
+            duration > 0L && duration < current.layoutInfo.viewConfiguration.longPressTimeoutMillis)
+        val autoAdvance = composeRule.mainClock.autoAdvance
+        try {
+            composeRule.mainClock.autoAdvance = false
+            canvas.performTouchInput { down(local); advanceEventTime(duration); up() }
+        } finally {
+            composeRule.mainClock.autoAdvance = autoAdvance
+        }
+        if (autoAdvance) composeRule.waitForIdle()
     }
 
     private fun nativeGesture(
