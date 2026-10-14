@@ -625,10 +625,54 @@ class ConditionalChromeLifecycleTest {
         val editor = sessions.textEditorFor(1L, BoardSnapshot())
         val navigation = sessions.viewportHistoryFor(1L, BoardSnapshot())
         val store = com.thinkcanvas.data.CanvasStore.get(instrumentation.targetContext)
+        // #122: native input readiness and settled layout are independent preconditions.
+        val reference = board.snapshot().texts.single { it.id == "chrome-lifecycle-text" }
+        var nativeInputReady = false
+        fun cameraObservation(): ImeViewportObservation {
+            val canvas = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().boundsInWindow
+            val marker = composeRule.onNodeWithContentDescription(reference.text).fetchSemanticsNode().positionInWindow
+            val field = composeRule.onAllNodes(hasContentDescription("囲みの名前")).fetchSemanticsNodes().singleOrNull()
+            val focused = field?.config?.let {
+                SemanticsProperties.Focused in it && it[SemanticsProperties.Focused]
+            } == true
+            lateinit var result: ImeViewportObservation
+            instrumentation.runOnMainSync {
+                val decor = activity.window.decorView
+                val root = decor.findViewById<android.view.View>(android.R.id.content)
+                val origin = IntArray(2).also(root::getLocationInWindow)
+                val insets = checkNotNull(androidx.core.view.ViewCompat.getRootWindowInsets(decor))
+                val ime = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())
+                val view = decor.findFocus()
+                val input = activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                nativeInputReady = ImeTestObservation(decor.hasWindowFocus(), view?.javaClass?.simpleName,
+                    view?.let { input.isActive(it) }, input.isAcceptingText,
+                    insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()), ime.bottom).inputReady
+                val safe = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                    androidx.core.view.WindowInsetsCompat.Type.displayCutout() or androidx.core.view.WindowInsetsCompat.Type.ime())
+                fun views(name: String): List<ViewportFocus> =
+                    (ViewportHistory::class.java.getDeclaredField(name).apply { isAccessible = true }
+                        .get(navigation) as Iterable<*>).map { it as ViewportFocus }
+                result = ImeViewportObservation(canvas, navigation.focus(), navigation.viewportState.value,
+                    marker, field != null, focused, decor.hasWindowFocus(),
+                    insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()), ime.bottom,
+                    insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars()).bottom, root.height, decor.height,
+                    androidx.compose.ui.geometry.Rect((origin[0] + safe.left).toFloat(), (origin[1] + safe.top).toFloat(),
+                        (origin[0] + root.width - safe.right).toFloat(), (origin[1] + root.height - safe.bottom).toFloat()),
+                    editor.regionNameDraft.value?.sessionId, null, navigation.canBack, navigation.canForward,
+                    views("previous"), views("next"))
+            }
+            return result
+        }
+        fun settledCamera(shown: Boolean): ImeViewportObservation {
+            val settlement = ImeViewportSettlement(shown, androidx.compose.ui.geometry.Offset(reference.x, reference.y))
+            composeRule.waitUntil(5_000) { settlement.accept(cameraObservation()) && (!shown || nativeInputReady) }
+            return checkNotNull(settlement.latest)
+        }
         clickActionable(instrumentation, "囲み: Cluster")
         val (region, rename) = waitForRegionRenameAction(instrumentation)
         val configuration = composeRule.onNodeWithContentDescription("キャンバス")
             .fetchSemanticsNode().layoutInfo.viewConfiguration
+        val beforeEditor = settledCamera(shown = false)
         val safeCanvas = paletteSafeCanvas(instrumentation, activity)
         val regionBoundsBeforeEditor = bounds(region)
         val neutralDown = (regionBoundsBeforeEditor.left + 30f) to (regionBoundsBeforeEditor.top + 30f)
@@ -655,6 +699,7 @@ class ConditionalChromeLifecycleTest {
         val renamed = "Renamed"
         assertEquals("editorに変更済みのregion名がある", renamed, editor.regionNameDraft.value?.name)
 
+        assertWorldFocusAndHistoryUnchanged(beforeEditor, settledCamera(shown = true))
         val moveHandle = waitForActionable(instrumentation, "移動")
         val moveStart = center(bounds(moveHandle))
         val regionNameEditorChrome = listOf(
@@ -674,7 +719,8 @@ class ConditionalChromeLifecycleTest {
         }) { "live MOVE handle has no path outside region-name editor chrome" }
         val beforeMove = board.snapshot()
         val savedBeforeMove = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
-        val viewportBeforeMove = navigation.viewportState.value
+        val cameraBeforeMove = settledCamera(shown = true)
+        val viewportBeforeMove = cameraBeforeMove.viewport
         val undoAvailableBeforeMove = board.canUndo
         nativeGesture(instrumentation, movePath, afterDown = {
             Thread.sleep(configuration.longPressTimeoutMillis + 100L)
@@ -687,6 +733,7 @@ class ConditionalChromeLifecycleTest {
             editor.regionNameDraft.value?.name)
         assertEquals("編集中の長押しdragは保存済みboardを変えない", savedBeforeMove,
             checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+        assertSameSizeCameraReturned(cameraBeforeMove, settledCamera(shown = true))
         assertEquals("編集中の長押しdragはviewportを変えない", viewportBeforeMove, navigation.viewportState.value)
         assertEquals("編集中の長押しdragは履歴を追加しない", undoAvailableBeforeMove, board.canUndo)
         assertEquals("編集中の長押しdrag後も囲みは選択中", "選択中",
@@ -715,8 +762,10 @@ class ConditionalChromeLifecycleTest {
             return node.config[SemanticsProperties.StateDescription]
         }
 
-        val viewportBeforeExcludedGestures = navigation.viewportState.value
+        val cameraBeforeExcludedGestures = settledCamera(shown = true)
+        val viewportBeforeExcludedGestures = cameraBeforeExcludedGestures.viewport
         fun assertUncommitted() {
+            assertSameSizeCameraReturned(cameraBeforeExcludedGestures, settledCamera(shown = true))
             assertEquals("除外gesture後も編集draftを保持する", renamed, editor.regionNameDraft.value?.name)
             assertEquals("除外gestureはboardを変更しない", before, board.snapshot())
             assertEquals("除外gestureは保存しない", savedBefore,
@@ -762,7 +811,7 @@ class ConditionalChromeLifecycleTest {
             terminal = MotionEvent.ACTION_CANCEL, flags = MotionEvent.FLAG_CANCELED)
         assertUncommitted()
 
-        val viewportBeforeCommit = navigation.viewportState.value
+        val cameraBeforeCommit = settledCamera(shown = true)
         val regionStateBeforeCommit = regionSelectionState("囲み: Cluster", "before outside tap")
         assertEquals("外側tap直前も同じ囲みが選択中", "選択中", regionStateBeforeCommit)
         val commitTapEventElapsed = nativeGesture(instrumentation, listOf(blank),
@@ -803,7 +852,9 @@ class ConditionalChromeLifecycleTest {
         awaitSavedRegionName(store, "chrome-lifecycle-region", renamed)
         assertEquals("変更済みのregion名を保存", renamed,
             runBlocking { store.savedBoard(1L)?.snapshot?.shapes?.singleOrNull { it.id == "chrome-lifecycle-region" }?.name })
-        assertEquals("dismissal tap does not pan or zoom", viewportBeforeCommit, navigation.viewportState.value)
+        val cameraAfterCommit = settledCamera(shown = false)
+        assertWorldFocusAndHistoryUnchanged(cameraBeforeCommit, cameraAfterCommit)
+        assertSameSizeCameraReturned(beforeEditor, cameraAfterCommit)
 
         assertTrue("region rename adds one undo entry", board.canUndo)
         assertTrue(board.undo())
