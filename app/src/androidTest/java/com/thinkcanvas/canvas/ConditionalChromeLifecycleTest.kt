@@ -949,8 +949,76 @@ class ConditionalChromeLifecycleTest {
         Thread.sleep(configuration.doubleTapTimeoutMillis + 100L)
         composeRule.waitForIdle()
         assertNull("dismissal event cannot start text after its timeout", editor.draft.value)
+        val nextSaveState = sessions.saveStateFor(1L, board.snapshot())
+        composeRule.waitUntil(5_000) {
+            nextSaveState.value == BoardSaveState.Idle &&
+                editor.pendingDraftAcknowledgement.value == null &&
+                editor.pendingImageAcknowledgement.value == null &&
+                editor.draft.value == null && editor.regionNameDraft.value == null &&
+                editor.imageDescriptionDraft.value == null
+        }
+        val cameraBeforeNextTap = settledCamera(shown = false)
+        val canvasForNextTap = composeRule.onNodeWithContentDescription("キャンバス")
+        val beforeNextCanvas = canvasForNextTap.fetchSemanticsNode()
+        val nextRoot = checkNotNull(beforeNextCanvas.root)
         val nextCanvasTap = paletteCanvasPoint(instrumentation, activity, verifyPaletteChrome = false)
-        nativeGesture(instrumentation, listOf(nextCanvasTap))
+        val nextAppRoot = checkNotNull(instrumentation.uiAutomation.rootInActiveWindow)
+        assertEquals("next tap uses the active app window", instrumentation.targetContext.packageName,
+            nextAppRoot.packageName?.toString())
+        val nativeNextCanvas = checkNotNull(findExact(nextAppRoot, "キャンバス"))
+        assertEquals(nextAppRoot.windowId, nativeNextCanvas.windowId)
+        val nextScreen = bounds(nativeNextCanvas)
+        val currentNextCanvas = canvasForNextTap.fetchSemanticsNode()
+        assertTrue("next tap retains the current Compose root", nextRoot === currentNextCanvas.root)
+        assertEquals("next tap retains the settled canvas", cameraBeforeNextTap.canvas, currentNextCanvas.boundsInWindow)
+        var nextWindowToScreen = androidx.compose.ui.geometry.Offset.Zero
+        instrumentation.runOnMainSync {
+            val decor = activity.window.decorView
+            val screenOrigin = IntArray(2).also(decor::getLocationOnScreen)
+            val windowOrigin = IntArray(2).also(decor::getLocationInWindow)
+            nextWindowToScreen = androidx.compose.ui.geometry.Offset(
+                (screenOrigin[0] - windowOrigin[0]).toFloat(),
+                (screenOrigin[1] - windowOrigin[1]).toFloat(),
+            )
+        }
+        assertEquals("next canvas maps exactly to native screen bounds",
+            androidx.compose.ui.geometry.Rect(
+                currentNextCanvas.boundsInWindow.topLeft + nextWindowToScreen,
+                currentNextCanvas.boundsInWindow.bottomRight + nextWindowToScreen),
+            androidx.compose.ui.geometry.Rect(nextScreen.left.toFloat(), nextScreen.top.toFloat(),
+                nextScreen.right.toFloat(), nextScreen.bottom.toFloat()))
+        val nextLocal = androidx.compose.ui.geometry.Offset(
+            nextCanvasTap.first - nextScreen.left, nextCanvasTap.second - nextScreen.top)
+        assertTrue("next tap is inside canvas-local bounds",
+            nextLocal.x > 0f && nextLocal.x < currentNextCanvas.boundsInWindow.width &&
+                nextLocal.y > 0f && nextLocal.y < currentNextCanvas.boundsInWindow.height)
+        val nextRootPoint = nextLocal + currentNextCanvas.boundsInRoot.topLeft
+        val nextChrome = composeRule.onAllNodes(hasClickAction()).fetchSemanticsNodes()
+            .filter { it.root === nextRoot }
+        assertTrue("next tap checks current Compose controls", nextChrome.isNotEmpty())
+        assertTrue("next tap excludes current Compose chrome",
+            nextChrome.none { it.boundsInRoot.contains(nextRootPoint) })
+        assertEquals("next tap waits for completed saves", BoardSaveState.Idle, nextSaveState.value)
+        assertNull(editor.pendingDraftAcknowledgement.value)
+        assertNull(editor.pendingImageAcknowledgement.value)
+        assertNull(editor.draft.value)
+        assertNull(editor.regionNameDraft.value)
+        assertNull(editor.imageDescriptionDraft.value)
+        val nextTapDuration = 35L
+        assertTrue("next Compose tap is below the long-press threshold",
+            nextTapDuration > 0L && nextTapDuration < currentNextCanvas.layoutInfo.viewConfiguration.longPressTimeoutMillis)
+        val nextAutoAdvance = composeRule.mainClock.autoAdvance
+        try {
+            composeRule.mainClock.autoAdvance = false
+            canvasForNextTap.performTouchInput {
+                down(nextLocal)
+                advanceEventTime(nextTapDuration)
+                up()
+            }
+        } finally {
+            composeRule.mainClock.autoAdvance = nextAutoAdvance
+        }
+        composeRule.waitForIdle()
         assertPaletteClosed(instrumentation)
         assertNull("次の独立したcanvas tapも新しいtext editorを作らない", editor.draft.value)
 
