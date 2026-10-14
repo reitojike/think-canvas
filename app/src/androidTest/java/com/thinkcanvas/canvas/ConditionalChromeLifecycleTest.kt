@@ -297,10 +297,16 @@ class ConditionalChromeLifecycleTest {
             var sameSessionAtThreeFramesAfterRegionStateCheck = false
             try {
                 try {
-                    nativeGesture(instrumentation, listOf(outsideTap), issue110Probe = issue110Probe)
+                    nativeGesture(instrumentation, listOf(outsideTap), issue110Probe = issue110Probe,
+                        asyncStationaryFingerTap = true)
                 } finally {
                     Issue110OutsideTapProbe.current = null
                 }
+                assertTrue("DOWN/UP eventTimes are captured",
+                    issue110Probe.nativeDownEventTime >= 0 && issue110Probe.nativeUpEventTime >= 0)
+                val tapEventElapsed = issue110Probe.nativeUpEventTime - issue110Probe.nativeDownEventTime
+                assertTrue("eventTime duration is below long-press threshold (elapsed=$tapEventElapsed, longPress=${issue110Probe.testLongPressMillis})",
+                    tapEventElapsed >= 0 && tapEventElapsed < issue110Probe.testLongPressMillis)
                 instrumentation.runOnMainSync {
                     val sessionIdAfterNativeGestureReturn =
                         editor.regionNameDraft.value?.sessionId
@@ -1212,9 +1218,15 @@ class ConditionalChromeLifecycleTest {
         toolType: Int = MotionEvent.TOOL_TYPE_FINGER,
         afterDown: (() -> Unit)? = null,
         issue110Probe: Issue110OutsideTapProbe? = null,
+        asyncStationaryFingerTap: Boolean = false,
     ) {
         require(flags and MotionEvent.FLAG_CANCELED == 0 || terminal == MotionEvent.ACTION_CANCEL) {
             "Single-pointer FLAG_CANCELED requires ACTION_CANCEL"
+        }
+        require(!asyncStationaryFingerTap || (points.size == 1 && terminal == MotionEvent.ACTION_UP &&
+            flags == 0 && holdMillis == 0L && toolType == MotionEvent.TOOL_TYPE_FINGER &&
+            afterDown == null && issue110Probe != null)) {
+            "Asynchronous injection is limited to the probed stationary single-finger DOWN/UP tap"
         }
         val down = SystemClock.uptimeMillis()
         val samples = if (points.size == 1) points + points else points
@@ -1238,7 +1250,8 @@ class ConditionalChromeLifecycleTest {
                 }
             }
             val injectStart = if (issue110Probe != null) SystemClock.uptimeMillis() else -1L
-            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
+            val synchronous = !(asyncStationaryFingerTap && (index == 0 || index == samples.lastIndex))
+            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, synchronous)) }
             finally {
                 if (issue110Probe != null) {
                     val injectEnd = SystemClock.uptimeMillis()
