@@ -12,6 +12,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -596,7 +597,10 @@ class ConditionalChromeLifecycleTest {
 
     @PrSmoke
     @Test
-    fun paletteRegionNameEditorKeepsOutsidePriority() = withPaletteBoard(expanded = false) { instrumentation, activity, database, sessions ->
+    fun paletteRegionNameEditorKeepsOutsidePriority() = withPaletteBoard(
+        expanded = false,
+        awaitSavedRegion = true,
+    ) { instrumentation, activity, database, sessions ->
         val board = sessions.stateFor(1L, BoardSnapshot())
         val editor = sessions.textEditorFor(1L, BoardSnapshot())
         val navigation = sessions.viewportHistoryFor(1L, BoardSnapshot())
@@ -914,8 +918,10 @@ class ConditionalChromeLifecycleTest {
         assertEquals(anchor, bounds(waitForActionable(instrumentation, launcher)))
     }
 
+    @OptIn(ExperimentalTestApi::class)
     private fun withPaletteBoard(
         expanded: Boolean = true,
+        awaitSavedRegion: Boolean = false,
         block: (android.app.Instrumentation, MainActivity, CanvasDatabase, BoardSessionViewModel) -> Unit,
     ) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -926,7 +932,14 @@ class ConditionalChromeLifecycleTest {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
         val database = CanvasDatabase.open(context)
         try {
-            waitForActionable(instrumentation, "図形ツールを開く")
+            if (awaitSavedRegion) {
+                composeRule.waitUntilAtLeastOneExists(
+                    matcher = hasContentDescription("囲み: Cluster") and hasClickAction(),
+                    timeoutMillis = 4_000L,
+                )
+            } else {
+                waitForActionable(instrumentation, "図形ツールを開く")
+            }
             lateinit var sessions: BoardSessionViewModel
             instrumentation.runOnMainSync { sessions = ViewModelProvider(activity)[BoardSessionViewModel::class.java] }
             if (expanded) {
