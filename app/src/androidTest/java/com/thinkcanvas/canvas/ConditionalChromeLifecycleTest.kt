@@ -961,7 +961,19 @@ class ConditionalChromeLifecycleTest {
         val canvasForNextTap = composeRule.onNodeWithContentDescription("キャンバス")
         val beforeNextCanvas = canvasForNextTap.fetchSemanticsNode()
         val nextRoot = checkNotNull(beforeNextCanvas.root)
-        val nextCanvasTap = paletteCanvasPoint(instrumentation, activity, verifyPaletteChrome = false)
+        // The neutral launcher exists only for tool NONE with inkTool null; do not reset either mode.
+        val neutralLauncher = composeRule.onNode(hasContentDescription("図形ツールを開く") and hasClickAction())
+            .fetchSemanticsNode()
+        assertTrue("next operation is in the neutral tool/ink mode", neutralLauncher.root === nextRoot)
+        assertTrue("neutral launcher is enabled", SemanticsProperties.Disabled !in neutralLauncher.config)
+        val paletteOnlyMatcher = hasContentDescription("まとめて選ぶ")
+        val paletteOnlyNode = composeRule.onNode(paletteOnlyMatcher and hasClickAction()).fetchSemanticsNode()
+        val paletteRegionNode = composeRule.onNode(hasContentDescription("囲み") and hasClickAction()).fetchSemanticsNode()
+        assertTrue("palette-specific controls use the current root",
+            paletteOnlyNode.root === nextRoot && paletteRegionNode.root === nextRoot)
+        assertTrue("lasso node is the palette action",
+            SemanticsActions.CustomActions in paletteOnlyNode.config &&
+                paletteOnlyNode.config[SemanticsActions.CustomActions].any { it.label == "表示範囲をまとめて選択" })
         val nextAppRoot = checkNotNull(instrumentation.uiAutomation.rootInActiveWindow)
         assertEquals("next tap uses the active app window", instrumentation.targetContext.packageName,
             nextAppRoot.packageName?.toString())
@@ -987,17 +999,85 @@ class ConditionalChromeLifecycleTest {
                 currentNextCanvas.boundsInWindow.bottomRight + nextWindowToScreen),
             androidx.compose.ui.geometry.Rect(nextScreen.left.toFloat(), nextScreen.top.toFloat(),
                 nextScreen.right.toFloat(), nextScreen.bottom.toFloat()))
-        val nextLocal = androidx.compose.ui.geometry.Offset(
-            nextCanvasTap.first - nextScreen.left, nextCanvasTap.second - nextScreen.top)
-        assertTrue("next tap is inside canvas-local bounds",
-            nextLocal.x > 0f && nextLocal.x < currentNextCanvas.boundsInWindow.width &&
-                nextLocal.y > 0f && nextLocal.y < currentNextCanvas.boundsInWindow.height)
-        val nextRootPoint = nextLocal + currentNextCanvas.boundsInRoot.topLeft
+        val nextSafe = paletteSafeCanvas(instrumentation, activity)
+        val nextNativeTargets = accessibleTouchTargetBounds(instrumentation)
         val nextChrome = composeRule.onAllNodes(hasClickAction()).fetchSemanticsNodes()
             .filter { it.root === nextRoot }
         assertTrue("next tap checks current Compose controls", nextChrome.isNotEmpty())
-        assertTrue("next tap excludes current Compose chrome",
-            nextChrome.none { it.boundsInRoot.contains(nextRootPoint) })
+        val paletteRegionAncestors = generateSequence(paletteRegionNode.layoutInfo) { it.parentInfo }.toList()
+        val paletteLayout = generateSequence(paletteOnlyNode.layoutInfo) { it.parentInfo }
+            .first { ancestor -> paletteRegionAncestors.any { it === ancestor } }
+        val nextRootLayout = generateSequence(currentNextCanvas.layoutInfo) { it.parentInfo }.last()
+        lateinit var paletteViewport: androidx.compose.ui.geometry.Rect
+        instrumentation.runOnMainSync {
+            val content = paletteLayout.coordinates
+            val scrollViewport = checkNotNull(content.parentCoordinates)
+            assertTrue("palette viewport is attached and distinct from its parent layout",
+                content.isAttached && scrollViewport.isAttached && scrollViewport !== content.parentLayoutCoordinates)
+            paletteViewport = nextRootLayout.coordinates.localBoundingBoxOf(scrollViewport, clipBounds = true)
+            assertTrue("palette viewport is nonempty", !paletteViewport.isEmpty)
+        }
+        // This fixture contains one text, one region and ink. Use the existing model hit functions.
+        val nextSnapshot = board.snapshot()
+        assertTrue("blank proof is limited to this fixture", nextSnapshot.images.isEmpty() && nextSnapshot.arrows.isEmpty())
+        val nextText = nextSnapshot.texts.single()
+        val nextRegion = nextSnapshot.shapes.single()
+        assertEquals(reference.id, nextText.id)
+        assertEquals("chrome-lifecycle-region", nextRegion.id)
+        assertEquals(ShapeKind.REGION, nextRegion.kind)
+        val textNode = composeRule.onNodeWithContentDescription(nextText.text).fetchSemanticsNode()
+        assertTrue("text geometry belongs to the current root", textNode.root === nextRoot)
+        val textSize = textNode.layoutInfo.coordinates.size
+        val nextView = cameraBeforeNextTap.viewport
+        val pixelsPerDp = instrumentation.targetContext.resources.displayMetrics.density
+        val textTarget = 44f * pixelsPerDp / nextView.scale
+        val contentGeometry = nextSnapshot.resolveRenderedGeometry(mapOf(nextText.id to WorldBounds(
+            nextText.x, nextText.y, nextText.x + maxOf(textSize.width.toFloat(), textTarget),
+            nextText.y + maxOf(textSize.height.toFloat(), textTarget))), nextView.scale, pixelsPerDp)
+        val handleRadius = 24f * pixelsPerDp
+        val regionHandles = listOf(
+            WorldPoint(nextRegion.x + nextRegion.width, nextRegion.y + nextRegion.height),
+            WorldPoint(nextRegion.x + nextRegion.width / 2f, nextRegion.y + nextRegion.height + 14f),
+        ).map { point -> nextView.worldToScreen(point.x, point.y).let {
+            androidx.compose.ui.geometry.Offset(it.first, it.second) } }
+        val textGrip = nextView.worldToScreen(nextText.x + textSize.width / 2f, nextText.y + textSize.height)
+        val regionLabels = composeRule.onAllNodes(hasContentDescription("囲み: " + nextRegion.name))
+            .fetchSemanticsNodes().filter { it.root === nextRoot }
+        assertTrue("current region label geometry exists", regionLabels.isNotEmpty())
+        val nameOrigin = nextView.worldToScreen(nextRegion.x + DetailedRenderFacts.REGION_LABEL_LEFT_WORLD,
+            nextRegion.y - DetailedRenderFacts.REGION_LABEL_TOP_WORLD)
+        val nameWidth = maxOf(48f * pixelsPerDp, regionLabels.maxOf { it.boundsInRoot.width })
+        val nameHeight = maxOf(48f * pixelsPerDp, regionLabels.maxOf { it.boundsInRoot.height })
+        val nextLocal = checkNotNull(listOf(.15f to .55f, .85f to .55f, .15f to .78f, .85f to .78f)
+            .map { (x, y) -> androidx.compose.ui.geometry.Offset(
+                nextSafe.left + nextSafe.width() * x - nextScreen.left,
+                nextSafe.top + nextSafe.height() * y - nextScreen.top) }
+            .firstOrNull { local ->
+                val screenX = local.x + nextScreen.left
+                val screenY = local.y + nextScreen.top
+                val rootPoint = local + currentNextCanvas.boundsInRoot.topLeft
+                val world = nextView.screenToWorld(local.x, local.y).let { WorldPoint(it.first, it.second) }
+                local.x > 0f && local.x < currentNextCanvas.boundsInWindow.width &&
+                    local.y > 0f && local.y < currentNextCanvas.boundsInWindow.height &&
+                    nextSafe.contains(screenX.toInt(), screenY.toInt()) &&
+                    nextNativeTargets.none { it.contains(screenX.toInt(), screenY.toInt()) } &&
+                    nextChrome.none { it.boundsInRoot.contains(rootPoint) } &&
+                    (rootPoint.x < paletteViewport.left || rootPoint.x > paletteViewport.right ||
+                        rootPoint.y < paletteViewport.top || rootPoint.y > paletteViewport.bottom) &&
+                    contentGeometry.boundsById.values.none { it.contains(world) } &&
+                    !nextRegion.hitStroke(world, 12f / nextView.scale) &&
+                    nextSnapshot.ink.none { it.hitStroke(world, it.kind.hitTolerance(nextView.scale)) } &&
+                    regionHandles.all { (local - it).getDistance() > handleRadius } &&
+                    !(local.x in (textGrip.first - handleRadius)..(textGrip.first + handleRadius) &&
+                        local.y in textGrip.second..(textGrip.second + handleRadius * 2f)) &&
+                    !(local.x in nameOrigin.first..(nameOrigin.first + nameWidth) &&
+                        local.y in nameOrigin.second..(nameOrigin.second + nameHeight))
+            }) { "fixed blank candidates hit content, handles, labels or chrome" }
+        assertEquals("blank proof retains the model snapshot", nextSnapshot, board.snapshot())
+        assertEquals("blank proof retains the settled viewport", nextView, navigation.viewportState.value)
+        assertTrue("neutral launcher remains in the current root before DOWN",
+            composeRule.onNode(hasContentDescription("図形ツールを開く") and hasClickAction())
+                .fetchSemanticsNode().root === nextRoot)
         assertEquals("next tap waits for completed saves", BoardSaveState.Idle, nextSaveState.value)
         assertNull(editor.pendingDraftAcknowledgement.value)
         assertNull(editor.pendingImageAcknowledgement.value)
@@ -1019,7 +1099,14 @@ class ConditionalChromeLifecycleTest {
             composeRule.mainClock.autoAdvance = nextAutoAdvance
         }
         composeRule.waitForIdle()
-        assertPaletteClosed(instrumentation)
+        assertTrue("palette closure stays on the current canvas root",
+            canvasForNextTap.fetchSemanticsNode().root === nextRoot)
+        assertTrue("palette-specific lasso node is removed",
+            composeRule.onAllNodes(paletteOnlyMatcher).fetchSemanticsNodes().none { it.root === nextRoot })
+        assertTrue("palette closure retains neutral mode",
+            composeRule.onNode(hasContentDescription("図形ツールを開く") and hasClickAction())
+                .fetchSemanticsNode().root === nextRoot)
+        assertEquals("palette-only tap does not change content", nextSnapshot, board.snapshot())
         assertNull("次の独立したcanvas tapも新しいtext editorを作らない", editor.draft.value)
 
     }
