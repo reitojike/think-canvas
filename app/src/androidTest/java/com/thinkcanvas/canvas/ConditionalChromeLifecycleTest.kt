@@ -313,8 +313,16 @@ class ConditionalChromeLifecycleTest {
                 repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
                 assertEquals("短い外側tapは選択を変えない", "選択中",
                     waitForRegionState(instrumentation, "選択中"))
+                if (Build.VERSION.SDK_INT >= 34) instrumentation.uiAutomation.clearCache()
+                val appRootAtThreeFramesAfterRegionStateCheck =
+                    instrumentation.uiAutomation.rootInActiveWindow
+                val validAppRootAtThreeFramesAfterRegionStateCheck =
+                    appRootAtThreeFramesAfterRegionStateCheck != null &&
+                        appRootAtThreeFramesAfterRegionStateCheck.packageName?.toString() == appPackageName &&
+                        appRootAtThreeFramesAfterRegionStateCheck.windowId == appWindowIdBeforeOutsideTap
                 val editorNodeAtThreeFramesAfterRegionStateCheck =
-                    findExact(instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前")
+                    if (validAppRootAtThreeFramesAfterRegionStateCheck)
+                        findExact(appRootAtThreeFramesAfterRegionStateCheck, "囲みの名前") else null
                 instrumentation.runOnMainSync {
                     val sessionIdAtThreeFramesAfterRegionStateCheck =
                         editor.regionNameDraft.value?.sessionId
@@ -354,6 +362,10 @@ class ConditionalChromeLifecycleTest {
                 val laterGone = laterObservation?.first
                 val laterTimedOut = laterObservation?.let { !it.first }
                 val laterValidAppRootObserved = laterObservation?.second
+                assertTrue("消失判定は同じアプリ window の有効な root で行う",
+                    validAppRootAtThreeFramesAfterRegionStateCheck)
+                assertFalse("消失判定 checkpoint の model draft が閉じる",
+                    draftPresentAtThreeFramesAfterRegionStateCheck)
                 assertNull(
                     "未変更の外側tapでeditorが閉じる; " +
                         "afterNativeGestureReturn(draftPresent=$draftPresentAfterNativeGestureReturn, " +
