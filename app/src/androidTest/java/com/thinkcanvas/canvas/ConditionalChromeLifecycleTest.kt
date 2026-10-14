@@ -10,6 +10,8 @@ import android.view.MotionEvent
 import android.view.InputDevice
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -726,14 +728,48 @@ class ConditionalChromeLifecycleTest {
             terminal = MotionEvent.ACTION_CANCEL, flags = MotionEvent.FLAG_CANCELED)
         assertUncommitted()
 
+        fun regionSelectionState(regionLabel: String, checkpoint: String): String {
+            val node = composeRule.onNode(hasContentDescription(regionLabel) and hasClickAction())
+                .fetchSemanticsNode("$checkpoint: expected one clickable $regionLabel node")
+            assertTrue("$checkpoint: $regionLabel exposes StateDescription",
+                SemanticsProperties.StateDescription in node.config)
+            return node.config[SemanticsProperties.StateDescription]
+        }
+
         val viewportBeforeCommit = navigation.viewportState.value
+        val regionStateBeforeCommit = regionSelectionState("囲み: Cluster", "before outside tap")
+        assertEquals("外側tap直前も同じ囲みが選択中", "選択中", regionStateBeforeCommit)
         val commitTapEventElapsed = nativeGesture(instrumentation, listOf(blank),
             asyncStationaryFingerTap = true)
         assertTrue("Stationary tap duration is below long-press threshold: $commitTapEventElapsed",
             commitTapEventElapsed >= 0 && commitTapEventElapsed < configuration.longPressTimeoutMillis)
         waitForGone(instrumentation, "囲みの名前")
-        assertEquals("外側tapでregion選択を変えない", "選択中",
-            waitForRegionState(instrumentation, "選択中", regionLabel = "囲み: Renamed"))
+        var regionNodeCountAfterCommit = -1
+        var regionStatesAfterCommit: List<String?> = emptyList()
+        try {
+            composeRule.waitUntil(
+                conditionDescription = "タップ後の囲み: Renamed の StateDescription が選択中になりません",
+                timeoutMillis = 4_000L,
+            ) {
+                composeRule.waitForIdle()
+                instrumentation.waitForIdleSync()
+                val nodes = composeRule.onAllNodes(hasContentDescription("囲み: Renamed") and hasClickAction())
+                    .fetchSemanticsNodes()
+                regionNodeCountAfterCommit = nodes.size
+                regionStatesAfterCommit = nodes.map { node ->
+                    if (SemanticsProperties.StateDescription in node.config)
+                        node.config[SemanticsProperties.StateDescription] else null
+                }
+                regionNodeCountAfterCommit == 1 && regionStatesAfterCommit.single() == "選択中"
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            throw AssertionError(
+                "タップ後の囲み: Renamed の選択確認がtimeout; " +
+                    "lastNodeCount=$regionNodeCountAfterCommit, lastStates=$regionStatesAfterCommit",
+                timeout,
+            )
+        }
+        assertEquals("外側tapでregion選択を変えない", "選択中", regionStatesAfterCommit.single())
         assertPaletteOpen(instrumentation)
         assertNull("dismissal tapはblank textを作らない", editor.draft.value)
         assertEquals("変更済み名は1回のmodel更新", renamed,
