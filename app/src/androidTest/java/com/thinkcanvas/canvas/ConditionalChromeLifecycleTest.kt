@@ -252,6 +252,7 @@ class ConditionalChromeLifecycleTest {
             lateinit var sessions: BoardSessionViewModel
             instrumentation.runOnMainSync { sessions = ViewModelProvider(activity as MainActivity)[BoardSessionViewModel::class.java] }
             val board = sessions.stateFor(1L, BoardSnapshot())
+            val editor = sessions.textEditorFor(1L, BoardSnapshot())
             val store = com.thinkcanvas.data.CanvasStore.get(context)
             val before = board.snapshot()
             val savedBefore = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
@@ -268,6 +269,12 @@ class ConditionalChromeLifecycleTest {
                 findExact(instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前"))
             assertEquals("former point tap 前も囲みは選択中", "選択中",
                 waitForRegionState(instrumentation, "選択中"))
+            var editorSessionIdBeforeOutsideTap: String? = null
+            instrumentation.runOnMainSync {
+                editorSessionIdBeforeOutsideTap = editor.regionNameDraft.value?.sessionId
+            }
+            val appPackageName = instrumentation.targetContext.packageName
+            val appWindowIdBeforeOutsideTap = region.windowId
 
             val configuration = composeRule.onNodeWithContentDescription("キャンバス")
                 .fetchSemanticsNode().layoutInfo.viewConfiguration
@@ -275,13 +282,76 @@ class ConditionalChromeLifecycleTest {
             val outsideTap = liveCanvasPointOutsideTouchTargets(instrumentation, canvasActivity)
             assertSafeCanvasPath(instrumentation, canvasActivity, listOf(outsideTap))
             composeRule.mainClock.autoAdvance = false
+            var draftPresentAfterNativeGestureReturn = false
+            var sameSessionAfterNativeGestureReturn = false
+            var draftPresentAtThreeFramesAfterRegionStateCheck = false
+            var sameSessionAtThreeFramesAfterRegionStateCheck = false
             try {
                 nativeGesture(instrumentation, listOf(outsideTap))
+                instrumentation.runOnMainSync {
+                    val sessionIdAfterNativeGestureReturn =
+                        editor.regionNameDraft.value?.sessionId
+                    draftPresentAfterNativeGestureReturn =
+                        sessionIdAfterNativeGestureReturn != null
+                    sameSessionAfterNativeGestureReturn =
+                        editorSessionIdBeforeOutsideTap != null &&
+                            sessionIdAfterNativeGestureReturn == editorSessionIdBeforeOutsideTap
+                }
                 repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
                 assertEquals("短い外側tapは選択を変えない", "選択中",
                     waitForRegionState(instrumentation, "選択中"))
-                assertNull("未変更の外側tapでeditorが閉じる",
-                    findExact(instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前"))
+                val editorNodeAtThreeFramesAfterRegionStateCheck =
+                    findExact(instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前")
+                instrumentation.runOnMainSync {
+                    val sessionIdAtThreeFramesAfterRegionStateCheck =
+                        editor.regionNameDraft.value?.sessionId
+                    draftPresentAtThreeFramesAfterRegionStateCheck =
+                        sessionIdAtThreeFramesAfterRegionStateCheck != null
+                    sameSessionAtThreeFramesAfterRegionStateCheck =
+                        editorSessionIdBeforeOutsideTap != null &&
+                            sessionIdAtThreeFramesAfterRegionStateCheck == editorSessionIdBeforeOutsideTap
+                }
+                val laterObservation =
+                    if (editorNodeAtThreeFramesAfterRegionStateCheck != null) {
+                        var laterGone = false
+                        var laterValidAppRootObserved = false
+                        for (attempt in 0 until 40) {
+                            composeRule.waitForIdle()
+                            instrumentation.waitForIdleSync()
+                            if (Build.VERSION.SDK_INT >= 34) {
+                                instrumentation.uiAutomation.clearCache()
+                            }
+                            val root = instrumentation.uiAutomation.rootInActiveWindow
+                            val validAppRoot = root != null &&
+                                root.packageName?.toString() == appPackageName &&
+                                root.windowId == appWindowIdBeforeOutsideTap
+                            if (validAppRoot) {
+                                laterValidAppRootObserved = true
+                                if (findExact(root, "囲みの名前") == null) {
+                                    laterGone = true
+                                    break
+                                }
+                            }
+                            Thread.sleep(100)
+                        }
+                        laterGone to laterValidAppRootObserved
+                    } else {
+                        null
+                    }
+                val laterGone = laterObservation?.first
+                val laterTimedOut = laterObservation?.let { !it.first }
+                val laterValidAppRootObserved = laterObservation?.second
+                assertNull(
+                    "未変更の外側tapでeditorが閉じる; " +
+                        "afterNativeGestureReturn(draftPresent=$draftPresentAfterNativeGestureReturn, " +
+                        "sameSession=$sameSessionAfterNativeGestureReturn); " +
+                        "afterThreeFramesAndRegionStateCheck(" +
+                        "draftPresent=$draftPresentAtThreeFramesAfterRegionStateCheck, " +
+                        "sameSession=$sameSessionAtThreeFramesAfterRegionStateCheck); " +
+                        "laterGone=$laterGone, laterTimedOut=$laterTimedOut, " +
+                        "laterValidAppRootObserved=$laterValidAppRootObserved",
+                    editorNodeAtThreeFramesAfterRegionStateCheck,
+                )
                 composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
             } finally {
                 composeRule.mainClock.autoAdvance = true
@@ -715,7 +785,7 @@ class ConditionalChromeLifecycleTest {
         nativeGesture(instrumentation, listOf(blank))
         waitForGone(instrumentation, "囲みの名前")
         assertEquals("外側tapでregion選択を変えない", "選択中",
-            waitForRegionState(instrumentation, "選択中"))
+            waitForRegionState(instrumentation, "選択中", regionLabel = "囲み: Renamed"))
         assertPaletteOpen(instrumentation)
         assertNull("dismissal tapはblank textを作らない", editor.draft.value)
         assertEquals("変更済み名は1回のmodel更新", renamed,
@@ -732,7 +802,10 @@ class ConditionalChromeLifecycleTest {
         assertTrue(board.redo())
         assertEquals(renamed, board.snapshot().shapes.single { it.id == "chrome-lifecycle-region" }.name)
 
-        val (regionForStylus, renameForStylus) = waitForRegionRenameAction(instrumentation)
+        val (regionForStylus, renameForStylus) = waitForRegionRenameAction(
+            instrumentation,
+            regionLabel = "囲み: Renamed",
+        )
         assertTrue(regionForStylus.performAction(renameForStylus.id))
         assertEquals("stylus操作前にregion editorを開く", renamed,
             editor.regionNameDraft.value?.name)
@@ -1278,7 +1351,7 @@ class ConditionalChromeLifecycleTest {
         if (node == null) return null
         val ownsClick = node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }
         if (node.contentDescription?.toString() == label &&
-            (label != "囲み: Cluster" || ownsClick)) {
+            (!label.startsWith("囲み: ") || ownsClick)) {
             assertPlatformControl(node, label, checkExternalGeometry = !useAppProcessGeometry)
             return node
         }
@@ -1538,15 +1611,16 @@ class ConditionalChromeLifecycleTest {
     private fun waitForRegionState(
         instrumentation: android.app.Instrumentation,
         expected: String,
+        regionLabel: String = "囲み: Cluster",
     ): String {
         var matchedState: String? = null
         composeRule.waitUntil(
-            conditionDescription = "囲みの stateDescription が $expected になりません",
+            conditionDescription = "$regionLabel の stateDescription が $expected になりません",
             timeoutMillis = 4_000L,
         ) {
             composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
-            matchedState = findActionable(instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster")
+            matchedState = findActionable(instrumentation.uiAutomation.rootInActiveWindow, regionLabel)
                 ?.stateDescription?.toString()
             matchedState == expected
         }
@@ -1555,15 +1629,16 @@ class ConditionalChromeLifecycleTest {
 
     private fun waitForRegionRenameAction(
         instrumentation: android.app.Instrumentation,
+        regionLabel: String = "囲み: Cluster",
     ): Pair<AccessibilityNodeInfo, AccessibilityNodeInfo.AccessibilityAction> {
         var matchedAction: Pair<AccessibilityNodeInfo, AccessibilityNodeInfo.AccessibilityAction>? = null
         composeRule.waitUntil(
-            conditionDescription = "囲み: Cluster の名前編集 accessibility action が見つかりません",
+            conditionDescription = "$regionLabel の名前編集 accessibility action が見つかりません",
             timeoutMillis = 4_000L,
         ) {
             composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
-            val region = findActionable(instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster")
+            val region = findActionable(instrumentation.uiAutomation.rootInActiveWindow, regionLabel)
             val action = region?.actionList?.firstOrNull { it.label?.toString() == "囲みの名前を編集" }
             matchedAction = if (region != null && action != null) region to action else null
             matchedAction != null
