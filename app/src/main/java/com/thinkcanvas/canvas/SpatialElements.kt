@@ -87,7 +87,9 @@ fun SpatialElements(
                 else if (shape.id in ghostIds) redColor.copy(alpha = .65f)
                 else if (shape.color == TextColor.VERMILION) redColor else inkColor
             val displayColor = if (searching && shape.id !in searchMatches && shape.id !in selected)
-                color.copy(alpha = .25f) else color
+                color.copy(alpha = .25f)
+            else if (shape.id in projection.outlineShapes) color.copy(alpha = .4f)
+            else color
             val farLike = shape.kind == ShapeKind.REGION && projection.farLikeRegion(shape.id)
             val style = Stroke(width = if (shape.kind == ShapeKind.REGION)
                 DetailedRenderFacts.REGION_STROKE_DP.dp.toPx()
