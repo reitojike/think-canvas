@@ -38,7 +38,7 @@ runbookに変動する総数・lane別件数は固定しません。過去のcen
 | Lane | Execution | 起動境界 |
 | --- | --- | --- |
 | PR smoke | PrSmoke AND NOT FlakyTest | pull_request、required process gate |
-| main regression | NOT FlakyTest | main push、required process gate |
+| main regression | NOT FlakyTest | main push / main指定の手動起動、required process gate |
 | quarantine | FlakyTest | default branch schedule/manual |
 | unfiltered full | filterなし | android-full.ymlのmanualのみ |
 
@@ -50,6 +50,7 @@ quarantineの裁定、strict failure、sample判定、2026-10-23 review gateは
 | --- | --- | --- | --- | --- | --- |
 | PR | RUN | RUN | SKIP | - | - |
 | main push | RUN | SKIP | RUN | - | - |
+| android.yml manual（main） | RUN | SKIP | RUN | - | - |
 | android-full manual | - | - | - | - | RUN |
 | quarantine schedule/manual | - | - | - | RUN | - |
 | targeted manual | 既存契約 | 既存契約 | 既存契約 | 既存契約 | 既存契約 |
@@ -57,7 +58,9 @@ quarantineの裁定、strict failure、sample判定、2026-10-23 review gateは
 各eventのRUN/SKIPPEDをjob単位で確認します。quarantineとunfiltered fullはmain pushでは起動しません。
 main regressionまたはquarantineのgreenをunfiltered fullのgreenとは扱いません。
 manual fullの起動は `gh workflow run android-full.yml --ref <ref>` を使い、availability証明だけの
-追加canaryは実行しません。android.ymlにmanual dispatchはありません。
+追加canaryは実行しません。通常mainと同じ検証を手動起動する場合は
+`gh workflow run android.yml --ref main` を使います（inputsなし）。手動起動でmain以外のbranch/tagを
+選んだ場合は全jobをSKIPします。手動起動でも検証内容・filter・receipt/XMLの合格条件はmain pushと同じです。
 workflow/process requiredとserver enforced requiredを区別し、rulesetは変更しません。
 
 ローカルのreceipt検証:
