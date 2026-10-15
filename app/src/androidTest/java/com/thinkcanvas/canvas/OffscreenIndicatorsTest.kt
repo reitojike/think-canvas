@@ -319,7 +319,7 @@ class OffscreenIndicatorsTest {
     @Test fun singleSelectionFamiliesNavigateWithoutHistoryOrSaving() {
         val cases = listOf(note.text, "四角: Selection shape", "囲み: Cluster", "ペンの線", "矢印")
         for (label in cases) withBoard(defaults.copy(shapes = listOf(rectangle, region))) {
-            click(label)
+            if (label == note.text) action(label, "選択に追加") else click(label)
             outsideToLeft()
             assertEquals(1, indicators().size)
             click("選択対象、")
@@ -331,7 +331,7 @@ class OffscreenIndicatorsTest {
     }
 
     @Test fun multiSelectionHasOneIndicatorAndRetainsRelativeGeometry() = withBoard {
-        click(note.text)
+        action(note.text, "選択に追加")
         action("四角: Selection shape", "選択に追加")
         action("矢印", "選択に追加")
         outsideToLeft()
@@ -348,12 +348,13 @@ class OffscreenIndicatorsTest {
     @PrSmoke
     @Test fun searchAndSelectionDeduplicateAndKeepStableAccessibleOrder() = withBoard {
         search()
-        click(note.text)
+        action(note.text, "選択に追加")
         outsideToLeft()
         assertEquals(1, indicators().size)
         assertTrue(indicators().single().config[SemanticsProperties.ContentDescription].single().startsWith("現在の検索結果、"))
         click("現在の検索結果、")
-        click(other.text)
+        action(note.text, "選択から外す")
+        action(other.text, "選択に追加")
         outsideToLeft()
         assertEquals(2, indicators().size)
         val search = marker("現在の検索結果、")
@@ -391,7 +392,7 @@ class OffscreenIndicatorsTest {
     }
 
     @Test fun backClearsSelectionAndOldHitAllowsNativePan() = withBoard {
-        click(note.text)
+        action(note.text, "選択に追加")
         outsideToLeft()
         val old = marker("選択対象、").boundsInWindow.center
         back()
@@ -403,7 +404,7 @@ class OffscreenIndicatorsTest {
     @PrSmoke
     @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun editorAndCreationToolSuppressIndicatorsAndRestoreOnlyCurrentTargets() = withBoard {
-        click(note.text)
+        action(note.text, "選択に追加")
         outsideToLeft()
         val oldAction = marker("選択対象、").config[SemanticsActions.OnClick].action!!
         val before = settledCamera(shown = false)
@@ -445,7 +446,7 @@ class OffscreenIndicatorsTest {
     }
 
     @Test fun saveBlockRejectsStaleNavigationBeforeRecomposition() = withBoard {
-        click(note.text)
+        action(note.text, "選択に追加")
         outsideToLeft()
         val staleAction = marker("選択対象、").config[SemanticsActions.OnClick].action!!
         val camera = position(reference.text)
@@ -478,7 +479,7 @@ class OffscreenIndicatorsTest {
     }
 
     @Test fun movePreviewSuppressesIndicatorUntilNativeCancelReleasesOwner() = withBoard {
-        click(note.text)
+        action(note.text, "選択に追加")
         val start = nodes("要素を移動").single().boundsInWindow.center
         val edge = Offset(canvas.right - 3f, canvas.center.y)
         val time = SystemClock.uptimeMillis()
@@ -507,7 +508,7 @@ class OffscreenIndicatorsTest {
 
     @Test fun pendingAcknowledgementAndRemovedTargetRejectSameTurnStaleActions() {
         for (removed in listOf(false, true)) withBoard {
-            click(note.text)
+            action(note.text, "選択に追加")
             outsideToLeft()
             val stale = marker("選択対象、").config[SemanticsActions.OnClick].action!!
             val camera = position(reference.text)

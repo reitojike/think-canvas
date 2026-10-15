@@ -21,7 +21,7 @@
 | blank / ink / 作成tool | 各既存ownerが処理 | tap / double tap / stylus / lasso所有権を変更しない |
 | 保存・Undo・ack | 保存guardと既存sessionが所有 | primary起動でもlive guardを確認、選択/開始だけで保存しない |
 
-既存fixtureの旧選択入口のみを、custom actionに変更した: `EdgeAutoPanTest`、`ViewportHistoryInteractionTest`、`NeutralInteractionTest`、`TextEditorDismissalTest`、`LongPressGestureTest`。`BoardListScreenTest`の既存編集入口は1回へ変更。既存assertionとannotationは保持する。
+既存fixtureの旧選択入口のみを、custom actionに変更した: `EdgeAutoPanTest`、`ViewportHistoryInteractionTest`、`NeutralInteractionTest`、`TextEditorDismissalTest`、`LongPressGestureTest`、`OffscreenIndicatorsTest`。`BoardListScreenTest`の既存編集入口は1回へ変更。既存assertionとannotationは保持する。
 
 ## ローカルで確認した結果
 
@@ -37,3 +37,9 @@
 実際のPR head、base鮮度、通常CIのrun/attempt、jobのRUN/SKIP、artifact digest、receipt/XML、canonical review、APKの署名/版は、[Issue #111](https://github.com/reitojike/think-canvas/issues/111)からリンクするDraft PRの検証記録を参照する。このファイルのローカル成功をAndroid runtime成功と読み替えない。
 
 代表実機、TalkBack、旧方式との実機比較は未確認。[quickstart](quickstart.md)に手順を記載し、Issueの対応するACは未完のまま残す。
+
+## 最初のPR smokeと限定補正
+
+run [38693659347 / #537 attempt1](https://github.com/reitojike/think-canvas/actions/runs/38693659347)はfresh exact 68/1/0/0のvalid red。新規に追加したprimary actionの統合assertionと他66件は成功し、`OffscreenIndicatorsTest#searchAndSelectionDeduplicateAndKeepStableAccessibleOrder`が旧通常click選択のためeditorを開き、indicator setupで停止した。
+
+補正1の範囲は同じOffscreenIndicators fixtureの選択入口だけ。8か所のtext primary clickとfamily分岐1か所を既存custom actionへ移し、別textへ置き換えるケースは旧選択の解除と対象追加を明示する。production、assertion、timeout、identity/annotation、selector、quarantineは変更しない。新しいheadの通常CIで再検証し、旧runのgreen部分を最終証拠へ流用しない。
