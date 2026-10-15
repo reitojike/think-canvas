@@ -77,6 +77,10 @@ class EdgeAutoPanTest {
         fun frames(count: Int) { repeat(count) { composeRule.mainClock.advanceTimeByFrame() } }
         fun savedSnapshot() = runBlocking { checkNotNull(CanvasStore.get(instrumentation.targetContext).savedBoard(1L)).snapshot }
         fun select(label: String) {
+            if (label == moving.text) {
+                action(label, "選択に追加")
+                return
+            }
             val nodes = composeRule.onAllNodesWithContentDescription(label).fetchSemanticsNodes()
             val node = nodes.first { it.config.contains(SemanticsActions.OnClick) }
             composeRule.runOnUiThread { assertTrue(node.config[SemanticsActions.OnClick].action!!.invoke()) }
@@ -259,7 +263,7 @@ class EdgeAutoPanTest {
         fun stationaryDrag(cancel: Boolean = false) {
             val selected = composeRule.onNodeWithContentDescription(moving.text).fetchSemanticsNode()
                 .config.getOrNull(SemanticsProperties.StateDescription) == "選択中"
-            if (!selected) composeRule.onNodeWithContentDescription(moving.text).performClick()
+            if (!selected) select(moving.text)
             val start = bounds("要素を移動").center
             val area = canvas
             val edge = Offset(area.right - 3f, area.top + area.height * .45f)

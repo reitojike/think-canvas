@@ -8,6 +8,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.Window
+import android.view.WindowInsets
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.activity.compose.setContent
@@ -21,6 +22,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -71,6 +73,7 @@ class LongPressGestureTest {
         val feedback: MutableList<HapticFeedbackType>,
         val openListCalls: AtomicInteger,
         val saveRequests: AtomicInteger,
+        val shares: MutableList<Set<String>>,
     )
 
     private fun withBoard(shapes: List<ShapeElement> = emptyList(), image: Boolean = false,
@@ -104,6 +107,7 @@ class LongPressGestureTest {
             val feedback = CopyOnWriteArrayList<HapticFeedbackType>()
             val openListCalls = AtomicInteger()
             val saveRequests = AtomicInteger()
+            val shares = CopyOnWriteArrayList<Set<String>>()
             val recorder = object : HapticFeedback {
                 override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
                     feedback.add(hapticFeedbackType)
@@ -119,7 +123,7 @@ class LongPressGestureTest {
                                 sessions.textEditorFor(1L, initial), sessions.saveStateFor(1L, initial),
                                 { saveRequests.incrementAndGet(); sessions.requestSave(1L, it) },
                                 { sessions.retrySave(1L) },
-                                { openListCalls.incrementAndGet() }, {},
+                                { openListCalls.incrementAndGet() }, { shares.add(it.toSet()) },
                                 viewportHistory = sessions.viewportHistoryFor(1L, initial))
                         }
                     }
@@ -130,7 +134,7 @@ class LongPressGestureTest {
                 composeRule.onNodeWithContentDescription("図形ツールを開く").performClick()
                 composeRule.onNodeWithContentDescription("ペン").assertExists()
             }
-            Harness(context, scenario, database, sessions, feedback, openListCalls, saveRequests).block()
+            Harness(context, scenario, database, sessions, feedback, openListCalls, saveRequests, shares).block()
         } finally {
             database.close()
             scenario.close()
@@ -241,6 +245,25 @@ class LongPressGestureTest {
         composeRule.waitUntil(10_000) { sessions.saveStateFor(1L, BoardSnapshot()).value == BoardSaveState.Idle }
         composeRule.onNodeWithContentDescription(description).performClick()
         composeRule.waitForIdle()
+    }
+
+    private fun selectionAction(description: String, label: String) {
+        val action = composeRule.onNodeWithContentDescription(description).fetchSemanticsNode()
+            .config[SemanticsActions.CustomActions].single { it.label == label }
+        composeRule.runOnUiThread { assertTrue(action.action()) }
+        composeRule.waitForIdle()
+    }
+
+    private fun Harness.awaitEditorClosed() {
+        composeRule.waitUntil(10_000) {
+            var imeHidden = false
+            scenario.onActivity {
+                imeHidden = it.window.decorView.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == false
+            }
+            imeHidden && sessions.textEditorFor(1L, BoardSnapshot()).draft.value == null
+        }
+        composeRule.waitForIdle()
+        assertNoTextDraft()
     }
 
     private fun Harness.awaitRows(predicate: (List<TextElementRow>) -> Boolean) {
@@ -418,7 +441,7 @@ class LongPressGestureTest {
         composeRule.onNodeWithContentDescription(text).assert(SemanticsMatcher.expectValue(
             SemanticsProperties.StateDescription, context.getString(
                 if (selected) R.string.selection_state_selected else R.string.unselected)))
-        if (!selected) assertEquals(context.getString(R.string.select),
+        if (!selected) assertEquals(context.getString(R.string.edit),
             composeRule.onNodeWithContentDescription(text).fetchSemanticsNode()
                 .config[SemanticsActions.OnClick].label)
     }
@@ -430,8 +453,84 @@ class LongPressGestureTest {
 
     @PrSmoke
     @Test
-    fun elementLongPressReleaseOpensMenuAndDeleteIsReachable() = withBoard {
+    fun elementLongPressReleaseOpensMenuAndDeleteIsReachable() = withBoard(shapes = listOf(
+        ShapeElement(id = "selection-anchor", kind = ShapeKind.RECTANGLE,
+            x = 600f, y = 750f, width = 120f, height = 80f),
+    )) {
+        assertTextPrimaryActions()
         assertElementLongPressRelease()
+    }
+
+    private fun Harness.assertTextPrimaryActions() {
+        val before = storedSnapshot()
+        val editor = sessions.textEditorFor(1L, BoardSnapshot())
+        // One native short tap edits; the tap that closes it cannot edit another text.
+        assertSelection(leftText, false)
+        longPress(centerOf(leftText), emptyList(), held = false)
+        assertEquals("left", editor.draft.value?.id)
+        composeRule.waitUntil(10_000) {
+            var imeShown = false
+            scenario.onActivity {
+                imeShown = it.window.decorView.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true
+            }
+            imeShown
+        }
+        longPress(centerOf(rightText), emptyList(), held = false)
+        awaitEditorClosed()
+        assertSelection(leftText, true)
+        longPress(centerOf(rightText), emptyList(), held = false)
+        assertEquals("right", editor.draft.value?.id)
+        click("やめる")
+        awaitEditorClosed()
+        selectionAction(rightText, "選択から外す")
+
+        // Explicit selection keeps movement and sharing reachable without opening an editor.
+        longPress(centerOf(leftText), emptyList())
+        click(context.getString(R.string.select))
+        assertNoTextDraft()
+        assertSelection(leftText, true)
+        assertGripCount(1)
+        click("選択範囲を画像で共有")
+        assertEquals(listOf(setOf("left")), shares.toList())
+        selectionAction("四角", "選択に追加")
+        assertEquals("選択に追加", composeRule.onNodeWithContentDescription(rightText)
+            .fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+        longPress(centerOf(rightText), emptyList(), held = false)
+        assertNoTextDraft()
+        assertSelection(rightText, true)
+        assertSelection(leftText, true)
+        assertGripCount(2)
+        assertEquals("選択から外す", composeRule.onNodeWithContentDescription(rightText)
+            .fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+        click(rightText)
+        assertNoTextDraft()
+        assertGripCount(1)
+        click(leftText)
+        assertNoTextDraft()
+        assertGripCount(0)
+        click(rightText)
+        assertEquals("right", editor.draft.value?.id)
+        click("やめる")
+        awaitEditorClosed()
+        selectionAction(rightText, "選択から外す")
+
+        // Search changes the viewport only; an independent text tap still opens editing.
+        click("ボード内を検索")
+        composeRule.onNodeWithContentDescription("ボード内を探す").performTextReplacement(leftText)
+        composeRule.waitUntil(10_000) {
+            sessions.viewportHistoryFor(1L, BoardSnapshot()).canBack
+        }
+        composeRule.waitForIdle()
+        assertEquals(null, editor.draft.value)
+        click(leftText)
+        assertEquals("left", editor.draft.value?.id)
+        click("やめる")
+        awaitEditorClosed()
+        click("検索を閉じる")
+        selectionAction(leftText, "選択から外す")
+        assertEquals(0, saveRequests.get())
+        assertEquals(before, storedSnapshot())
+        assertTrue(!sessions.stateFor(1L, BoardSnapshot()).canUndo)
     }
 
     @PrSmoke
@@ -630,7 +729,7 @@ class LongPressGestureTest {
             assertEquals(before, rows())
         }
         cancelBlankPickup()
-        click(leftText)
+        selectionAction(leftText, "選択に追加")
         cancelBlankPickup()
         composeRule.onNodeWithContentDescription(leftText).assert(SemanticsMatcher.expectValue(
             SemanticsProperties.StateDescription, context.getString(R.string.selection_state_selected)))
@@ -647,7 +746,7 @@ class LongPressGestureTest {
     @Test
     fun pickupExplainsSelectionAdditionAndGroupMovement() = withBoard {
         val before = rows()
-        click(leftText)
+        selectionAction(leftText, "選択に追加")
         longPress(centerOf(rightText), emptyList(), whileHeld = {
             assertPickup("ドラッグで移動、離すと選択に追加")
             assertSelection(leftText, true)

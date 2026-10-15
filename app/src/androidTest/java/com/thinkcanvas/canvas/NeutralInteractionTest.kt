@@ -185,13 +185,14 @@ class NeutralInteractionTest {
             composeRule.waitForIdle()
         }
         fun startExisting() {
-            val selected = composeRule.onNodeWithContentDescription(note.text)
-            // Existing edit opens by double click; preserve the selection-aware tap contract.
-            val selection = selected.fetchSemanticsNode().config
-                .getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription)
-            if (selection != "選択中") selected.performClick()
             composeRule.onNodeWithContentDescription(note.text).performClick()
             waitEditor("テキストを編集")
+        }
+        fun selectNote() {
+            val actions = composeRule.onNodeWithContentDescription(note.text)
+                .fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            composeRule.runOnUiThread { assertTrue(actions.single { it.label == "選択に追加" }.action()) }
+            composeRule.waitForIdle()
         }
         fun renameRegion() {
             val actions = composeRule.onAllNodesWithContentDescription("囲み: Cluster")
@@ -512,7 +513,7 @@ class NeutralInteractionTest {
             .fetchSemanticsNodes().size)
         assertCanvasStillOpen()
 
-        composeRule.onNodeWithContentDescription(note.text).performClick()
+        selectNote()
         back()
         val state = composeRule.onNodeWithContentDescription(note.text).fetchSemanticsNode().config
             .getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription)
@@ -586,7 +587,7 @@ class NeutralInteractionTest {
             } finally { if (!ended) send(MotionEvent.ACTION_CANCEL, start) }
             composeRule.waitForIdle()
         }
-        composeRule.onNodeWithContentDescription(note.text).performClick()
+        selectNote()
         composeRule.waitUntil(5_000) { noteSelected() }
         composeRule.onNodeWithContentDescription("図形ツールを開く").performClick()
         composeRule.waitForIdle()
@@ -695,7 +696,7 @@ class NeutralInteractionTest {
     @Test fun backBeforeSelectionPreviewRejectsOldTapMoveAndResize() = withBoard {
         for (label in listOf(note.text, "要素を移動", "移動", "サイズ変更")) {
             if (label == note.text || label == "要素を移動") {
-                composeRule.onNodeWithContentDescription(note.text).performClick()
+                selectNote()
             } else {
                 val target = composeRule.onAllNodesWithContentDescription("囲み: Cluster")
                     .fetchSemanticsNodes().single { it.config.contains(SemanticsActions.CustomActions) }
