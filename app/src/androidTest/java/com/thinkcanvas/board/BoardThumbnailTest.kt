@@ -83,6 +83,96 @@ class BoardThumbnailTest {
         } finally {
             bitmap.recycle()
         }
+
+        val pixelShapes = listOf(
+            ShapeElement(id = "tiny-rect", kind = ShapeKind.RECTANGLE,
+                x = 0f, y = 0f, width = 40f, height = 30f),
+            ShapeElement(id = "ordinary-rect", kind = ShapeKind.RECTANGLE,
+                x = 1_000f, y = 0f, width = 1_000f, height = 1_000f),
+            ShapeElement(id = "tiny-ellipse", kind = ShapeKind.ELLIPSE,
+                x = 3_000f, y = 0f, width = 40f, height = 30f),
+            ShapeElement(id = "ordinary-ellipse", kind = ShapeKind.ELLIPSE,
+                x = 4_000f, y = 0f, width = 1_000f, height = 1_000f),
+            ShapeElement(id = "unnamed-region", kind = ShapeKind.REGION,
+                x = 6_000f, y = 0f, width = 1_000f, height = 1_000f),
+        )
+        val pixelSnapshot = BoardSnapshot(shapes = pixelShapes)
+        data class PixelCrop(val id: String, val left: Int, val top: Int,
+                             val right: Int, val bottom: Int)
+        for (density in listOf(1f, 3f)) {
+            val width = 240f * density
+            val height = 160f * density
+            val testBitmap = Bitmap.createBitmap(width.toInt(), height.toInt(), Bitmap.Config.ARGB_8888)
+            try {
+                drawBoardThumbnail(Canvas(testBitmap), pixelSnapshot, width, height, density)
+                val paper = 0xFFF7F6F4.toInt()
+                fun blendChannel(sourceChannel: Int, paperChannel: Int) =
+                    (sourceChannel * 102 + paperChannel * (255 - 102)) / 255
+                val maxOutline = intArrayOf(
+                    blendChannel(0xBD, 0xF7), blendChannel(0xB8, 0xF6),
+                    blendChannel(0xB1, 0xF4))
+                val title = titlePaint(density)
+                val label = labelPaint(density)
+                var scale = 1f
+                var fitBounds = thumbnailFitBounds(pixelSnapshot, title, label, scale, density)!!
+                repeat(8) {
+                    scale = thumbnailFitScale(width, height, fitBounds, density)
+                    fitBounds = thumbnailFitBounds(pixelSnapshot, title, label, scale, density)!!
+                }
+                val scaleDp = scale / density
+                assertTrue("pixel fixture is FAR at density $density", 14f * scaleDp < 5f)
+                assertTrue("tiny shapes are below 24dp at density $density", 30f * scaleDp < 24f)
+                assertTrue("ordinary shapes are at least 24dp at density $density", 1_000f * scaleDp >= 24f)
+                val offsetX = (width - (fitBounds.right - fitBounds.left) * scale) / 2f -
+                    fitBounds.left * scale
+                val offsetY = (height - (fitBounds.bottom - fitBounds.top) * scale) / 2f -
+                    fitBounds.top * scale
+                val crops = pixelShapes.filter { it.kind != ShapeKind.REGION }.map { shape ->
+                    val pad = 2f * density
+                    PixelCrop(shape.id,
+                        kotlin.math.floor(offsetX + shape.x * scale - pad).toInt(),
+                        kotlin.math.floor(offsetY + shape.y * scale - pad).toInt(),
+                        kotlin.math.ceil(offsetX + (shape.x + shape.width) * scale + pad).toInt(),
+                        kotlin.math.ceil(offsetY + (shape.y + shape.height) * scale + pad).toInt())
+                }
+                crops.forEach { crop ->
+                    assertTrue("${crop.id} crop is in bitmap at density $density",
+                        crop.left >= 0 && crop.top >= 0 && crop.right <= testBitmap.width &&
+                            crop.bottom <= testBitmap.height && crop.left < crop.right && crop.top < crop.bottom)
+                }
+                for (i in crops.indices) for (j in i + 1 until crops.size) {
+                    val a = crops[i]
+                    val b = crops[j]
+                    assertTrue("${a.id} and ${b.id} crops do not overlap at density $density",
+                        a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top)
+                }
+                fun cropPixels(crop: PixelCrop) = (crop.top until crop.bottom).flatMap { y ->
+                    (crop.left until crop.right).map { x -> testBitmap.getPixel(x, y) }
+                }
+                fun channel(pixel: Int, shift: Int) = (pixel shr shift) and 0xFF
+                val tinyRectPixels = cropPixels(crops.first { it.id == "tiny-rect" })
+                val tinyEllipsePixels = cropPixels(crops.first { it.id == "tiny-ellipse" })
+                for ((id, pixels) in listOf("tiny-rect" to tinyRectPixels,
+                        "tiny-ellipse" to tinyEllipsePixels)) {
+                    val inkPixels = pixels.filter { it != paper }
+                    assertTrue("$id outline is distinguishable from paper at density $density",
+                        inkPixels.any { channel(it, 16) < 240 && channel(it, 8) < 240 && channel(it, 0) < 240 })
+                    assertTrue("$id outline stays within 40% blend darkness at density $density",
+                        inkPixels.all { channel(it, 16) >= maxOutline[0] - 1 &&
+                            channel(it, 8) >= maxOutline[1] - 1 && channel(it, 0) >= maxOutline[2] - 1 })
+                }
+                for (id in listOf("ordinary-rect", "ordinary-ellipse")) {
+                    val ordinaryPixels = cropPixels(crops.first { it.id == id }).filter { it != paper }
+                    // A 1px antialiased stroke can split coverage across adjacent pixels.
+                    // It must still be darker than any 40%-alpha pixel, allowing rounding.
+                    assertTrue("$id resets to ordinary stroke darkness at density $density",
+                        ordinaryPixels.any { channel(it, 16) < maxOutline[0] - 2 &&
+                            channel(it, 8) < maxOutline[1] - 2 && channel(it, 0) < maxOutline[2] - 2 })
+                }
+            } finally {
+                testBitmap.recycle()
+            }
+        }
     }
 
     @Test fun fittedTitleGeometryMatchesItsFixedPixelExtent() {

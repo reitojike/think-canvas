@@ -64,6 +64,6 @@ app/src/androidTest/java/com/thinkcanvas/canvas/
 
 ## Complexity Tracking
 
-Issue #108では表示投影に淡い輪郭のID集合を一つ追加し、rendererの濃さと見出しの省略境界へ共用する。線幅・rendered bounds・hit-testのgeometryは変更しない。選択・検索・移動のkeepと既存の非表示条件を先に適用し、保存モデルや新しい操作モードを追加しない。
+Issue #108では表示投影に淡い輪郭のID集合を一つ追加し、canvasとサムネイルrendererの濃さ、見出しの省略境界へ共用する。canvasの2dp、サムネイルの1dp線幅・fit・bounds、hit-testのgeometryは変更しない。サムネイルの共有Paintは図形ごとにalphaを設定し、後続図形へ淡色を持ち越さない。選択・検索・移動のkeepと既存の非表示条件を先に適用し、保存モデルや新しい操作モードを追加しない。
 
 新しい framework や保存 schema は不要。PRD が要求する semantic zoom は通常の一律拡大縮小より複雑だが、表示用の純粋な計算を一箇所へ集め、描画と当たり判定で共用する。
