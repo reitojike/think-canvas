@@ -84,13 +84,15 @@ class BoardThumbnailTest {
             bitmap.recycle()
         }
 
+        // Keep outline edges separate: sub-stroke bodies can composite overlapping edges.
+        // These bodies are still below the FAR 24dp threshold after fitting.
         val pixelShapes = listOf(
             ShapeElement(id = "tiny-rect", kind = ShapeKind.RECTANGLE,
-                x = 0f, y = 0f, width = 40f, height = 30f),
+                x = 0f, y = 0f, width = 400f, height = 300f),
             ShapeElement(id = "ordinary-rect", kind = ShapeKind.RECTANGLE,
                 x = 1_000f, y = 0f, width = 1_000f, height = 1_000f),
             ShapeElement(id = "tiny-ellipse", kind = ShapeKind.ELLIPSE,
-                x = 3_000f, y = 0f, width = 40f, height = 30f),
+                x = 3_000f, y = 0f, width = 400f, height = 300f),
             ShapeElement(id = "ordinary-ellipse", kind = ShapeKind.ELLIPSE,
                 x = 4_000f, y = 0f, width = 1_000f, height = 1_000f),
             ShapeElement(id = "unnamed-region", kind = ShapeKind.REGION,
@@ -121,7 +123,8 @@ class BoardThumbnailTest {
                 }
                 val scaleDp = scale / density
                 assertTrue("pixel fixture is FAR at density $density", 14f * scaleDp < 5f)
-                assertTrue("tiny shapes are below 24dp at density $density", 30f * scaleDp < 24f)
+                assertTrue("tiny shapes are below 24dp at density $density", 300f * scaleDp < 24f)
+                assertTrue("tiny outline edges are separate at density $density", 300f * scaleDp > 4f)
                 assertTrue("ordinary shapes are at least 24dp at density $density", 1_000f * scaleDp >= 24f)
                 val offsetX = (width - (fitBounds.right - fitBounds.left) * scale) / 2f -
                     fitBounds.left * scale
