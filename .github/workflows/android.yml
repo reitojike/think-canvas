@@ -1,6 +1,7 @@
 name: Android checks
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main]
@@ -15,6 +16,7 @@ concurrency:
 jobs:
   android:
     name: lint・test・build・公開境界
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -119,7 +121,7 @@ jobs:
 
   managed-device:
     name: Android 17 non-quarantined GMD
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
