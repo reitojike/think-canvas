@@ -7,7 +7,8 @@ read-only の作業、親・roadmap・tracking・coordination Issue、close 禁�
 
 1. PR が実際に merge されたこと、merge commit の SHA、必要なら main の CI 結果を確認します。
    PR の merge だけで Issue の完了を推定しません。
-   Android checksのnatural main pushでbasic checksがRUN/success、PR smokeがjob-level SKIPPED、
+   Android checksのmain push、またはTask Contractで許可されたmain指定の手動起動で、
+   basic checksがRUN/success、PR smokeがjob-level SKIPPED、
    main regression（NOT FlakyTest）がRUN/successであることを確認します。merged SHAのfresh XMLでcurrent-sourceの期待identity集合へのexact一致、
    missing/extra/duplicate0、testsは実行時receiptのexpected countと一致、failures/errors/skipped=0、receipt/identity/counter/device/freshness一致を照合します。
    quarantineとunfiltered fullはmain pushで起動しません。

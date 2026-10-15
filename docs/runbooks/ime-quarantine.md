@@ -41,7 +41,7 @@ test body、production、timeout、assertion、retry は変更しません。
 | Lane | 起動境界 | Runner arguments |
 | --- | --- | --- |
 | PR smoke | pull_request、required process gate | annotation=PrSmoke、notAnnotation=FlakyTest |
-| main regression | main push、required process gate（PRはjob-level SKIPPED） | notAnnotation=FlakyTest |
+| main regression | main push / main指定の手動起動、required process gate（PRはjob-level SKIPPED） | notAnnotation=FlakyTest |
 | quarantine | default branch schedule / workflow_dispatch | annotation=FlakyTest |
 | unfiltered full | android-full.ymlのworkflow_dispatchのみ | filterなし |
 
