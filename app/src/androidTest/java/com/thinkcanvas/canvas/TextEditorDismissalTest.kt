@@ -129,10 +129,9 @@ class TextEditorDismissalTest {
                 }
                 return checkNotNull(state)
             }
-            if (selectionState() == unselected) {
-                composeRule.onNodeWithContentDescription(target.text).performClick()
-                assertEquals(selected, selectionState())
-            }
+            selectionState()
+            assertEquals(context.getString(R.string.edit), composeRule.onNodeWithContentDescription(target.text)
+                .fetchSemanticsNode().config[SemanticsActions.OnClick].label)
             composeRule.onNodeWithContentDescription(target.text).performClick()
             composeRule.waitUntil(10_000) {
                 val nodes = composeRule.onAllNodesWithContentDescription(existingEditor).fetchSemanticsNodes()
@@ -160,6 +159,16 @@ class TextEditorDismissalTest {
                 .fetchSemanticsNodes().single()
             assertEquals(context.getString(R.string.selection_state_selected),
                 node.config.getOrNull(SemanticsProperties.StateDescription))
+        }
+        fun selectExistingText() {
+            val actions = composeRule.onNodeWithContentDescription(original.text)
+                .fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            composeRule.runOnUiThread {
+                assertTrue(actions.single { it.label == "選択に追加" }.action())
+            }
+            composeRule.waitForIdle()
+            assertExistingSelected(original)
+            assertEquals(null, editor.draft.value)
         }
         fun prepareExistingDraft(text: String) {
             composeRule.waitForIdle()
@@ -729,7 +738,7 @@ class TextEditorDismissalTest {
     }
 
     @Test fun selectedBlankSingleWaitsThenClearsWithoutDraft() = withBoard {
-        composeRule.onNodeWithContentDescription(original.text).performClick()
+        selectExistingText()
         val configuration = composeRule.onNodeWithContentDescription("キャンバス")
             .fetchSemanticsNode().layoutInfo.viewConfiguration
         val location = point(.1f, .23f)
@@ -757,7 +766,7 @@ class TextEditorDismissalTest {
 
     @Test fun selectedShiftedNativeDoubleTapKeepsSelectionAndOneNavigation() = withBoard {
         val saves = trackSaves()
-        composeRule.onNodeWithContentDescription(original.text).performClick()
+        selectExistingText()
         val first = point(.1f, .23f)
         val history = sessions.viewportHistoryFor(1L, BoardSnapshot())
         val before = history.viewportState.value
@@ -780,7 +789,7 @@ class TextEditorDismissalTest {
         val saves = trackSaves()
         // 選択paddingの表示変化を固定referenceのcamera比較に混ぜない。
         val baseline = settledCamera(shown = false)
-        composeRule.onNodeWithContentDescription(original.text).performClick()
+        selectExistingText()
         val first = point(.1f, .23f)
         val slop = ViewConfiguration.get(InstrumentationRegistry.getInstrumentation().targetContext)
             .scaledDoubleTapSlop.toFloat()
@@ -956,7 +965,7 @@ class TextEditorDismissalTest {
         for (action in listOf("zoom", "selectedZoom", "tools", "share")) withBoard {
             val saves = trackSaves()
             val selected = action == "selectedZoom" || action == "share"
-            if (selected) composeRule.onNodeWithContentDescription(original.text).performClick()
+            if (selected) selectExistingText()
             val label = when (action) {
                 "tools" -> "図形ツールを開く"
                 "share" -> "選択範囲を画像で共有"

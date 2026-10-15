@@ -404,7 +404,6 @@ fun CanvasScreen(
         renderedGeometry.boundsById)
     val latestProjection = rememberUpdatedState(projection)
     val latestBodyDp = rememberUpdatedState(bodyDp)
-    val latestSelected = rememberUpdatedState(selectedId)
     val latestSelectedIds = rememberUpdatedState(selectedIds)
     val latestTool = rememberUpdatedState(tool)
     val latestInkTool = rememberUpdatedState(inkTool)
@@ -1065,6 +1064,38 @@ fun CanvasScreen(
         }
     }
 
+    fun textPrimaryActionAllowed(): Boolean = !exitBlocked() &&
+        editorSession.draft.value == null && editorSession.regionNameDraft.value == null &&
+        editorSession.imageDescriptionDraft.value == null && !imagePickerOpen &&
+        discardTarget == null && attachmentEditor == null && menuTarget == null &&
+        latestInkTool.value == null && latestTool.value == SpatialTool.NONE
+
+    fun activateText(id: String): Boolean {
+        if (!textPrimaryActionAllowed() || !latestProjection.value.visible(id)) return false
+        val element = board.elements.firstOrNull { it.id == id } ?: return false
+        stopFling()
+        cancelBlankTap()
+        val selection = latestSelectedIds.value
+        when (textPrimaryAction(id, selection)) {
+            TextPrimaryAction.EDIT -> {
+                selectedId = id
+                selectedIds = setOf(id)
+                writeTracedDraft("existingTap", Draft(id, element.x, element.y,
+                    element.text, element.kind, element.color))
+            }
+            TextPrimaryAction.ADD_TO_SELECTION -> {
+                selectedIds = selection + id
+                guidance = "${selectedIds.size}個を選択"
+            }
+            TextPrimaryAction.REMOVE_FROM_SELECTION -> {
+                selectedIds = selection - id
+                if (selectedId == id) selectedId = null
+                guidance = "${selectedIds.size}個を選択"
+            }
+        }
+        return true
+    }
+
     fun tap(point: Offset, eventUptimeMillis: Long?) {
         stopFling()
         if (editorSession.draft.value != null || exitBlocked()) return
@@ -1096,13 +1127,7 @@ fun CanvasScreen(
             } else if (spatial in latestSelectedIds.value && board.shapes.any { it.id == spatial && it.kind == ShapeKind.REGION }) {
                 openRegionName(spatial, board.shapes.first { it.id == spatial }.name)
             } else { selectedId = null; selectedIds = setOf(spatial) }
-        } else if (element != null && latestSelectedIds.value.size > 1 && element.id in latestSelectedIds.value) {
-            cancelBlankTap()
-            selectedIds = latestSelectedIds.value - element.id
-        } else if (element != null && latestSelected.value == element.id) {
-            cancelBlankTap()
-            writeTracedDraft("existingTap", Draft(element.id, element.x, element.y, element.text, element.kind, element.color))
-        } else if (element != null) { cancelBlankTap(); selectedId = element.id; selectedIds = setOf(element.id) }
+        } else if (element != null) activateText(element.id)
     }
 
     fun nudge(id: String, dx: Float, dy: Float): Boolean {
@@ -2153,9 +2178,13 @@ fun CanvasScreen(
                             contentDescription = element.text
                             stateDescription = if (selected) selectedLabel else unselectedLabel
                             if (elementActionsEnabled) {
-                                onClick(label = if (selected) editLabel else selectLabel) {
-                                    tap(Offset(screenX + 1, screenY + 1), null)
-                                    true
+                                if (textPrimaryActionAllowed()) {
+                                    val primaryLabel = when (textPrimaryAction(element.id, selectedIds)) {
+                                        TextPrimaryAction.EDIT -> editLabel
+                                        TextPrimaryAction.ADD_TO_SELECTION -> "選択に追加"
+                                        TextPrimaryAction.REMOVE_FROM_SELECTION -> "選択から外す"
+                                    }
+                                    onClick(label = primaryLabel) { activateText(element.id) }
                                 }
                                 customActions = listOf(
                                     if (element.id in selectedIds)
@@ -2604,6 +2633,13 @@ fun CanvasScreen(
                             Text("代替テキストを編集")
                         }
                     } else if (board.elements.any { it.id == id }) {
+                        EditorOption(selectLabel, false, false, enabled = !exitBlocked()) {
+                            if (exitBlocked()) return@EditorOption
+                            cancelBlankTap()
+                            selectedId = id
+                            selectedIds = setOf(id)
+                            menuTarget = null
+                        }
                         EditorOption(stringResource(R.string.edit), false, false, enabled = !saveBlocked()) {
                             if (saveBlocked()) return@EditorOption
                             val element = board.elements.first { it.id == id }

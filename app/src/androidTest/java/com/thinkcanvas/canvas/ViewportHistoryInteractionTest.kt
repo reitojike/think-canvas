@@ -862,7 +862,7 @@ class ViewportHistoryInteractionTest {
     }
 
     @Test fun moveAutoPanCancelAddsNoEntryAndNextPanHasOneEntry() = withBoard {
-        click(note.text)
+        action(note.text, "選択に追加")
         val start = nodes("要素を移動").single().boundsInWindow.center
         val edge = Offset(canvas.right - 3f, canvas.center.y)
         val time = SystemClock.uptimeMillis()

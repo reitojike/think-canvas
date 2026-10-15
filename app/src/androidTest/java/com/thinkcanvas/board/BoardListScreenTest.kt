@@ -1097,8 +1097,6 @@ class BoardListScreenTest {
             sessions.setSaveOperation { boardId, snapshot -> CanvasStore.get(context).save(boardId, snapshot) }
             awaitDescription("編集前", substring = true)
             composeRule.onNodeWithContentDescription("編集前", substring = true).performClick()
-            composeRule.waitForIdle()
-            composeRule.onNodeWithContentDescription("編集前", substring = true).performClick()
             composeRule.onNode(hasSetTextAction()).performTextClearance()
             composeRule.onNode(hasSetTextAction()).performTextInput("編集後")
             composeRule.onNodeWithText("完了").performClick()
