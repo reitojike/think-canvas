@@ -116,17 +116,92 @@ class SemanticNavigationTest {
             .semanticProjection(.5f, 14f).visible("title"))
     }
 
-    @Test fun hiddenSmallShapeDoesNotClipFarTitle() {
+    @Test fun smallOutlineShapeDoesNotClipFarTitle() {
         val title = TextElement(id = "title", text = "見出し", kind = TextKind.TITLE,
             x = 0f, y = 0f)
         val small = ShapeElement(id = "small", kind = ShapeKind.RECTANGLE,
             x = 10f, y = 0f, width = 40f, height = 30f)
         val snapshot = BoardSnapshot(texts = listOf(title), shapes = listOf(small))
         val projection = snapshot.semanticProjection(.25f, 14f)
-        assertFalse(projection.visible("small"))
+        assertTrue(projection.visible("small"))
+        assertTrue("small" in projection.outlineShapes)
         assertTrue(projection.visible("title"))
+        assertFalse(projection.titleBoundary("small"))
         assertEquals(null, snapshot.titleAvailableWidth(title, 22.5f,
-            snapshot.shapes.filter { projection.visible(it.id) }))
+            snapshot.shapes.filter { projection.titleBoundary(it.id) }))
+        val selected = snapshot.semanticProjection(.25f, 14f, setOf("small"))
+        assertTrue(selected.visible("small"))
+        assertTrue("small" !in selected.outlineShapes)
+        assertTrue(selected.titleBoundary("small"))
+        assertFalse(selected.visible("title"))
+    }
+
+    @Test fun outlineThresholdAppliesToFarRectanglesAndEllipsesOnly() {
+        val rectangle = ShapeElement(id = "rect", kind = ShapeKind.RECTANGLE,
+            x = 0f, y = 0f, width = 100f, height = 80f)
+        val ellipse = rectangle.copy(id = "ellipse", kind = ShapeKind.ELLIPSE, x = 120f)
+        val exact = rectangle.copy(id = "exact", x = 240f, width = 96f, height = 96f)
+        val ordinary = rectangle.copy(id = "ordinary", x = 360f, width = 100f, height = 100f)
+        val region = rectangle.copy(id = "region", kind = ShapeKind.REGION, x = 480f,
+            width = 100f, height = 100f)
+        val minimum = rectangle.copy(id = "minimum", x = 600f, width = 40f, height = 30f)
+        val snapshot = BoardSnapshot(shapes = listOf(rectangle, ellipse, exact, ordinary, region, minimum))
+        val far = snapshot.semanticProjection(.25f, 14f)
+        assertEquals(setOf("rect", "ellipse", "minimum"), far.outlineShapes)
+        assertTrue(far.visible("exact"))
+        assertTrue(far.visible("ordinary"))
+        assertTrue("region" !in far.outlineShapes)
+        val denseFar = snapshot.semanticProjection(.25f, 14f, pixelsPerDp = 3f)
+        assertTrue(denseFar.visible("rect"))
+        assertTrue("rect" in denseFar.outlineShapes)
+        assertTrue("ellipse" in denseFar.outlineShapes)
+        val minimumScale = snapshot.semanticProjection(.15f, 14f, pixelsPerDp = 4f)
+        assertTrue(minimumScale.visible("minimum"))
+        assertTrue("minimum" in minimumScale.outlineShapes)
+        val kept = snapshot.semanticProjection(.15f, 14f, setOf("minimum"), pixelsPerDp = 4f)
+        assertTrue(kept.visible("minimum"))
+        assertFalse("minimum" in kept.outlineShapes)
+        assertTrue(snapshot.semanticProjection(.5f, 14f).outlineShapes.isEmpty())
+        assertTrue(snapshot.semanticProjection(1f, 14f).outlineShapes.isEmpty())
+    }
+
+    @Test fun outlineProjectionPreservesCollapsedCoverageAndFullyHiddenShape() {
+        val region = ShapeElement(id = "region", kind = ShapeKind.REGION,
+            x = 0f, y = 0f, width = 300f, height = 300f, name = "Group")
+        val covered = ShapeElement(id = "covered", kind = ShapeKind.RECTANGLE,
+            x = 10f, y = 10f, width = 50f, height = 50f)
+        val coveredText = TextElement(id = "covered-text", text = "inside", x = 20f, y = 20f)
+        val containsHiddenBody = ShapeElement(id = "body-container", kind = ShapeKind.RECTANGLE,
+            x = 400f, y = 0f, width = 80f, height = 80f)
+        val body = TextElement(id = "body", text = "body", x = 420f, y = 20f)
+        val snapshot = BoardSnapshot(texts = listOf(coveredText, body),
+            shapes = listOf(region, covered, containsHiddenBody))
+        val projection = snapshot.semanticProjection(.25f, 14f)
+        assertFalse(projection.visible("covered"))
+        assertFalse(projection.visible("covered-text"))
+        assertFalse(projection.visible("body-container"))
+        assertFalse(projection.visible("body"))
+        assertTrue("region" !in projection.outlineShapes)
+        assertTrue("covered" !in projection.outlineShapes)
+        val kept = snapshot.semanticProjection(.25f, 14f, setOf("covered", "body"))
+        assertTrue(kept.visible("covered"))
+        assertFalse("covered" in kept.outlineShapes)
+        assertTrue(kept.visible("body"))
+        assertTrue(kept.visible("body-container"))
+        assertTrue("body-container" in kept.outlineShapes)
+    }
+
+    @Test fun arrowToSmallOutlineStillUsesOtherFarVisibilityRules() {
+        val small = ShapeElement(id = "small", kind = ShapeKind.RECTANGLE,
+            x = 0f, y = 0f, width = 40f, height = 30f)
+        val longArrow = ArrowElement(id = "long", from = ArrowEnd.Attached("small", .5f, .5f),
+            to = ArrowEnd.Free(240f, 15f))
+        val shortArrow = longArrow.copy(id = "short", to = ArrowEnd.Free(100f, 15f))
+        val snapshot = BoardSnapshot(shapes = listOf(small), arrows = listOf(longArrow, shortArrow))
+        val projection = snapshot.semanticProjection(.25f, 14f)
+        assertTrue(projection.visible("small"))
+        assertTrue(projection.visible("long"))
+        assertFalse(projection.visible("short"))
     }
 
     @Test fun bentArrowUsesRenderedCurveExtentInFarView() {

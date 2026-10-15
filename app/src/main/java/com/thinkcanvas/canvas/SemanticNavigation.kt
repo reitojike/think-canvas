@@ -16,8 +16,10 @@ data class SemanticProjection(
     val collapsedRegions: Set<String>,
     val hidden: Set<String>,
     val midProgress: Float,
+    val outlineShapes: Set<String> = emptySet(),
 ) {
     fun visible(id: String) = id !in hidden
+    fun titleBoundary(id: String) = visible(id) && id !in outlineShapes
     fun farLikeRegion(id: String) = tier == SemanticTier.FAR || id in collapsedRegions
 }
 
@@ -58,16 +60,17 @@ fun BoardSnapshot.semanticProjection(
     texts.filter { it.id !in keep &&
         (covered(it.id) || tier == SemanticTier.FAR && it.kind == TextKind.BODY) }
         .forEach { hidden += it.id }
+    val outlineShapes = shapes.filter { shape -> shape.kind != ShapeKind.REGION && shape.id !in keep &&
+        tier == SemanticTier.FAR && apparentDp(min(shape.width, shape.height)) < 24f
+    }.map { it.id }.toSet()
     shapes.filter { it.kind != ShapeKind.REGION && it.id !in keep }.forEach { shape ->
         val contained = texts.filter { shape.bounds().contains(textCenter(it)) }
-        if (covered(shape.id) || tier == SemanticTier.FAR &&
-            apparentDp(min(shape.width, shape.height)) < 24f ||
-            contained.isNotEmpty() && contained.all { it.id in hidden }) hidden += shape.id
+        if (covered(shape.id) || contained.isNotEmpty() && contained.all { it.id in hidden }) hidden += shape.id
     }
     val titleGlyphDp = max(titleDp * scale, if (tier == SemanticTier.FAR) 9f else 11f)
     if (tier != SemanticTier.NEAR) texts.filter { it.kind == TextKind.TITLE && it.id !in keep &&
         titleAvailableWidth(it, titleLineHeightWorld,
-            shapes.filter { shape -> shape.id !in hidden })?.let { width ->
+            shapes.filter { shape -> shape.id !in hidden && shape.id !in outlineShapes })?.let { width ->
             apparentDp(width) < titleGlyphDp * 2f } == true }
         .forEach { hidden += it.id }
     shapes.filter { it.kind != ShapeKind.REGION && it.id !in keep && it.id !in hidden }.forEach { shape ->
@@ -106,7 +109,7 @@ fun BoardSnapshot.semanticProjection(
     }.forEach { hidden += it.id }
     hidden.removeAll(keep)
     return SemanticProjection(tier, collapsed.map { it.id }.toSet(), hidden,
-        ((9f - bodyDp * scale) / 4f).coerceIn(0f, 1f))
+        ((9f - bodyDp * scale) / 4f).coerceIn(0f, 1f), outlineShapes - hidden)
 }
 
 data class CanvasMatch(val id: String, val bounds: WorldBounds, val region: Boolean)

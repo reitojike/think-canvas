@@ -215,6 +215,7 @@ internal fun drawBoardThumbnail(canvas: AndroidCanvas, snapshot: BoardSnapshot,
         }
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x0F23211E; style = Paint.Style.FILL }
         snapshot.shapes.filter { projection.visible(it.id) }.forEach { shape ->
+            outline.alpha = if (shape.id in projection.outlineShapes) 102 else 255
             val x = left + shape.x * scale
             val y = top + shape.y * scale
             val right = x + shape.width * scale

@@ -296,7 +296,7 @@ fun CanvasScreen(
     val keptIds = selectedIds + matchIds + listOfNotNull(regionNameId)
     val initialProjection = snapshot.semanticProjection(viewport.scale, bodyDp,
         keptIds, density.density, titleDp, titleLineHeightWorld)
-    val boundaryShapes = snapshot.shapes.filter { initialProjection.visible(it.id) }
+    val boundaryShapes = snapshot.shapes.filter { initialProjection.titleBoundary(it.id) }
     fun measureTextExtent(element: TextElement, atScale: Float,
                           keepIds: Set<String>, visibleShapes: List<ShapeElement>): TextExtent {
         val tier = semanticTier(bodyDp, atScale)
@@ -360,7 +360,7 @@ fun CanvasScreen(
             for (pass in 0 until 8) {
                 val approximateProjection = snapshot.semanticProjection(fitted.scale, bodyDp,
                     pixelsPerDp = density.density, titleDp = titleDp)
-                val visibleShapes = snapshot.shapes.filter { approximateProjection.visible(it.id) }
+                val visibleShapes = snapshot.shapes.filter { approximateProjection.titleBoundary(it.id) }
                 val textSizes = snapshot.texts.associate { element ->
                     element.id to measureTextExtent(element, fitted.scale, emptySet(), visibleShapes)
                 }
@@ -1953,7 +1953,7 @@ fun CanvasScreen(
         val displayProjection = displaySnapshot.semanticProjection(viewport.scale, bodyDp,
             keptIds + movingIds, density.density, titleDp, titleLineHeightWorld,
             displayGeometry.boundsById)
-        val displayBoundaryShapes = displaySnapshot.shapes.filter { displayProjection.visible(it.id) }
+        val displayBoundaryShapes = displaySnapshot.shapes.filter { displayProjection.titleBoundary(it.id) }
         fun imageActionAllowed(id: String): Boolean = !latestExternalBlock.value() &&
             baseNavigationAllowed() && !searchOpen && !manualGestureActive && !viewportAnimating && board.images.any { it.id == id }
         fun admitImageAction(id: String): Boolean {
