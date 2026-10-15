@@ -89,3 +89,11 @@ T017/T020〜T022は[Issue91の最新7AC closure](https://github.com/reitojike/th
 
 - [x] T030 初期modeのpalette上書きを通常tap候補へ限定し、既存handle/grip ownerを維持する。画像resize一件を既存fixtureで追加し、七行の実geometry・全配送のhit/chrome/slop/正常UPを確認した同一test bytesの旧幅RED・補正全GREEN、palette/viewport/他content不変・matching保存一回を対応付ける。不備のあった広範囲候補・前提失敗の証拠は保持し、採用候補へ含めない。
 - [ ] T031 最小候補のlocal gate・inventory/public境界と自然PR CIの実体、最後の依頼より新しい現行head canonical review・base/threadを確認する。範囲内fixture補正は担当協議と具体的証拠による利用者承認に従い、別familyや複雑性増加はHOLDする。merge・Issue close・AC完了は行わず、T026/T027の未証明gateを保持する。
+
+## Issue #110: 編集優先の指操作へ仕様変更（2026-10-14承認）
+
+- [x] T032 利用者承認の変更点をIssue #110とspec/contract/planへ明記する。指の除外gestureは既存canvas ownerへ渡さず、下書き・入力・選択・内容・保存・履歴・viewportを保持する。既存task履歴とreviewer-owned checklistを維持する。
+- [x] T033 `CanvasScreen.kt`のregion outside Initial passでTouch DOWNからsequenceをconsumeし、正常short UPのみ既存commit pathへ渡す。mainのactive-region Touch admissionを除外し、text/Done/guard/IME/Back/lifecycleとStylus開始inkを維持する（実装段階）。
+- [x] T034 `ConditionalChromeLifecycleTest.kt`の旧移動期待を不変assertへ置き換え、既存changed/unchanged・保存/reopen/Undo/Redo・同tap抑止/次操作・stale/CANCEL/save blockを維持する。native short tapはlive座標と実測durationを照合する（test実装段階、実行成功を意味しない）。
+- [ ] T035 採用candidateのlocal lint/unit/build/androidTest compile/scriptsと、承認された範囲のAndroid native CI・自然PR CIを成立させる。今回Android CIは開始しない。環境拒否は回避・同条件反復しない。別familyへ自動で範囲を広げない。
+- [ ] T036 独立review結果とcurrent-head canonical reviewを区別して確認し、Pixel 9a / Android 17のchanged/unchanged・選択保持・同tap抑止/次操作・指除外gesture・Stylus/アクセシビリティを受入確認する。Issue AC・merge・配布は各承認と証拠に従う。

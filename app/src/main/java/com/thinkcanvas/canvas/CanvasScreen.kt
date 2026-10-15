@@ -612,8 +612,10 @@ fun CanvasScreen(
     }
 
     fun moveIsLive(owner: MoveDragSession): Boolean = moveOwner === owner &&
-        gestureGeneration == owner.generation && !exitBlocked() && owner.hasSameContent(board) &&
-        editorSession.draft.value == null && editorSession.regionNameDraft.value == null &&
+        gestureGeneration == owner.generation &&
+        editorSession.regionNameDraft.value?.sessionId == owner.regionSessionIdAtDown &&
+        !exitBlocked() && owner.hasSameContent(board) &&
+        editorSession.draft.value == null &&
         editorSession.imageDescriptionDraft.value == null && !imagePickerOpen &&
         discardTarget == null && attachmentEditor == null && menuTarget == null && !searchOpen
 
@@ -840,6 +842,14 @@ fun CanvasScreen(
         cancelBlankTap()
         val acknowledgement = onRequestSave(board.snapshot())
         if (closeDraft) pendingDraftAcknowledgement = acknowledgement
+    }
+
+    fun commitRegionName(expectedSessionId: String) {
+        if (exitBlocked()) return
+        val current = editorSession.regionNameDraft.value ?: return
+        if (current.sessionId != expectedSessionId) return
+        if (board.updateShape(current.id, name = current.name)) saveSnapshot()
+        closeRegionName()
     }
 
     fun editHistory(redo: Boolean) {
@@ -1145,6 +1155,7 @@ fun CanvasScreen(
         else commitDraft()
     }
     val latestFinalizeDraft = rememberUpdatedState({ finalizeDraft() })
+    val latestCommitRegionName = rememberUpdatedState({ sessionId: String -> commitRegionName(sessionId) })
 
     suspend fun focusEditorInput(requester: FocusRequester, isCurrent: () -> Boolean) {
         if (!isCurrent()) return
@@ -1303,38 +1314,76 @@ fun CanvasScreen(
                         down.consume()
                         return@awaitEachGesture
                     }
-                    val activeDraft = editorSession.draft.value ?: return@awaitEachGesture
-                    val fieldBounds = textEditorBounds ?: return@awaitEachGesture
-                    val toolbarBounds = editorToolbarBounds ?: return@awaitEachGesture
-                    if (fieldBounds.contains(down.position) || toolbarBounds.contains(down.position))
-                        return@awaitEachGesture
-                    // Finalize-only: keep this whole gesture away from children and canvas tools.
-                    down.consume()
-                    var isTap = true
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        if (gestureGeneration != admittedGeneration) {
+                    val activeDraft = editorSession.draft.value
+                    val activeRegion = editorSession.regionNameDraft.value
+                    if (activeDraft == null && activeRegion == null) return@awaitEachGesture
+                    if (activeDraft != null) {
+                        val fieldBounds = textEditorBounds ?: return@awaitEachGesture
+                        val toolbarBounds = editorToolbarBounds ?: return@awaitEachGesture
+                        if (fieldBounds.contains(down.position) || toolbarBounds.contains(down.position))
+                            return@awaitEachGesture
+                        // Keep the established text-editor finalize-only ownership unchanged.
+                        down.consume()
+                        var isTap = true
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (gestureGeneration != admittedGeneration) {
+                                event.changes.forEach { it.consume() }
+                                break
+                            }
+                            val active = event.changes.firstOrNull { it.id == down.id }
+                            if (event.changes.size != 1 || active == null ||
+                                (active.position - down.position).getDistance() > touchSlop ||
+                                active.uptimeMillis - down.uptimeMillis >= longPressMillis ||
+                                active.position.x !in 0f..size.width.toFloat() ||
+                                active.position.y !in 0f..size.height.toFloat()) isTap = false
                             event.changes.forEach { it.consume() }
-                            break
+                            if (event.changes.none { it.pressed }) {
+                                // Compose cancellation can synthesize a release without a native event.
+                                // Android also marks canceled pointer-up events with FLAG_CANCELED.
+                                val nativeEvent = event.motionEvent
+                                val cancelled = nativeEvent == null ||
+                                    nativeEvent.actionMasked == MotionEvent.ACTION_CANCEL ||
+                                    nativeEvent.flags and MotionEvent.FLAG_CANCELED != 0
+                                if (isTap && !cancelled && event.type == PointerEventType.Release &&
+                                    active?.previousPressed == true &&
+                                    editorSession.draft.value?.sessionId == activeDraft.sessionId)
+                                    latestFinalizeDraft.value()
+                                break
+                            }
                         }
-                        val active = event.changes.firstOrNull { it.id == down.id }
-                        if (event.changes.size != 1 || active == null ||
-                            (active.position - down.position).getDistance() > touchSlop ||
-                            active.uptimeMillis - down.uptimeMillis >= longPressMillis ||
-                            active.position.x !in 0f..size.width.toFloat() ||
-                            active.position.y !in 0f..size.height.toFloat()) isTap = false
-                        event.changes.forEach { it.consume() }
-                        if (event.changes.none { it.pressed }) {
-                            // Compose cancellation can synthesize a release without a native event.
-                            // Android also marks canceled pointer-up events with FLAG_CANCELED.
-                            val nativeEvent = event.motionEvent
-                            val cancelled = nativeEvent == null ||
-                                nativeEvent.actionMasked == MotionEvent.ACTION_CANCEL ||
-                                nativeEvent.flags and MotionEvent.FLAG_CANCELED != 0
-                            if (isTap && !cancelled && event.type == PointerEventType.Release &&
-                                active?.previousPressed == true &&
-                                editorSession.draft.value?.sessionId == activeDraft.sessionId) latestFinalizeDraft.value()
-                            break
+                    } else {
+                        val region = checkNotNull(activeRegion)
+                        // A region outside dismissal is a finger tap. Stylus remains owned by ink.
+                        if (down.type != PointerType.Touch) return@awaitEachGesture
+                        val regionBounds = chromeBounds["regionName"] ?: return@awaitEachGesture
+                        if (regionBounds.contains(down.position)) return@awaitEachGesture
+                        down.consume()
+                        var isTap = true
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (gestureGeneration != admittedGeneration) {
+                                event.changes.forEach { it.consume() }
+                                break
+                            }
+                            val active = event.changes.firstOrNull { it.id == down.id }
+                            if (event.changes.size != 1 || active == null ||
+                                (active.position - down.position).getDistance() > touchSlop ||
+                                active.uptimeMillis - down.uptimeMillis >= longPressMillis ||
+                                active.position.x !in 0f..size.width.toFloat() ||
+                                active.position.y !in 0f..size.height.toFloat()) isTap = false
+                            // Region-name editing owns the whole outside finger sequence.
+                            event.changes.forEach { it.consume() }
+                            if (event.changes.none { it.pressed }) {
+                                val nativeEvent = event.motionEvent
+                                val normalUp = nativeEvent?.actionMasked == MotionEvent.ACTION_UP &&
+                                    nativeEvent.flags and MotionEvent.FLAG_CANCELED == 0
+                                if (isTap && normalUp && event.type == PointerEventType.Release &&
+                                    active?.previousPressed == true &&
+                                    editorSession.regionNameDraft.value?.sessionId == region.sessionId)
+                                    latestCommitRegionName.value(region.sessionId)
+                                break
+                            }
                         }
                     }
                 }
@@ -1343,6 +1392,7 @@ fun CanvasScreen(
                 var gestureMove: MoveDragSession? = null
                 try {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                val regionSessionAtDown = editorSession.regionNameDraft.value?.sessionId
                 manualGestureActive = true
                 if (latestExternalBlock.value()) return@awaitEachGesture
                 if (imageDraft != null || imagePickerOpen) return@awaitEachGesture
@@ -1352,6 +1402,10 @@ fun CanvasScreen(
                     return@awaitEachGesture
                 }
                 if (editorSession.draft.value != null) return@awaitEachGesture
+                if (regionSessionAtDown != null && down.type == PointerType.Touch) {
+                    cancelBlankTap()
+                    return@awaitEachGesture
+                }
                 val requestedInk = down.type == PointerType.Stylus || latestInkTool.value != null
                 if (chromeContains(down.position)) { cancelBlankTap(); return@awaitEachGesture }
                 // Only a neutral, single-touch short release belongs to palette dismissal.
@@ -1367,7 +1421,11 @@ fun CanvasScreen(
                 stopViewportAnimation()
                 pendingHistoryFocus = null
                 val previousBlankTap = blankTapBoundary.pending
-                if (previousBlankTap != null) {
+                if (regionSessionAtDown != null) {
+                    // The region editor owns the in-flight outside gesture; discard a stale blank-tap
+                    // candidate so it cannot turn this pointer-down into a delayed create or zoom.
+                    cancelBlankTap()
+                } else if (previousBlankTap != null) {
                     if (!blankTapIsLive(previousBlankTap) || requestedInk) cancelBlankTap()
                     else if (previousBlankTap.matchesSecondDown(down.uptimeMillis, down.position,
                         doubleTapMinTimeMillis, doubleTapTimeoutMillis, doubleTapSlop) &&
@@ -1471,7 +1529,7 @@ fun CanvasScreen(
                         return
                     }
                     val owner = gestureMove ?: MoveDragSession(moveIds, startWorld, admittedGeneration,
-                        gestureSnapshot, pointer).also { gestureMove = it; moveOwner = it }
+                        regionSessionAtDown, gestureSnapshot, pointer).also { gestureMove = it; moveOwner = it }
                     if (moveIsLive(owner)) {
                         owner.pointer = pointer
                         movePreview = owner.ids to worldDragDelta(viewport, owner.anchor, pointer)
@@ -1488,6 +1546,10 @@ fun CanvasScreen(
                     } else if (pendingTap && remaining <= 0) null
                     else awaitPointerEvent()
                     if (gestureGeneration != admittedGeneration) {
+                        event?.changes?.forEach { it.consume() }
+                        break
+                    }
+                    if (editorSession.regionNameDraft.value?.sessionId != regionSessionAtDown) {
                         event?.changes?.forEach { it.consume() }
                         break
                     }
@@ -2581,8 +2643,7 @@ fun CanvasScreen(
                         })
                     EditorOption(stringResource(R.string.done), false, true, enabled = !saveBlocked()) {
                         if (saveBlocked()) return@EditorOption
-                        if (board.updateShape(editingRegionId, name = regionName)) saveSnapshot()
-                        closeRegionName()
+                        regionDraft?.let { commitRegionName(it.sessionId) }
                     }
                 }
             }

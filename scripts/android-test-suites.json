@@ -3,8 +3,8 @@
   "authority": {
     "issue": 112,
     "baseline_main": "71849bd94005ce986bcf3a884064e97b0df7b19b",
-    "census_total": 271,
-    "note": "Issue #118のdated snapshotにIssue #112の独立回帰を追加。scope rebase後のPR代表4・main詳細5、palette長押しhandoffのPR回帰3、palette展開中の画像resize subslop正常UPのPR回帰1 identityを追加。actual discoveryはAndroidJUnitRunnerに委ね、receiptはselector生成に使わない。quarantine/filterは不変。Issue #141のsimulated diagnostic plumbing検証をPR/mainへ1 identity追加。 Issue #148のlauncher geometry記録・strict failure保持・selected-node freshnessの模擬契約検証を同じConditional familyのPR/mainへ3 identity追加。原因再現ではない。"
+    "census_total": 272,
+    "note": "Issue #118のdated snapshotにIssue #112の独立回帰を追加。scope rebase後のPR代表4・main詳細5、palette長押しhandoffのPR回帰3、palette展開中の画像resize subslop正常UPのPR回帰1 identityを追加。actual discoveryはAndroidJUnitRunnerに委ね、receiptはselector生成に使わない。quarantine/filterは不変。Issue #141のsimulated diagnostic plumbing検証をPR/mainへ1 identity追加。 Issue #148のlauncher geometry記録・strict failure保持・selected-node freshnessの模擬契約検証を同じConditional familyのPR/mainへ3 identity追加。原因再現ではない。 Issue #110でpending ack/Running/Failed時の囲み名外側確定境界テストを追加し、full_only identityを同期。"
   },
   "suites": {
     "smoke": [
@@ -138,7 +138,8 @@
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteOutsidePanKeepsMenuAndContent",
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteOutsidePinchKeepsMenuAndContent",
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteStylusNormalReleasePersistsStroke",
-      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#pendingBlankSingleRejectsRegionNameInputChange",
+      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#regionNameOutsideTapRejectsRunningAndFailedSave",
+      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#staleRegionNameInputAfterOutsideCommitDoesNotReopenEditor",
       "com.thinkcanvas.canvas.EdgeAutoPanTest#editorAndDiscardDialogDoNotAdmitTheMoveTicker",
       "com.thinkcanvas.canvas.EdgeAutoPanTest#longPressMoveAdmitsTextShapeAndInkOnlyAfterSlop",
       "com.thinkcanvas.canvas.EdgeAutoPanTest#multiSelectionTranslatesTextShapeAndFreeArrowTogether",

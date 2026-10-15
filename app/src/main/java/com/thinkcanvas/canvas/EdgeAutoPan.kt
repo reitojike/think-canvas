@@ -48,6 +48,7 @@ internal fun worldDragDelta(viewport: Viewport, anchor: WorldPoint, pointer: Off
 
 /** Composition内だけのowner。保存・再生成で復元しない。 */
 internal class MoveDragSession(ids: Set<String>, val anchor: WorldPoint, val generation: Int,
+                               val regionSessionIdAtDown: String?,
                                val source: BoardSnapshot, pointer: Offset) {
     val ids = ids.toSet()
     var pointer by mutableStateOf(pointer)

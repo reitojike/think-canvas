@@ -10,17 +10,23 @@ import android.view.MotionEvent
 import android.view.InputDevice
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.Lifecycle
+import com.thinkcanvas.BoardSaveAcknowledgement
+import com.thinkcanvas.BoardSaveState
 import com.thinkcanvas.BoardSessionViewModel
 import com.thinkcanvas.MainActivity
 import com.thinkcanvas.data.BoardRow
@@ -28,7 +34,9 @@ import com.thinkcanvas.data.CanvasDatabase
 import com.thinkcanvas.data.SpatialElementRow
 import com.thinkcanvas.data.TextElementRow
 import com.thinkcanvas.data.showBoardOneAtStartup
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
+import java.util.concurrent.atomic.AtomicInteger
 import com.thinkcanvas.test.PrSmoke
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -245,9 +253,15 @@ class ConditionalChromeLifecycleTest {
             clickActionable(instrumentation, "囲み: Cluster")
             assertEquals("囲みが選択されている", "選択中",
                 waitForRegionState(instrumentation, "選択中"))
+            lateinit var sessions: BoardSessionViewModel
+            instrumentation.runOnMainSync { sessions = ViewModelProvider(activity as MainActivity)[BoardSessionViewModel::class.java] }
+            val board = sessions.stateFor(1L, BoardSnapshot())
+            val editor = sessions.textEditorFor(1L, BoardSnapshot())
+            val store = com.thinkcanvas.data.CanvasStore.get(context)
+            val before = board.snapshot()
+            val savedBefore = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
 
-            val shareButton = waitForActionable(instrumentation, "選択範囲を画像で共有")
-            val shareCenter = center(bounds(shareButton))
+            waitForActionable(instrumentation, "選択範囲を画像で共有")
 
             val (region, renameAction) = waitForRegionRenameAction(instrumentation)
             assertTrue("囲み名編集のアクセシビリティ操作を実行できる",
@@ -259,40 +273,77 @@ class ConditionalChromeLifecycleTest {
                 findExact(instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前"))
             assertEquals("former point tap 前も囲みは選択中", "選択中",
                 waitForRegionState(instrumentation, "選択中"))
+            val appPackageName = instrumentation.targetContext.packageName
+            val appWindowIdBeforeOutsideTap = region.windowId
 
             val configuration = composeRule.onNodeWithContentDescription("キャンバス")
                 .fetchSemanticsNode().layoutInfo.viewConfiguration
+            val canvasActivity = activity as MainActivity
+            val outsideTap = liveCanvasPointOutsideTouchTargets(instrumentation, canvasActivity)
+            assertSafeCanvasPath(instrumentation, canvasActivity, listOf(outsideTap))
             composeRule.mainClock.autoAdvance = false
             try {
-                tap(instrumentation, shareCenter.first, shareCenter.second)
+                val outsideTapEventElapsed = nativeGesture(instrumentation, listOf(outsideTap),
+                    asyncStationaryFingerTap = true)
+                assertTrue("Stationary tap duration is below long-press threshold: $outsideTapEventElapsed",
+                    outsideTapEventElapsed >= 0 && outsideTapEventElapsed < configuration.longPressTimeoutMillis)
                 repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
-                assertEquals("confirmed single 前は選択を維持する", "選択中",
+                assertEquals("短い外側tapは選択を変えない", "選択中",
                     waitForRegionState(instrumentation, "選択中"))
+                if (Build.VERSION.SDK_INT >= 34) instrumentation.uiAutomation.clearCache()
+                val appRootAfterOutsideTap = instrumentation.uiAutomation.rootInActiveWindow
+                assertTrue("Editor absence uses the same valid app window",
+                    appRootAfterOutsideTap != null &&
+                        appRootAfterOutsideTap.packageName?.toString() == appPackageName &&
+                        appRootAfterOutsideTap.windowId == appWindowIdBeforeOutsideTap)
+                instrumentation.runOnMainSync {
+                    assertNull("Outside tap closes the region-name model draft", editor.regionNameDraft.value)
+                }
+                assertNull("未変更の外側tapでeditorが閉じる",
+                    findExact(appRootAfterOutsideTap, "囲みの名前"))
                 composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
             } finally {
                 composeRule.mainClock.autoAdvance = true
             }
-            assertEquals("former share Button center から囲み選択が解除される", "未選択",
-                waitForRegionState(instrumentation, "未選択"))
-            assertNotNull("選択解除後も囲み名 editor は active",
-                findExact(instrumentation.uiAutomation.rootInActiveWindow, "囲みの名前"))
+            assertEquals("dismissal tap は別操作を起こさない", "選択中",
+                waitForRegionState(instrumentation, "選択中"))
+            assertEquals("未変更の確定はboardを変更しない", before, board.snapshot())
+            assertEquals("未変更の確定は保存しない", savedBefore,
+                checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+            assertNotNull("閉じたeditorの後でshare actionが戻る",
+                waitForActionable(instrumentation, "選択範囲を画像で共有"))
 
+            val (reopenedRegion, reopenedRename) = waitForRegionRenameAction(instrumentation)
+            assertTrue(reopenedRegion.performAction(reopenedRename.id))
             clickActionable(instrumentation, "完了")
+            waitForGone(instrumentation, "囲みの名前")
+            assertEquals("Doneも未変更内容を保存しない", savedBefore,
+                checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+
+            val selectedRegion = waitForActionable(instrumentation, "囲み: Cluster")
+            val deselectAction = selectedRegion.actionList.singleOrNull {
+                it.label?.toString() == "選択から外す"
+            }
+            assertNotNull("選択中の囲みが解除 custom action を公開する", deselectAction)
+            assertTrue("標準の選択解除 custom action を実行する",
+                selectedRegion.performAction(checkNotNull(deselectAction).id))
+            assertEquals("custom action による明示解除", "未選択",
+                waitForRegionState(instrumentation, "未選択"))
             waitForGone(instrumentation, "選択範囲を画像で共有")
             clickActionable(instrumentation, "囲み: Cluster")
             assertEquals("再選択後に囲みが選択中", "選択中",
                 waitForRegionState(instrumentation, "選択中"))
             assertNotNull("再選択後に共有 Button が再表示される",
                 waitForActionable(instrumentation, "選択範囲を画像で共有"))
-
         } finally {
             activity.finish()
             instrumentation.waitForIdleSync()
         }
     }
 
+    @OptIn(ExperimentalTestApi::class)
     @Test
-    fun pendingBlankSingleRejectsRegionNameInputChange() {
+    fun staleRegionNameInputAfterOutsideCommitDoesNotReopenEditor() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         seedBoard(context)
@@ -301,30 +352,51 @@ class ConditionalChromeLifecycleTest {
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
         try {
+            composeRule.waitUntilAtLeastOneExists(
+                matcher = hasContentDescription("囲み: Cluster") and hasClickAction(),
+                timeoutMillis = 4_000L,
+            )
+            lateinit var sessions: BoardSessionViewModel
+            instrumentation.runOnMainSync { sessions = ViewModelProvider(activity as MainActivity)[BoardSessionViewModel::class.java] }
+            val editor = sessions.textEditorFor(1L, BoardSnapshot())
+            val store = com.thinkcanvas.data.CanvasStore.get(context)
+
             clickActionable(instrumentation, "囲み: Cluster")
-            val formerPoint = center(bounds(waitForActionable(instrumentation, "選択範囲を画像で共有")))
+            waitForActionable(instrumentation, "選択範囲を画像で共有")
             val (region, renameAction) = waitForRegionRenameAction(instrumentation)
             assertTrue(region.performAction(renameAction.id))
             waitForGone(instrumentation, "選択範囲を画像で共有")
-            val changeName = checkNotNull(composeRule.onNodeWithContentDescription("囲みの名前")
+            composeRule.onNodeWithContentDescription("囲みの名前").performTextReplacement("Changed")
+            val canvasActivity = activity as MainActivity
+            val regionSession = checkNotNull(editor.regionNameDraft.value).sessionId
+            awaitRegionNameComposeReady(instrumentation, canvasActivity, editor, regionSession)
+            val staleSetText = checkNotNull(composeRule.onNodeWithContentDescription("囲みの名前")
                 .fetchSemanticsNode().config[SemanticsActions.SetText].action)
+
             val configuration = composeRule.onNodeWithContentDescription("キャンバス")
                 .fetchSemanticsNode().layoutInfo.viewConfiguration
             composeRule.mainClock.autoAdvance = false
             try {
-                tap(instrumentation, formerPoint.first, formerPoint.second)
+                composeRegionNameOutsideTap(instrumentation, canvasActivity, editor, regionSession)
                 repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
-                assertEquals("pending 中は選択を維持する", "選択中",
-                    waitForRegionState(instrumentation, "選択中"))
-                instrumentation.runOnMainSync { assertTrue(changeName(AnnotatedString("Changed"))) }
+                waitForGone(instrumentation, "囲みの名前")
+                assertNull("外側確定後はregion editorを閉じる", editor.regionNameDraft.value)
+                awaitSavedRegionName(store, "chrome-lifecycle-region", "Changed")
+
+                instrumentation.runOnMainSync {
+                    assertTrue(staleSetText(AnnotatedString("Stale callback")))
+                }
                 composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
             } finally {
                 composeRule.mainClock.autoAdvance = true
             }
-            assertEquals("囲み名変更で old single の選択解除を取消す", "選択中",
-                waitForRegionState(instrumentation, "選択中"))
-            composeRule.onNodeWithContentDescription("囲みの名前").assertTextEquals("Changed")
-            assertNull("old single から text editor を生成しない",
+
+            assertNull("古いSetText actionでeditorを再生成しない", editor.regionNameDraft.value)
+            assertEquals("確定済みregion名を維持する", "Changed",
+                runBlocking { store.savedBoard(1L)?.snapshot?.shapes?.singleOrNull { it.id == "chrome-lifecycle-region" }?.name })
+            assertEquals("外側tapと古いactionで選択を変えない", "選択中",
+                waitForRegionState(instrumentation, "選択中", regionLabel = "囲み: Changed"))
+            assertNull("外側tapからtext editorを生成しない",
                 findExact(instrumentation.uiAutomation.rootInActiveWindow, "新しいテキスト"))
         } finally {
             composeRule.mainClock.autoAdvance = true
@@ -332,6 +404,82 @@ class ConditionalChromeLifecycleTest {
             instrumentation.waitForIdleSync()
         }
     }
+
+
+    @Test
+    fun regionNameOutsideTapRejectsRunningAndFailedSave() =
+        withPaletteBoard(expanded = false, awaitSavedRegion = true) { instrumentation, activity, _, sessions ->
+            val board = sessions.stateFor(1L, BoardSnapshot())
+            val editor = sessions.textEditorFor(1L, BoardSnapshot())
+            val store = com.thinkcanvas.data.CanvasStore.get(instrumentation.targetContext)
+            clickActionable(instrumentation, "囲み: Cluster")
+            waitForActionable(instrumentation, "選択範囲を画像で共有")
+            val (region, rename) = waitForRegionRenameAction(instrumentation)
+            assertTrue(region.performAction(rename.id))
+            waitForGone(instrumentation, "選択範囲を画像で共有")
+            composeRule.onNodeWithContentDescription("囲みの名前").performTextReplacement("Blocked rename")
+            val regionSession = checkNotNull(editor.regionNameDraft.value).sessionId
+            // Prepare editable input before acknowledgement/Running/Failed makes the field readonly.
+            awaitRegionNameComposeReady(instrumentation, activity, editor, regionSession)
+            fun tapWhileSaveBlocked() {
+                composeRegionNameOutsideTap(instrumentation, activity, editor, regionSession)
+            }
+
+            val blockedBefore = board.snapshot()
+            val savedBeforeBlocked = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
+
+            // Pending acknowledgement blocks both Done and outside commit before saveState changes.
+            val pendingAckCompletion = CompletableDeferred<Unit>()
+            val pendingAck = BoardSaveAcknowledgement(1L, Long.MAX_VALUE, pendingAckCompletion)
+            instrumentation.runOnMainSync { editor.pendingDraftAcknowledgement.value = pendingAck }
+            clickActionable(instrumentation, "完了")
+            assertEquals("pending ack中はDoneでregion名を確定しない", "Blocked rename",
+                editor.regionNameDraft.value?.name)
+            assertEquals("pending ack中のDoneはboardを変更しない", blockedBefore, board.snapshot())
+            assertFalse("pending ackを完了させない", pendingAck.isCompleted)
+            tapWhileSaveBlocked()
+            assertEquals("pending ack中も外側tap後のdraftを保持する", "Blocked rename",
+                editor.regionNameDraft.value?.name)
+            assertEquals("pending ack中の外側tapはboardを変更しない", blockedBefore, board.snapshot())
+            assertFalse("pending ack中の外側tapでもacknowledgementを完了しない", pendingAck.isCompleted)
+            instrumentation.runOnMainSync { editor.pendingDraftAcknowledgement.value = null }
+
+            val blocker = CompletableDeferred<Unit>()
+            val saveCalls = AtomicInteger()
+            sessions.setSaveOperation { _, _ ->
+                saveCalls.incrementAndGet()
+                blocker
+            }
+            lateinit var acknowledgement: BoardSaveAcknowledgement
+            instrumentation.runOnMainSync {
+                acknowledgement = checkNotNull(sessions.requestSave(1L, blockedBefore))
+            }
+            val saveState = sessions.saveStateFor(1L, blockedBefore)
+            composeRule.waitUntil(5_000) { saveState.value is BoardSaveState.Running }
+
+            fun assertBlockedTap(phase: String) {
+                tapWhileSaveBlocked()
+                assertEquals("${phase}中も編集draftを保持する", "Blocked rename",
+                    editor.regionNameDraft.value?.name)
+                assertEquals("${phase}中はboardを変更しない", blockedBefore, board.snapshot())
+                assertEquals("${phase}中は保存済みboardを変更しない", savedBeforeBlocked,
+                    checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+                assertEquals("${phase}中に余分なsave requestを送らない", 1, saveCalls.get())
+                assertFalse("${phase}中はacknowledgementを未完了のまま保つ", acknowledgement.isCompleted)
+            }
+
+            assertBlockedTap("Running")
+            blocker.completeExceptionally(IllegalStateException("bounded region-name save failure"))
+            composeRule.waitUntil(5_000) { saveState.value is BoardSaveState.Failed }
+            assertBlockedTap("Failed")
+
+            val successfulRetry = CompletableDeferred<Unit>().also { it.complete(Unit) }
+            sessions.setSaveOperation { _, _ -> successfulRetry }
+            sessions.retrySave(1L)
+            composeRule.waitUntil(5_000) {
+                acknowledgement.isCompleted && saveState.value == BoardSaveState.Idle
+            }
+        }
 
     @PrSmoke
     @Test
@@ -464,27 +612,503 @@ class ConditionalChromeLifecycleTest {
 
     @PrSmoke
     @Test
-    fun paletteRegionNameEditorKeepsOutsidePriority() = withPaletteBoard(expanded = false) { instrumentation, activity, _, _ ->
+    fun paletteRegionNameEditorKeepsOutsidePriority() = withPaletteBoard(
+        expanded = false,
+        awaitSavedRegion = true,
+    ) { instrumentation, activity, database, sessions ->
+        val board = sessions.stateFor(1L, BoardSnapshot())
+        val editor = sessions.textEditorFor(1L, BoardSnapshot())
+        val navigation = sessions.viewportHistoryFor(1L, BoardSnapshot())
+        val store = com.thinkcanvas.data.CanvasStore.get(instrumentation.targetContext)
+        // #122: native input readiness and settled layout are independent preconditions.
+        val reference = board.snapshot().texts.single { it.id == "chrome-lifecycle-text" }
+        var nativeInputReady = false
+        fun cameraObservation(): ImeViewportObservation {
+            val canvas = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().boundsInWindow
+            val marker = composeRule.onNodeWithContentDescription(reference.text).fetchSemanticsNode().positionInWindow
+            val field = composeRule.onAllNodes(hasContentDescription("囲みの名前")).fetchSemanticsNodes().singleOrNull()
+            val focused = field?.config?.let {
+                SemanticsProperties.Focused in it && it[SemanticsProperties.Focused]
+            } == true
+            lateinit var result: ImeViewportObservation
+            instrumentation.runOnMainSync {
+                val decor = activity.window.decorView
+                val root = decor.findViewById<android.view.View>(android.R.id.content)
+                val origin = IntArray(2).also(root::getLocationInWindow)
+                val insets = checkNotNull(androidx.core.view.ViewCompat.getRootWindowInsets(decor))
+                val ime = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())
+                val view = decor.findFocus()
+                val input = activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                nativeInputReady = ImeTestObservation(decor.hasWindowFocus(), view?.javaClass?.simpleName,
+                    view?.let { input.isActive(it) }, input.isAcceptingText,
+                    insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()), ime.bottom).inputReady
+                val safe = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                    androidx.core.view.WindowInsetsCompat.Type.displayCutout() or androidx.core.view.WindowInsetsCompat.Type.ime())
+                fun views(name: String): List<ViewportFocus> =
+                    (ViewportHistory::class.java.getDeclaredField(name).apply { isAccessible = true }
+                        .get(navigation) as Iterable<*>).map { it as ViewportFocus }
+                result = ImeViewportObservation(canvas, navigation.focus(), navigation.viewportState.value,
+                    marker, field != null, focused, decor.hasWindowFocus(),
+                    insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()), ime.bottom,
+                    insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars()).bottom, root.height, decor.height,
+                    androidx.compose.ui.geometry.Rect((origin[0] + safe.left).toFloat(), (origin[1] + safe.top).toFloat(),
+                        (origin[0] + root.width - safe.right).toFloat(), (origin[1] + root.height - safe.bottom).toFloat()),
+                    editor.regionNameDraft.value?.sessionId, null, navigation.canBack, navigation.canForward,
+                    views("previous"), views("next"))
+            }
+            return result
+        }
+        fun settledCamera(shown: Boolean): ImeViewportObservation {
+            val settlement = ImeViewportSettlement(shown, androidx.compose.ui.geometry.Offset(reference.x, reference.y))
+            composeRule.waitUntil(5_000) { settlement.accept(cameraObservation()) && (!shown || nativeInputReady) }
+            return checkNotNull(settlement.latest)
+        }
         clickActionable(instrumentation, "囲み: Cluster")
-        val formerShare = center(bounds(waitForActionable(instrumentation, "選択範囲を画像で共有")))
         val (region, rename) = waitForRegionRenameAction(instrumentation)
-        assertTrue(region.performAction(rename.id))
+        val configuration = composeRule.onNodeWithContentDescription("キャンバス")
+            .fetchSemanticsNode().layoutInfo.viewConfiguration
+        val beforeEditor = settledCamera(shown = false)
+        val safeCanvas = paletteSafeCanvas(instrumentation, activity)
+        val regionBoundsBeforeEditor = bounds(region)
+        val neutralDown = (regionBoundsBeforeEditor.left + 30f) to (regionBoundsBeforeEditor.top + 30f)
+        assertTrue("neutral DOWNはlive canvas内", safeCanvas.contains(neutralDown.first.toInt(), neutralDown.second.toInt()))
+        assertNull("neutral DOWN前は囲み名editorがない", editor.regionNameDraft.value)
+        val beforeNeutralMove = board.snapshot()
+        val savedBeforeNeutralMove = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
+        val neutralMovePath = (0..6).map { (neutralDown.first + it * 12f) to neutralDown.second }
+        nativeGesture(instrumentation, neutralMovePath, afterDown = {
+            assertTrue("DOWN中に囲み名editorを開く", region.performAction(rename.id))
+            Thread.sleep(configuration.longPressTimeoutMillis + 100L)
+        })
+        composeRule.waitForIdle()
+        assertEquals("editor開始前のDOWNは要素を移動しない", beforeNeutralMove, board.snapshot())
+        assertEquals("editor開始前のDOWNは保存もしない", savedBeforeNeutralMove,
+            checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+        assertEquals("中断された長押し後も囲みは選択中", "選択中",
+            waitForRegionState(instrumentation, "選択中"))
+        assertEquals("DOWN後に開いたeditorは元の囲み名を保持", "Cluster",
+            editor.regionNameDraft.value?.name)
         waitForGone(instrumentation, "選択範囲を画像で共有", recordPostRenameShareDecision = true)
+        composeRule.onNodeWithContentDescription("囲みの名前")
+            .performTextReplacement("Renamed")
+        val renamed = "Renamed"
+        assertEquals("editorに変更済みのregion名がある", renamed, editor.regionNameDraft.value?.name)
+
+        assertWorldFocusAndHistoryUnchanged(beforeEditor, settledCamera(shown = true))
+        val moveHandle = waitForActionable(instrumentation, "移動")
+        val moveStart = center(bounds(moveHandle))
+        // This gesture scenario uses the whole editor Row in the current Compose root.
+        // Strict platform description/control geometry remains in the other Done callers.
+        val regionSessionBeforeMove = checkNotNull(editor.regionNameDraft.value).sessionId
+        val canvasNode = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode()
+        val composeRoot = checkNotNull(canvasNode.root)
+        val rootLayoutInfo = generateSequence(canvasNode.layoutInfo) { it.parentInfo }.last()
+        val fieldNode = composeRule.onNodeWithContentDescription("囲みの名前").fetchSemanticsNode()
+        val doneNode = composeRule.onNode(hasContentDescription("完了") and hasClickAction()).fetchSemanticsNode()
+        assertTrue("editor field and Done use the current canvas root",
+            composeRoot === fieldNode.root && composeRoot === doneNode.root)
+        assertTrue("Done is enabled", SemanticsProperties.Disabled !in doneNode.config)
+        assertNotNull("Done exposes an action", doneNode.config[SemanticsActions.OnClick].action)
+        val fieldAncestors = generateSequence(fieldNode.layoutInfo) { it.parentInfo }.toList()
+        val editorRow = generateSequence(doneNode.layoutInfo) { it.parentInfo }
+            .first { ancestor -> fieldAncestors.any { it === ancestor } }
+        assertTrue("editor Row is below the canvas root",
+            editorRow !== rootLayoutInfo && editorRow !== canvasNode.layoutInfo)
+        lateinit var editorRowScreen: androidx.compose.ui.geometry.Rect
+        lateinit var canvasScreen: androidx.compose.ui.geometry.Rect
+        instrumentation.runOnMainSync {
+            val decor = activity.window.decorView
+            val screenOrigin = IntArray(2).also(decor::getLocationOnScreen)
+            val windowOrigin = IntArray(2).also(decor::getLocationInWindow)
+            val windowToScreen = androidx.compose.ui.geometry.Offset(
+                (screenOrigin[0] - windowOrigin[0]).toFloat(),
+                (screenOrigin[1] - windowOrigin[1]).toFloat(),
+            )
+            val rootCoordinates = rootLayoutInfo.coordinates
+            val inner = editorRow.coordinates
+            assertTrue("editor Row coordinates are attached", inner.isAttached)
+            val outer = checkNotNull(inner.parentCoordinates)
+            assertTrue("outer Row includes its padding rather than the parent layout",
+                outer.isAttached && outer !== inner.parentLayoutCoordinates)
+            val row = rootCoordinates.localBoundingBoxOf(outer, clipBounds = false)
+            val content = rootCoordinates.localBoundingBoxOf(inner, clipBounds = false)
+            val canvas = canvasNode.boundsInRoot
+            assertTrue("the whole editor Row is inside the current canvas",
+                !row.isEmpty && row.left >= canvas.left && row.top >= canvas.top &&
+                    row.right <= canvas.right && row.bottom <= canvas.bottom)
+            for (control in listOf(content, fieldNode.boundsInRoot, doneNode.boundsInRoot)) {
+                assertTrue("outer editor Row contains its content, field and Done",
+                    row.left <= control.left && row.top <= control.top &&
+                        row.right >= control.right && row.bottom >= control.bottom)
+            }
+            editorRowScreen = androidx.compose.ui.geometry.Rect(
+                rootCoordinates.localToWindow(row.topLeft) + windowToScreen,
+                rootCoordinates.localToWindow(row.bottomRight) + windowToScreen,
+            )
+            canvasScreen = androidx.compose.ui.geometry.Rect(
+                rootCoordinates.localToWindow(canvas.topLeft) + windowToScreen,
+                rootCoordinates.localToWindow(canvas.bottomRight) + windowToScreen,
+            )
+        }
+        val appRoot = checkNotNull(instrumentation.uiAutomation.rootInActiveWindow)
+        assertEquals("editor geometry belongs to the active app window",
+            instrumentation.targetContext.packageName, appRoot.packageName?.toString())
+        val nativeCanvasNode = checkNotNull(findExact(appRoot, "キャンバス"))
+        assertEquals(appRoot.windowId, nativeCanvasNode.windowId)
+        val nativeCanvas = bounds(nativeCanvasNode)
+        assertEquals("Compose canvas maps exactly to native screen bounds", canvasScreen,
+            androidx.compose.ui.geometry.Rect(nativeCanvas.left.toFloat(), nativeCanvas.top.toFloat(),
+                nativeCanvas.right.toFloat(), nativeCanvas.bottom.toFloat()))
+        assertEquals("Row observation retains the region session", regionSessionBeforeMove,
+            editor.regionNameDraft.value?.sessionId)
+        val moveSafeCanvas = paletteSafeCanvas(instrumentation, activity)
+        val movePaths = listOf(1f, -1f).map { direction ->
+            (0..6).map { (moveStart.first + direction * it * 12f) to moveStart.second }
+        }
+        val movePath = checkNotNull(movePaths.firstOrNull { path ->
+            path.all { (x, y) ->
+                moveSafeCanvas.contains(x.toInt(), y.toInt()) &&
+                    (x < editorRowScreen.left || x > editorRowScreen.right ||
+                        y < editorRowScreen.top || y > editorRowScreen.bottom)
+            }
+        }) { "live MOVE handle has no path outside region-name editor chrome" }
+        val beforeMove = board.snapshot()
+        val savedBeforeMove = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
+        val cameraBeforeMove = settledCamera(shown = true)
+        val viewportBeforeMove = cameraBeforeMove.viewport
+        val undoAvailableBeforeMove = board.canUndo
+        nativeGesture(instrumentation, movePath, afterDown = {
+            Thread.sleep(configuration.longPressTimeoutMillis + 100L)
+        })
+        composeRule.waitForIdle()
+        val movedRegion = board.snapshot().shapes.single { it.id == "chrome-lifecycle-region" }
+        assertEquals("region editor中の長押しdragは要素を移動しない", beforeMove, board.snapshot())
+        assertEquals("要素dragは未確定region名をcommitしない", "Cluster", movedRegion.name)
+        assertEquals("要素drag後もregion editor draftを保持する", renamed,
+            editor.regionNameDraft.value?.name)
+        assertEquals("編集中の長押しdragは保存済みboardを変えない", savedBeforeMove,
+            checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+        assertSameSizeCameraReturned(cameraBeforeMove, settledCamera(shown = true))
+        assertEquals("編集中の長押しdragはviewportを変えない", viewportBeforeMove, navigation.viewportState.value)
+        assertEquals("編集中の長押しdragは履歴を追加しない", undoAvailableBeforeMove, board.canUndo)
+        assertEquals("編集中の長押しdrag後も囲みは選択中", "選択中",
+            waitForRegionState(instrumentation, "選択中"))
+        val before = board.snapshot()
+        val savedBefore = checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot
+        val undoAvailableBefore = board.canUndo
+
         val deadline = SystemClock.uptimeMillis() + 4_000L
         val launcher = waitForActionable(instrumentation, "図形ツールを開く", deadline,
             useAppProcessGeometry = true)
         clickNode(instrumentation, launcher, "図形ツールを開く", activity = activity,
             deadline = deadline, useAppProcessGeometry = true)
         assertPaletteOpen(instrumentation)
-        nativeGesture(instrumentation, listOf(formerShare))
-        val configuration = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode().layoutInfo.viewConfiguration
-        composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
-        assertEquals("palette中もregion outsideの選択解除を保持する", "未選択", waitForRegionState(instrumentation, "未選択"))
-        composeRule.onNodeWithContentDescription("囲みの名前").assertExists()
+        val blank = paletteCanvasPoint(instrumentation, activity, verifyPaletteChrome = false)
+        val pairOffsets = listOf(0f to 0f, 64f to 0f)
+        val pairStart = liveCanvasPointOutsideTouchTargets(instrumentation, activity, pairOffsets)
+        val secondPoint = (pairStart.first + 64f) to pairStart.second
+        assertSafeCanvasPath(instrumentation, activity, listOf(pairStart, secondPoint))
+
+        fun regionSelectionState(regionLabel: String, checkpoint: String): String {
+            val node = composeRule.onNode(hasContentDescription(regionLabel) and hasClickAction())
+                .fetchSemanticsNode("$checkpoint: expected one clickable $regionLabel node")
+            assertTrue("$checkpoint: $regionLabel exposes StateDescription",
+                SemanticsProperties.StateDescription in node.config)
+            return node.config[SemanticsProperties.StateDescription]
+        }
+
+        val cameraBeforeExcludedGestures = settledCamera(shown = true)
+        val viewportBeforeExcludedGestures = cameraBeforeExcludedGestures.viewport
+        fun assertUncommitted() {
+            assertSameSizeCameraReturned(cameraBeforeExcludedGestures, settledCamera(shown = true))
+            assertEquals("除外gesture後も編集draftを保持する", renamed, editor.regionNameDraft.value?.name)
+            assertEquals("除外gestureはboardを変更しない", before, board.snapshot())
+            assertEquals("除外gestureは保存しない", savedBefore,
+                checkNotNull(runBlocking { store.savedBoard(1L) }).snapshot)
+            assertEquals("除外gestureはviewportを変えない", viewportBeforeExcludedGestures, navigation.viewportState.value)
+            assertEquals("除外gesture後も囲みは選択中", "選択中",
+                regionSelectionState("囲み: Cluster", "after excluded finger gesture"))
+            assertEquals("除外gestureは履歴を追加しない", undoAvailableBefore, board.canUndo)
+            assertNull("除外gestureはtext editorを作らない", editor.draft.value)
+            assertPaletteOpen(instrumentation)
+        }
+
+        nativeGesture(instrumentation, listOf(blank),
+            holdMillis = configuration.longPressTimeoutMillis + 100L)
+        assertUncommitted()
+
+        val dragOffsets = (0..6).map { (80f - it * 20f) to 0f }
+        val dragStart = liveCanvasPointOutsideTouchTargets(instrumentation, activity, dragOffsets)
+        val dragPath = dragOffsets.map { (dragStart.first + it.first) to dragStart.second }
+        assertSafeCanvasPath(instrumentation, activity, dragPath)
+        val beforeDrag = navigation.viewportState.value
+        nativeGesture(instrumentation, dragPath, holdMillis = 180L)
+        assertUncommitted()
+        assertEquals("region editor外のdragはcanvasをpanしない", beforeDrag, navigation.viewportState.value)
+        assertEquals("dragはzoomを変えない", beforeDrag.scale, navigation.viewportState.value.scale)
+
+        val pinchOffsets = listOf(-70f to 0f, 70f to 0f)
+        val pinchPoint = liveCanvasPointOutsideTouchTargets(instrumentation, activity, pinchOffsets)
+        assertSafeCanvasPath(instrumentation, activity, listOf(
+            (pinchPoint.first - 70f) to pinchPoint.second,
+            (pinchPoint.first + 70f) to pinchPoint.second,
+        ))
+        val beforePinch = navigation.viewportState.value
+        nativePinch(instrumentation, pinchPoint.first, pinchPoint.second)
+        assertUncommitted()
+        assertEquals("region editor外のmulti-touchはcanvasをpinchしない", beforePinch, navigation.viewportState.value)
+
+        nativePointerPair(instrumentation, pairStart, secondPoint, cancelFirstPointer = false)
+        assertUncommitted()
+        nativePointerPair(instrumentation, pairStart, secondPoint)
+        assertUncommitted()
+        nativeGesture(instrumentation, listOf(blank),
+            terminal = MotionEvent.ACTION_CANCEL, flags = MotionEvent.FLAG_CANCELED)
+        assertUncommitted()
+
+        val cameraBeforeCommit = settledCamera(shown = true)
+        val regionStateBeforeCommit = regionSelectionState("囲み: Cluster", "before outside tap")
+        assertEquals("外側tap直前も同じ囲みが選択中", "選択中", regionStateBeforeCommit)
+        val commitTapEventElapsed = nativeGesture(instrumentation, listOf(blank),
+            asyncStationaryFingerTap = true)
+        assertTrue("Stationary tap duration is below long-press threshold: $commitTapEventElapsed",
+            commitTapEventElapsed >= 0 && commitTapEventElapsed < configuration.longPressTimeoutMillis)
+        waitForGone(instrumentation, "囲みの名前")
+        var regionNodeCountAfterCommit = -1
+        var regionStatesAfterCommit: List<String?> = emptyList()
+        try {
+            composeRule.waitUntil(
+                conditionDescription = "タップ後の囲み: Renamed の StateDescription が選択中になりません",
+                timeoutMillis = 4_000L,
+            ) {
+                composeRule.waitForIdle()
+                instrumentation.waitForIdleSync()
+                val nodes = composeRule.onAllNodes(hasContentDescription("囲み: Renamed") and hasClickAction())
+                    .fetchSemanticsNodes()
+                regionNodeCountAfterCommit = nodes.size
+                regionStatesAfterCommit = nodes.map { node ->
+                    if (SemanticsProperties.StateDescription in node.config)
+                        node.config[SemanticsProperties.StateDescription] else null
+                }
+                regionNodeCountAfterCommit == 1 && regionStatesAfterCommit.single() == "選択中"
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            throw AssertionError(
+                "タップ後の囲み: Renamed の選択確認がtimeout; " +
+                    "lastNodeCount=$regionNodeCountAfterCommit, lastStates=$regionStatesAfterCommit",
+                timeout,
+            )
+        }
+        assertEquals("外側tapでregion選択を変えない", "選択中", regionStatesAfterCommit.single())
         assertPaletteOpen(instrumentation)
-        clickActionable(instrumentation, "完了")
-        clickActionable(instrumentation, "図形ツールを開く")
-        assertPaletteClosed(instrumentation)
+        assertNull("dismissal tapはblank textを作らない", editor.draft.value)
+        assertEquals("変更済み名は1回のmodel更新", renamed,
+            board.snapshot().shapes.single { it.id == "chrome-lifecycle-region" }.name)
+        awaitSavedRegionName(store, "chrome-lifecycle-region", renamed)
+        assertEquals("変更済みのregion名を保存", renamed,
+            runBlocking { store.savedBoard(1L)?.snapshot?.shapes?.singleOrNull { it.id == "chrome-lifecycle-region" }?.name })
+        val cameraAfterCommit = settledCamera(shown = false)
+        assertWorldFocusAndHistoryUnchanged(cameraBeforeCommit, cameraAfterCommit)
+        assertSameSizeCameraReturned(beforeEditor, cameraAfterCommit)
+
+        assertTrue("region rename adds one undo entry", board.canUndo)
+        assertTrue(board.undo())
+        assertEquals("one undo reverts only the rename", before, board.snapshot())
+        assertEquals("rename contributed one history entry", undoAvailableBefore, board.canUndo)
+        assertTrue(board.redo())
+        assertEquals(renamed, board.snapshot().shapes.single { it.id == "chrome-lifecycle-region" }.name)
+
+        val (regionForStylus, renameForStylus) = waitForRegionRenameAction(
+            instrumentation,
+            regionLabel = "囲み: Renamed",
+        )
+        assertTrue(regionForStylus.performAction(renameForStylus.id))
+        assertEquals("stylus操作前にregion editorを開く", renamed,
+            editor.regionNameDraft.value?.name)
+        assertPaletteStylusStroke(instrumentation, activity, database, sessions, verifyPaletteChrome = false)
+        assertEquals("stylusはoutside finalize扱いにならずeditorを保持", renamed,
+            editor.regionNameDraft.value?.name)
+        val sessionForDone = checkNotNull(editor.regionNameDraft.value).sessionId
+        val done = composeRule.onNode(hasContentDescription("完了") and hasClickAction())
+        val currentDone = done.fetchSemanticsNode()
+        val currentField = composeRule.onNodeWithContentDescription("囲みの名前").fetchSemanticsNode()
+        val currentCanvas = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode()
+        val doneRoot = checkNotNull(currentCanvas.root)
+        assertTrue("Done acts in the current editor root",
+            doneRoot === currentField.root && doneRoot === currentDone.root)
+        assertTrue("Done remains enabled", SemanticsProperties.Disabled !in currentDone.config)
+        assertNotNull("Done retains its action", currentDone.config[SemanticsActions.OnClick].action)
+        done.performSemanticsAction(SemanticsActions.OnClick) { onClick ->
+            assertEquals("Done acts on the live region session", sessionForDone,
+                editor.regionNameDraft.value?.sessionId)
+            assertTrue("Done action is accepted", onClick())
+        }
+        waitForGone(instrumentation, "囲みの名前")
+        assertNull("Done closes the region draft", editor.regionNameDraft.value)
+
+        Thread.sleep(configuration.doubleTapTimeoutMillis + 100L)
+        composeRule.waitForIdle()
+        assertNull("dismissal event cannot start text after its timeout", editor.draft.value)
+        val nextSaveState = sessions.saveStateFor(1L, board.snapshot())
+        composeRule.waitUntil(5_000) {
+            nextSaveState.value == BoardSaveState.Idle &&
+                editor.pendingDraftAcknowledgement.value == null &&
+                editor.pendingImageAcknowledgement.value == null &&
+                editor.draft.value == null && editor.regionNameDraft.value == null &&
+                editor.imageDescriptionDraft.value == null
+        }
+        val cameraBeforeNextTap = settledCamera(shown = false)
+        val canvasForNextTap = composeRule.onNodeWithContentDescription("キャンバス")
+        val beforeNextCanvas = canvasForNextTap.fetchSemanticsNode()
+        val nextRoot = checkNotNull(beforeNextCanvas.root)
+        // The neutral launcher exists only for tool NONE with inkTool null; do not reset either mode.
+        val neutralLauncher = composeRule.onNode(hasContentDescription("図形ツールを開く") and hasClickAction())
+            .fetchSemanticsNode()
+        assertTrue("next operation is in the neutral tool/ink mode", neutralLauncher.root === nextRoot)
+        assertTrue("neutral launcher is enabled", SemanticsProperties.Disabled !in neutralLauncher.config)
+        val paletteOnlyMatcher = hasContentDescription("まとめて選ぶ")
+        val paletteOnlyNode = composeRule.onNode(paletteOnlyMatcher and hasClickAction()).fetchSemanticsNode()
+        val paletteRegionNode = composeRule.onNode(hasContentDescription("囲み") and hasClickAction()).fetchSemanticsNode()
+        assertTrue("palette-specific controls use the current root",
+            paletteOnlyNode.root === nextRoot && paletteRegionNode.root === nextRoot)
+        assertTrue("lasso node is the palette action",
+            SemanticsActions.CustomActions in paletteOnlyNode.config &&
+                paletteOnlyNode.config[SemanticsActions.CustomActions].any { it.label == "表示範囲をまとめて選択" })
+        val nextAppRoot = checkNotNull(instrumentation.uiAutomation.rootInActiveWindow)
+        assertEquals("next tap uses the active app window", instrumentation.targetContext.packageName,
+            nextAppRoot.packageName?.toString())
+        val nativeNextCanvas = checkNotNull(findExact(nextAppRoot, "キャンバス"))
+        assertEquals(nextAppRoot.windowId, nativeNextCanvas.windowId)
+        val nextScreen = bounds(nativeNextCanvas)
+        val currentNextCanvas = canvasForNextTap.fetchSemanticsNode()
+        assertTrue("next tap retains the current Compose root", nextRoot === currentNextCanvas.root)
+        assertEquals("next tap retains the settled canvas", cameraBeforeNextTap.canvas, currentNextCanvas.boundsInWindow)
+        var nextWindowToScreen = androidx.compose.ui.geometry.Offset.Zero
+        instrumentation.runOnMainSync {
+            val decor = activity.window.decorView
+            val screenOrigin = IntArray(2).also(decor::getLocationOnScreen)
+            val windowOrigin = IntArray(2).also(decor::getLocationInWindow)
+            nextWindowToScreen = androidx.compose.ui.geometry.Offset(
+                (screenOrigin[0] - windowOrigin[0]).toFloat(),
+                (screenOrigin[1] - windowOrigin[1]).toFloat(),
+            )
+        }
+        assertEquals("next canvas maps exactly to native screen bounds",
+            androidx.compose.ui.geometry.Rect(
+                currentNextCanvas.boundsInWindow.topLeft + nextWindowToScreen,
+                currentNextCanvas.boundsInWindow.bottomRight + nextWindowToScreen),
+            androidx.compose.ui.geometry.Rect(nextScreen.left.toFloat(), nextScreen.top.toFloat(),
+                nextScreen.right.toFloat(), nextScreen.bottom.toFloat()))
+        val nextSafe = paletteSafeCanvas(instrumentation, activity)
+        val nextNativeTargets = accessibleTouchTargetBounds(instrumentation)
+        val nextChrome = composeRule.onAllNodes(hasClickAction()).fetchSemanticsNodes()
+            .filter { it.root === nextRoot }
+        assertTrue("next tap checks current Compose controls", nextChrome.isNotEmpty())
+        val paletteRegionAncestors = generateSequence(paletteRegionNode.layoutInfo) { it.parentInfo }.toList()
+        val paletteLayout = generateSequence(paletteOnlyNode.layoutInfo) { it.parentInfo }
+            .first { ancestor -> paletteRegionAncestors.any { it === ancestor } }
+        val nextRootLayout = generateSequence(currentNextCanvas.layoutInfo) { it.parentInfo }.last()
+        lateinit var paletteViewport: androidx.compose.ui.geometry.Rect
+        instrumentation.runOnMainSync {
+            val content = paletteLayout.coordinates
+            val scrollViewport = checkNotNull(content.parentCoordinates)
+            assertTrue("palette viewport is attached and distinct from its parent layout",
+                content.isAttached && scrollViewport.isAttached && scrollViewport !== content.parentLayoutCoordinates)
+            paletteViewport = nextRootLayout.coordinates.localBoundingBoxOf(scrollViewport, clipBounds = true)
+            assertTrue("palette viewport is nonempty", !paletteViewport.isEmpty)
+        }
+        // This fixture contains one text, one region and ink. Use the existing model hit functions.
+        val nextSnapshot = board.snapshot()
+        assertTrue("blank proof is limited to this fixture", nextSnapshot.images.isEmpty() && nextSnapshot.arrows.isEmpty())
+        val nextText = nextSnapshot.texts.single()
+        val nextRegion = nextSnapshot.shapes.single()
+        assertEquals(reference.id, nextText.id)
+        assertEquals("chrome-lifecycle-region", nextRegion.id)
+        assertEquals(ShapeKind.REGION, nextRegion.kind)
+        val textNode = composeRule.onNodeWithContentDescription(nextText.text).fetchSemanticsNode()
+        assertTrue("text geometry belongs to the current root", textNode.root === nextRoot)
+        val textSize = textNode.layoutInfo.coordinates.size
+        val nextView = cameraBeforeNextTap.viewport
+        val pixelsPerDp = instrumentation.targetContext.resources.displayMetrics.density
+        val textTarget = 44f * pixelsPerDp / nextView.scale
+        val contentGeometry = nextSnapshot.resolveRenderedGeometry(mapOf(nextText.id to WorldBounds(
+            nextText.x, nextText.y, nextText.x + maxOf(textSize.width.toFloat(), textTarget),
+            nextText.y + maxOf(textSize.height.toFloat(), textTarget))), nextView.scale, pixelsPerDp)
+        val handleRadius = 24f * pixelsPerDp
+        val regionHandles = listOf(
+            WorldPoint(nextRegion.x + nextRegion.width, nextRegion.y + nextRegion.height),
+            WorldPoint(nextRegion.x + nextRegion.width / 2f, nextRegion.y + nextRegion.height + 14f),
+        ).map { point -> nextView.worldToScreen(point.x, point.y).let {
+            androidx.compose.ui.geometry.Offset(it.first, it.second) } }
+        val textGrip = nextView.worldToScreen(nextText.x + textSize.width / 2f, nextText.y + textSize.height)
+        val regionLabels = composeRule.onAllNodes(hasContentDescription("囲み: " + nextRegion.name))
+            .fetchSemanticsNodes().filter { it.root === nextRoot }
+        assertTrue("current region label geometry exists", regionLabels.isNotEmpty())
+        val nameOrigin = nextView.worldToScreen(nextRegion.x + DetailedRenderFacts.REGION_LABEL_LEFT_WORLD,
+            nextRegion.y - DetailedRenderFacts.REGION_LABEL_TOP_WORLD)
+        val nameWidth = maxOf(48f * pixelsPerDp, regionLabels.maxOf { it.boundsInRoot.width })
+        val nameHeight = maxOf(48f * pixelsPerDp, regionLabels.maxOf { it.boundsInRoot.height })
+        val nextLocal = checkNotNull(listOf(.15f to .55f, .85f to .55f, .15f to .78f, .85f to .78f)
+            .map { (x, y) -> androidx.compose.ui.geometry.Offset(
+                nextSafe.left + nextSafe.width() * x - nextScreen.left,
+                nextSafe.top + nextSafe.height() * y - nextScreen.top) }
+            .firstOrNull { local ->
+                val screenX = local.x + nextScreen.left
+                val screenY = local.y + nextScreen.top
+                val rootPoint = local + currentNextCanvas.boundsInRoot.topLeft
+                val world = nextView.screenToWorld(local.x, local.y).let { WorldPoint(it.first, it.second) }
+                local.x > 0f && local.x < currentNextCanvas.boundsInWindow.width &&
+                    local.y > 0f && local.y < currentNextCanvas.boundsInWindow.height &&
+                    nextSafe.contains(screenX.toInt(), screenY.toInt()) &&
+                    nextNativeTargets.none { it.contains(screenX.toInt(), screenY.toInt()) } &&
+                    nextChrome.none { it.boundsInRoot.contains(rootPoint) } &&
+                    (rootPoint.x < paletteViewport.left || rootPoint.x > paletteViewport.right ||
+                        rootPoint.y < paletteViewport.top || rootPoint.y > paletteViewport.bottom) &&
+                    contentGeometry.boundsById.values.none { it.contains(world) } &&
+                    !nextRegion.hitStroke(world, 12f / nextView.scale) &&
+                    nextSnapshot.ink.none { it.hitStroke(world, it.kind.hitTolerance(nextView.scale)) } &&
+                    regionHandles.all { (local - it).getDistance() > handleRadius } &&
+                    !(local.x in (textGrip.first - handleRadius)..(textGrip.first + handleRadius) &&
+                        local.y in textGrip.second..(textGrip.second + handleRadius * 2f)) &&
+                    !(local.x in nameOrigin.first..(nameOrigin.first + nameWidth) &&
+                        local.y in nameOrigin.second..(nameOrigin.second + nameHeight))
+            }) { "fixed blank candidates hit content, handles, labels or chrome" }
+        assertEquals("blank proof retains the model snapshot", nextSnapshot, board.snapshot())
+        assertEquals("blank proof retains the settled viewport", nextView, navigation.viewportState.value)
+        assertTrue("neutral launcher remains in the current root before DOWN",
+            composeRule.onNode(hasContentDescription("図形ツールを開く") and hasClickAction())
+                .fetchSemanticsNode().root === nextRoot)
+        assertEquals("next tap waits for completed saves", BoardSaveState.Idle, nextSaveState.value)
+        assertNull(editor.pendingDraftAcknowledgement.value)
+        assertNull(editor.pendingImageAcknowledgement.value)
+        assertNull(editor.draft.value)
+        assertNull(editor.regionNameDraft.value)
+        assertNull(editor.imageDescriptionDraft.value)
+        val nextTapDuration = 35L
+        assertTrue("next Compose tap is below the long-press threshold",
+            nextTapDuration > 0L && nextTapDuration < currentNextCanvas.layoutInfo.viewConfiguration.longPressTimeoutMillis)
+        val nextAutoAdvance = composeRule.mainClock.autoAdvance
+        try {
+            composeRule.mainClock.autoAdvance = false
+            canvasForNextTap.performTouchInput {
+                down(nextLocal)
+                advanceEventTime(nextTapDuration)
+                up()
+            }
+        } finally {
+            composeRule.mainClock.autoAdvance = nextAutoAdvance
+        }
+        composeRule.waitForIdle()
+        assertTrue("palette closure stays on the current canvas root",
+            canvasForNextTap.fetchSemanticsNode().root === nextRoot)
+        assertTrue("palette-specific lasso node is removed",
+            composeRule.onAllNodes(paletteOnlyMatcher).fetchSemanticsNodes().none { it.root === nextRoot })
+        assertTrue("palette closure retains neutral mode",
+            composeRule.onNode(hasContentDescription("図形ツールを開く") and hasClickAction())
+                .fetchSemanticsNode().root === nextRoot)
+        assertEquals("palette-only tap does not change content", nextSnapshot, board.snapshot())
+        assertNull("次の独立したcanvas tapも新しいtext editorを作らない", editor.draft.value)
+
     }
 
     @Test
@@ -506,7 +1130,7 @@ class ConditionalChromeLifecycleTest {
         // FLAG_CANCELED belongs to POINTER_UP/CANCEL, never to a single-pointer ACTION_UP.
         val second = (blank.first + 40f) to blank.second
         assertPalettePath(instrumentation, activity, listOf(blank, second))
-        nativeCanceledPointer(instrumentation, blank, second)
+        nativePointerPair(instrumentation, blank, second)
         assertPaletteOpen(instrumentation)
         assertNull(sessions.textEditorFor(1L, BoardSnapshot()).draft.value)
         assertEquals(before, board.snapshot())
@@ -592,8 +1216,10 @@ class ConditionalChromeLifecycleTest {
         assertEquals(anchor, bounds(waitForActionable(instrumentation, launcher)))
     }
 
+    @OptIn(ExperimentalTestApi::class)
     private fun withPaletteBoard(
         expanded: Boolean = true,
+        awaitSavedRegion: Boolean = false,
         block: (android.app.Instrumentation, MainActivity, CanvasDatabase, BoardSessionViewModel) -> Unit,
     ) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -604,7 +1230,14 @@ class ConditionalChromeLifecycleTest {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
         val database = CanvasDatabase.open(context)
         try {
-            waitForActionable(instrumentation, "図形ツールを開く")
+            if (awaitSavedRegion) {
+                composeRule.waitUntilAtLeastOneExists(
+                    matcher = hasContentDescription("囲み: Cluster") and hasClickAction(),
+                    timeoutMillis = 4_000L,
+                )
+            } else {
+                waitForActionable(instrumentation, "図形ツールを開く")
+            }
             lateinit var sessions: BoardSessionViewModel
             instrumentation.runOnMainSync { sessions = ViewModelProvider(activity)[BoardSessionViewModel::class.java] }
             if (expanded) {
@@ -655,6 +1288,60 @@ class ConditionalChromeLifecycleTest {
         return canvas
     }
 
+    private fun accessibleTouchTargetBounds(instrumentation: android.app.Instrumentation): List<Rect> {
+        if (Build.VERSION.SDK_INT >= 34) instrumentation.uiAutomation.clearCache()
+        val root = checkNotNull(instrumentation.uiAutomation.rootInActiveWindow) {
+            "accessibility hit target lookup requires the active window root"
+        }
+        val canvasNode = checkNotNull(findExact(root, "キャンバス")) {
+            "accessibility hit target lookup requires the active canvas node"
+        }
+        check(canvasNode.isVisibleToUser) { "active canvas node is not visible" }
+        val targets = mutableListOf<Rect>()
+        var canvasNodeCount = 0
+        fun collect(node: AccessibilityNodeInfo?) {
+            if (node == null) return
+            val label = node.contentDescription?.toString()
+            val isCanvasNode = label == "キャンバス"
+            if (isCanvasNode) canvasNodeCount++
+            val hasTapAction = node.isClickable || node.isLongClickable ||
+                node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }
+            if (node.isVisibleToUser && !isCanvasNode &&
+                (hasTapAction || label == "囲みの名前")) {
+                val rect = bounds(node)
+                if (!rect.isEmpty) targets += rect
+            }
+            for (index in 0 until node.childCount) collect(node.getChild(index))
+        }
+        collect(root)
+        check(canvasNodeCount == 1) {
+            "expected one actual canvas node in the active window, found $canvasNodeCount"
+        }
+        return targets.distinct()
+    }
+
+    private fun liveCanvasPointOutsideTouchTargets(
+        instrumentation: android.app.Instrumentation,
+        activity: MainActivity,
+        offsets: List<Pair<Float, Float>> = listOf(0f to 0f),
+    ): Pair<Float, Float> {
+        val safe = paletteSafeCanvas(instrumentation, activity)
+        val targets = accessibleTouchTargetBounds(instrumentation)
+        val candidates = listOf(
+            (safe.left + safe.width() * .15f) to (safe.top + safe.height() * .55f),
+            (safe.left + safe.width() * .85f) to (safe.top + safe.height() * .55f),
+            (safe.left + safe.width() * .15f) to (safe.top + safe.height() * .78f),
+            (safe.left + safe.width() * .85f) to (safe.top + safe.height() * .78f),
+        )
+        return checkNotNull(candidates.firstOrNull { (x, y) ->
+            offsets.all { (dx, dy) ->
+                val px = (x + dx).toInt()
+                val py = (y + dy).toInt()
+                safe.contains(px, py) && targets.none { it.contains(px, py) }
+            }
+        }) { "fixed live canvas candidates all hit a target or leave the safe canvas: safe=$safe targets=$targets" }
+    }
+
     private fun paletteChromeBounds(instrumentation: android.app.Instrumentation): List<Rect> {
         val root = instrumentation.uiAutomation.rootInActiveWindow
         val labels = setOf("画像を追加", "ペン", "マーカー", "まとめて選ぶ", "囲み", "矢印", "丸", "四角")
@@ -682,12 +1369,21 @@ class ConditionalChromeLifecycleTest {
         return rectangles
     }
 
-    private fun paletteCanvasPoint(instrumentation: android.app.Instrumentation, activity: MainActivity): Pair<Float, Float> {
+    private fun paletteCanvasPoint(
+        instrumentation: android.app.Instrumentation,
+        activity: MainActivity,
+        verifyPaletteChrome: Boolean = true,
+        offsets: List<Pair<Float, Float>> = listOf(0f to 0f),
+    ): Pair<Float, Float> {
         val safe = paletteSafeCanvas(instrumentation, activity)
-        val canvas = bounds(checkNotNull(findExact(instrumentation.uiAutomation.rootInActiveWindow, "キャンバス")))
-        val point = (canvas.left + canvas.width() * .20f) to (canvas.top + canvas.height() * .55f)
-        assertTrue("normal fixture point excludes system gestures: $point / $safe", safe.contains(point.first.toInt(), point.second.toInt()))
-        assertPalettePath(instrumentation, activity, listOf(point))
+        val point = if (verifyPaletteChrome) {
+            val canvas = bounds(checkNotNull(findExact(instrumentation.uiAutomation.rootInActiveWindow, "キャンバス")))
+            (canvas.left + canvas.width() * .20f) to (canvas.top + canvas.height() * .55f)
+        } else liveCanvasPointOutsideTouchTargets(instrumentation, activity, offsets)
+        assertTrue("normal fixture point excludes system gestures: $point / $safe",
+            safe.contains(point.first.toInt(), point.second.toInt()))
+        if (verifyPaletteChrome) assertPalettePath(instrumentation, activity, listOf(point))
+        else assertSafeCanvasPath(instrumentation, activity, listOf(point))
         return point
     }
 
@@ -700,13 +1396,32 @@ class ConditionalChromeLifecycleTest {
         }
     }
 
-    private fun assertPaletteStylusStroke(instrumentation: android.app.Instrumentation, activity: MainActivity, database: CanvasDatabase, sessions: BoardSessionViewModel) {
+    private fun assertSafeCanvasPath(instrumentation: android.app.Instrumentation, activity: MainActivity, path: List<Pair<Float, Float>>) {
+        val safe = paletteSafeCanvas(instrumentation, activity)
+        val targets = accessibleTouchTargetBounds(instrumentation)
+        path.forEach { (x, y) ->
+            assertTrue("input must remain in live app-owned canvas: ($x,$y) / $safe",
+                safe.contains(x.toInt(), y.toInt()))
+            assertTrue("input must avoid live accessibility hit targets: ($x,$y) / $targets",
+                targets.none { it.contains(x.toInt(), y.toInt()) })
+        }
+    }
+
+    private fun assertPaletteStylusStroke(
+        instrumentation: android.app.Instrumentation,
+        activity: MainActivity,
+        database: CanvasDatabase,
+        sessions: BoardSessionViewModel,
+        verifyPaletteChrome: Boolean = true,
+    ) {
         val board = sessions.stateFor(1L, BoardSnapshot())
         val before = runBlocking { database.canvasDao().inkStrokes(1).size }
         val modelBefore = board.snapshot().ink.sumOf { it.strokes.size }
-        val blank = paletteCanvasPoint(instrumentation, activity)
+        val strokeOffsets = listOf(0f to 0f, 30f to 0f, 60f to 0f)
+        val blank = paletteCanvasPoint(instrumentation, activity, verifyPaletteChrome, strokeOffsets)
         val path = listOf(blank, (blank.first + 30f) to blank.second, (blank.first + 60f) to blank.second)
-        assertPalettePath(instrumentation, activity, path)
+        if (verifyPaletteChrome) assertPalettePath(instrumentation, activity, path)
+        else assertSafeCanvasPath(instrumentation, activity, path)
         nativeGesture(instrumentation, path, toolType = MotionEvent.TOOL_TYPE_STYLUS)
         awaitInkCount(database, before + 1)
         assertEquals("normal native stylus UP commits exactly one model stroke", modelBefore + 1, board.snapshot().ink.sumOf { it.strokes.size })
@@ -719,6 +1434,87 @@ class ConditionalChromeLifecycleTest {
         assertNull(sessions.textEditorFor(1L, BoardSnapshot()).draft.value)
     }
 
+    // These two callers verify Compose pointer ownership, not OS input/window routing.
+    private fun awaitRegionNameComposeReady(
+        instrumentation: android.app.Instrumentation, activity: MainActivity,
+        editor: TextEditorSession, sessionId: String,
+    ) {
+        var previous: Pair<androidx.compose.ui.geometry.Rect, Int?>? = null
+        var stable = 0
+        composeRule.waitUntil(5_000) {
+            val field = composeRule.onNodeWithContentDescription("囲みの名前").fetchSemanticsNode()
+            val canvas = composeRule.onNodeWithContentDescription("キャンバス").fetchSemanticsNode()
+            lateinit var native: ImeTestObservation
+            lateinit var nativeCanvas: androidx.compose.ui.geometry.Rect
+            instrumentation.runOnMainSync {
+                val decor = activity.window.decorView
+                val root = decor.findViewById<android.view.View>(android.R.id.content)
+                val origin = IntArray(2).also(root::getLocationInWindow)
+                val insets = checkNotNull(androidx.core.view.ViewCompat.getRootWindowInsets(decor))
+                val view = decor.findFocus()
+                val input = activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                native = ImeTestObservation(decor.hasWindowFocus(), view?.javaClass?.simpleName,
+                    view?.let { input.isActive(it) }, input.isAcceptingText,
+                    insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()),
+                    insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom)
+                val safe = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                    androidx.core.view.WindowInsetsCompat.Type.displayCutout() or androidx.core.view.WindowInsetsCompat.Type.ime())
+                nativeCanvas = androidx.compose.ui.geometry.Rect((origin[0] + safe.left).toFloat(), (origin[1] + safe.top).toFloat(),
+                    (origin[0] + root.width - safe.right).toFloat(), (origin[1] + root.height - safe.bottom).toFloat())
+            }
+            val current = canvas.boundsInWindow to native.imeBottom
+            val ready = field.root === canvas.root && SemanticsProperties.Focused in field.config &&
+                field.config[SemanticsProperties.Focused] && native.inputReady && native.actualVisible &&
+                canvas.boundsInWindow == nativeCanvas && editor.regionNameDraft.value?.sessionId == sessionId
+            stable = if (ready && current == previous) stable + 1 else 0
+            previous = current
+            stable >= 2
+        }
+    }
+
+    private fun composeRegionNameOutsideTap(
+        instrumentation: android.app.Instrumentation, activity: MainActivity,
+        editor: TextEditorSession, sessionId: String,
+    ) {
+        assertEquals("outside input uses the current region session", sessionId, editor.regionNameDraft.value?.sessionId)
+        val canvas = composeRule.onNodeWithContentDescription("キャンバス")
+        val before = canvas.fetchSemanticsNode()
+        val field = composeRule.onNodeWithContentDescription("囲みの名前").fetchSemanticsNode()
+        assertTrue("canvas and editor use the current Compose root", before.root === field.root)
+        val point = liveCanvasPointOutsideTouchTargets(instrumentation, activity)
+        assertSafeCanvasPath(instrumentation, activity, listOf(point))
+        val root = checkNotNull(instrumentation.uiAutomation.rootInActiveWindow)
+        assertEquals("outside input uses the app window", instrumentation.targetContext.packageName, root.packageName?.toString())
+        val nativeCanvas = checkNotNull(findExact(root, "キャンバス"))
+        val nativeEditor = checkNotNull(findExact(root, "囲みの名前"))
+        assertEquals(root.windowId, nativeCanvas.windowId)
+        assertEquals(root.windowId, nativeEditor.windowId)
+        val screen = bounds(nativeCanvas)
+        val current = canvas.fetchSemanticsNode()
+        assertTrue("outside input retains the Compose root", before.root === current.root)
+        assertEquals(screen.width().toFloat(), current.boundsInWindow.width)
+        assertEquals(screen.height().toFloat(), current.boundsInWindow.height)
+        val local = androidx.compose.ui.geometry.Offset(point.first - screen.left, point.second - screen.top)
+        assertTrue("outside point is canvas-local", local.x in 0f..current.boundsInWindow.width &&
+            local.y in 0f..current.boundsInWindow.height)
+        val rootPoint = local + current.boundsInRoot.topLeft
+        val done = composeRule.onNodeWithContentDescription("完了").fetchSemanticsNode()
+        assertTrue("outside point excludes current editor and Done",
+            !field.boundsInRoot.contains(rootPoint) && !done.boundsInRoot.contains(rootPoint))
+        assertEquals("outside input retains the region session", sessionId, editor.regionNameDraft.value?.sessionId)
+        val duration = 35L
+        assertTrue("Compose event-time advance is below long-press threshold",
+            duration > 0L && duration < current.layoutInfo.viewConfiguration.longPressTimeoutMillis)
+        val autoAdvance = composeRule.mainClock.autoAdvance
+        try {
+            composeRule.mainClock.autoAdvance = false
+            canvas.performTouchInput { down(local); advanceEventTime(duration); up() }
+        } finally {
+            composeRule.mainClock.autoAdvance = autoAdvance
+        }
+        if (autoAdvance) composeRule.waitForIdle()
+    }
+
     private fun nativeGesture(
         instrumentation: android.app.Instrumentation,
         points: List<Pair<Float, Float>>,
@@ -727,11 +1523,19 @@ class ConditionalChromeLifecycleTest {
         holdMillis: Long = 0,
         toolType: Int = MotionEvent.TOOL_TYPE_FINGER,
         afterDown: (() -> Unit)? = null,
-    ) {
+        asyncStationaryFingerTap: Boolean = false,
+    ): Long {
         require(flags and MotionEvent.FLAG_CANCELED == 0 || terminal == MotionEvent.ACTION_CANCEL) {
             "Single-pointer FLAG_CANCELED requires ACTION_CANCEL"
         }
+        require(!asyncStationaryFingerTap || (points.size == 1 && terminal == MotionEvent.ACTION_UP &&
+            flags == 0 && holdMillis == 0L && toolType == MotionEvent.TOOL_TYPE_FINGER &&
+            afterDown == null)) {
+            "Asynchronous injection is limited to a stationary single-finger DOWN/UP tap"
+        }
         val down = SystemClock.uptimeMillis()
+        var downEventTime = down
+        var terminalEventTime = down
         val samples = if (points.size == 1) points + points else points
         samples.forEachIndexed { index, (x, y) ->
             if (index == samples.lastIndex && holdMillis > 0) Thread.sleep(holdMillis)
@@ -743,18 +1547,22 @@ class ConditionalChromeLifecycleTest {
                 0, 0, 1f, 1f, 0, 0,
                 if (toolType == MotionEvent.TOOL_TYPE_STYLUS) InputDevice.SOURCE_STYLUS else InputDevice.SOURCE_TOUCHSCREEN,
                 if (index == samples.lastIndex) flags else 0)
-            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) }
+            if (index == 0) downEventTime = event.eventTime
+            if (index == samples.lastIndex) terminalEventTime = event.eventTime
+            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, !asyncStationaryFingerTap)) }
             finally { event.recycle() }
             if (index == 0) afterDown?.invoke()
             Thread.sleep(35)
         }
         instrumentation.waitForIdleSync()
         if (composeRule.mainClock.autoAdvance) composeRule.waitForIdle()
+        return terminalEventTime - downEventTime
     }
 
-    private fun nativeCanceledPointer(
+    private fun nativePointerPair(
         instrumentation: android.app.Instrumentation,
         first: Pair<Float, Float>, second: Pair<Float, Float>,
+        cancelFirstPointer: Boolean = true,
     ) {
         val downTime = SystemClock.uptimeMillis()
         var previousTime = downTime
@@ -789,8 +1597,9 @@ class ConditionalChromeLifecycleTest {
         send(MotionEvent.ACTION_DOWN, listOf(0), listOf(first))
         send(MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
             listOf(0, 1), listOf(first, second))
-        // Cancel the original owner (id0/index0), then normally release remaining id1/index0.
-        send(MotionEvent.ACTION_POINTER_UP, listOf(0, 1), listOf(first, second), MotionEvent.FLAG_CANCELED)
+        // Release id0/index0, optionally marking it canceled, then normally release remaining id1/index0.
+        send(MotionEvent.ACTION_POINTER_UP, listOf(0, 1), listOf(first, second),
+            if (cancelFirstPointer) MotionEvent.FLAG_CANCELED else 0)
         send(MotionEvent.ACTION_UP, listOf(1), listOf(second))
         instrumentation.waitForIdleSync()
         composeRule.waitForIdle()
@@ -929,7 +1738,7 @@ class ConditionalChromeLifecycleTest {
         if (node == null) return null
         val ownsClick = node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }
         if (node.contentDescription?.toString() == label &&
-            (label != "囲み: Cluster" || ownsClick)) {
+            (!label.startsWith("囲み: ") || ownsClick)) {
             assertPlatformControl(node, label, checkExternalGeometry = !useAppProcessGeometry)
             return node
         }
@@ -1189,15 +1998,16 @@ class ConditionalChromeLifecycleTest {
     private fun waitForRegionState(
         instrumentation: android.app.Instrumentation,
         expected: String,
+        regionLabel: String = "囲み: Cluster",
     ): String {
         var matchedState: String? = null
         composeRule.waitUntil(
-            conditionDescription = "囲みの stateDescription が $expected になりません",
+            conditionDescription = "$regionLabel の stateDescription が $expected になりません",
             timeoutMillis = 4_000L,
         ) {
             composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
-            matchedState = findActionable(instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster")
+            matchedState = findActionable(instrumentation.uiAutomation.rootInActiveWindow, regionLabel)
                 ?.stateDescription?.toString()
             matchedState == expected
         }
@@ -1206,15 +2016,16 @@ class ConditionalChromeLifecycleTest {
 
     private fun waitForRegionRenameAction(
         instrumentation: android.app.Instrumentation,
+        regionLabel: String = "囲み: Cluster",
     ): Pair<AccessibilityNodeInfo, AccessibilityNodeInfo.AccessibilityAction> {
         var matchedAction: Pair<AccessibilityNodeInfo, AccessibilityNodeInfo.AccessibilityAction>? = null
         composeRule.waitUntil(
-            conditionDescription = "囲み: Cluster の名前編集 accessibility action が見つかりません",
+            conditionDescription = "$regionLabel の名前編集 accessibility action が見つかりません",
             timeoutMillis = 4_000L,
         ) {
             composeRule.waitForIdle()
             instrumentation.waitForIdleSync()
-            val region = findActionable(instrumentation.uiAutomation.rootInActiveWindow, "囲み: Cluster")
+            val region = findActionable(instrumentation.uiAutomation.rootInActiveWindow, regionLabel)
             val action = region?.actionList?.firstOrNull { it.label?.toString() == "囲みの名前を編集" }
             matchedAction = if (region != null && action != null) region to action else null
             matchedAction != null
@@ -1335,6 +2146,18 @@ class ConditionalChromeLifecycleTest {
             assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true))
             event.recycle()
             Thread.sleep(45)
+        }
+    }
+
+    private fun awaitSavedRegionName(
+        store: com.thinkcanvas.data.CanvasStore,
+        regionId: String,
+        name: String,
+    ) {
+        composeRule.waitUntil(5_000) {
+            runBlocking {
+                store.savedBoard(1L)?.snapshot?.shapes?.singleOrNull { it.id == regionId }?.name == name
+            }
         }
     }
 

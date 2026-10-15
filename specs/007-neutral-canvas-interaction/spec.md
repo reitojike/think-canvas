@@ -79,13 +79,21 @@
 
 - 共通化は実際にeditor2 family、spatial/ink familyで必要な終了判定・cleanupに限定する。全面的gesture rewrite・toolbar redesign・保存schema変更・新機能は対象外。
 - 明示「やめる」は従来の即時cancelを維持する。今回の確認はBackからの未確定変更破棄に適用する。
-- 囲み名の外側タップによる自動保存は追加しない。既存Doneと新しいBackを使用する。
+- Issue #110: 囲み名editor外で始まる1本指の短い静止tapは、変更ありなら既存Doneと同じRegionNameDraft / BoardState / saveSnapshot経路で一度だけ確定して閉じ、変更なしなら無保存で閉じる。外側で始まる指のDOWNからsequence全体をconsumeし、確定tapからselection・create・tool action・panを発生させない。slop超過drag、long-press、追加pointer、CANCEL / FLAG_CANCELEDも指sequenceをconsumeし、確定・canvas操作なしで下書きと選択を保持する。Stylusで始まる入力は既存ink経路を維持する。save / acknowledgement guard、session、focus / IME / chrome bounds / lifecycle契約を維持し、focus loss・Activity再生成を確定理由にしない。
 - Roadmap #81の2026-10-13横断dogfooding受入報告では、複数機能の組み合わせ、小画面、大きい文字で問題なしと記録した。TalkBack個別操作は未確認のまま今回の#81完了対象外とし、IME製品差・片手操作の個別判定はこの報告から推定しない。本仕様のTalkBack操作契約と既存テストは維持する。
+
+## Issue #110: 囲み名editorの外側tap
+
+- 2026-10-14の利用者承認により、囲み名editorの指操作をtext editorと同じ編集優先にする。外側で始まる1本指TouchのDOWNからsequence全体をconsumeし、短いstationaryな正常UPだけで終了する。変更があればDoneと同じregion commit pathで一度だけ保存し、変更がなければ保存せず閉じる。
+- 確定後も囲み選択を保持する。同じtapで選択解除・別要素selection・text creation・tool action・plus表示・panを発生させず、次の独立gestureから通常のcanvas操作へ戻る。
+- 外側の指drag、long-press、multi-touch、CANCEL / FLAG_CANCELEDは確定せずcanvas操作もしない。sequenceをconsumeし、下書き・入力・囲み選択・board・保存・content history・viewportを保持する。以前の「編集中の長押しdragをmove ownerへ渡す」期待は、この承認済み不変条件へ置き換える。
+- Stylusで始まる入力は既存ink経路を維持し、囲み名を確定しない。editor内のfield・Doneと既存アクセシビリティ操作を保持する。
+- 保存・acknowledgement guard、stale session / DOWN世代guard、focus / IME / chrome cleanup、Back・lifecycle契約を維持する。window focus lossやActivity recreationだけでは確定しない。標準Compose入力処理と既存save authorityを使い、generic frameworkやshared editor再設計を追加しない。
 
 ## Issue #112: 展開paletteの外側tap
 
 - palette/launcherと他のchrome controlは既存actionを保持する。canvas上の外側で始まる通常tap候補の1本指stationary short tapはpaletteだけ閉じ、同じtapからtext作成・選択・要素action・panを発火しない。明示handle/gripのownerは通常tap候補へ上書きせず、slop内でも既存の微調整・release・保存契約を保持する。
 - short tapは標準touchSlop以内、longPressTimeout未満の正常native UPとする。長押し・CANCEL・FLAG_CANCELED・領域外releaseはdismissしない。通常tap相当の候補は展開中も既存の長押し成立・pickup・一回の振動を維持し、要素のreleaseはmenu/選択追加、要素dragはmove、空白dragはgapへ渡す。timeout前のdragは既存pan、明示grip/handleは既存admission、追加指は既存pinch、stylusは既存inkへ渡し、paletteをdismissしない。
-- text outsideのfinalize-only、regionの既存outside admission、image editor・picker・標準modal、保存/ack guardを優先する。これらがactiveならpalette dismissalをadmitしない。Backの終了順は変更しない。
+- text outsideのfinalize-only、region outsideのIssue #110 finalization、image editor・picker・標準modal、保存/ack guardを優先する。これらがactiveならpalette dismissalをadmitしない。Backの終了順は変更しない。
 - 展開開始とdismissalではpending blank singleを取消し、dismissalをdouble-tapの第一tapに数えない。次の独立gestureとlauncherのaccessibility open/closeを維持する。閉じたpaletteのboundsは即時解放し、launcher/history/boundsのIssue #107 contractを保持する。
 - native instrumentationに外側blank/要素tap、長押し/取消、drag/pinch/stylus、次のtap、旧palette位置、native launcher/buttonとaccessibility操作の回帰を追加する。representative real-deviceの証拠が揃うまではIssue #112を完了にしない。
