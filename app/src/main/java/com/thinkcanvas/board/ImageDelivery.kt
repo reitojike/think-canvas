@@ -57,17 +57,6 @@ object ImageDelivery {
             }
         }
 
-    suspend fun writeDocument(context: Context, uri: Uri, bytes: ByteArray) =
-        withContext(Dispatchers.IO) {
-            try {
-                context.contentResolver.openOutputStream(uri, "w")?.use { it.write(bytes) }
-                    ?: error("選んだ保存先を開けません")
-            } catch (error: Throwable) {
-                runCatching { context.contentResolver.delete(uri, null, null) }
-                throw error
-            }
-        }
-
     suspend fun cacheUri(context: Context, bytes: ByteArray): Uri =
         withContext(Dispatchers.IO) {
             val directory = File(context.cacheDir, "board-images")
