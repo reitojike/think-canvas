@@ -48,7 +48,10 @@ class MultiSelectionTapTest {
             assertSelection(setOf("first", "second"))
         }
         fun click(label: String, pointer: Boolean) {
-            if (!pointer) node(label).performClick()
+            if (!pointer) {
+                val action = checkNotNull(node(label).fetchSemanticsNode().config[SemanticsActions.OnClick].action)
+                rule.runOnUiThread { assertTrue("semantic primary action: $label", action()) }
+            }
             else {
                 val canvas = rule.onNodeWithContentDescription("キャンバス")
                 val origin = canvas.fetchSemanticsNode().boundsInRoot.topLeft
@@ -84,7 +87,7 @@ class MultiSelectionTapTest {
         }
     }
 
-    private fun withBoard(block: Harness.() -> Unit) {
+    private fun withBoard(regionY: Float = 350f, block: Harness.() -> Unit) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val image = seedImage(context, "Picture").copy(id = imageId, x = 170f, y = 530f, width = 70f, height = 35f)
         val texts = listOf(TextElement("first", "First", x = 30f, y = 190f),
@@ -99,7 +102,7 @@ class MultiSelectionTapTest {
             val shapes = listOf(ShapeElement("rect", ShapeKind.RECTANGLE, 170f, 270f, 70f, 40f),
                 ShapeElement("ellipse", ShapeKind.ELLIPSE, 30f, 350f, 70f, 40f),
                 // Ordinary named regions must exceed the existing collapsed-region thresholds.
-                ShapeElement("region", ShapeKind.REGION, 170f, 350f, 130f, 100f, name = "Group"))
+                ShapeElement("region", ShapeKind.REGION, 170f, regionY, 130f, 100f, name = "Group"))
             fun stroke(id: String, kind: InkKind, x: Float, y: Float) = InkElement(id, kind, listOf(
                 InkStroke(startedAt = 1, endedAt = 101, inputType = InkInputType.TOUCH,
                     points = listOf(InkPoint(x, y, 0), InkPoint(x + 70f, y, 100)))))
@@ -174,7 +177,7 @@ class MultiSelectionTapTest {
         assertFalse(board.canUndo)
     }
 
-    @Test fun farRegionStillNavigatesInsteadOfTogglingSelection() = withBoard {
+    @Test fun farRegionStillNavigatesInsteadOfTogglingSelection() = withBoard(regionY = 1200f) {
         seedSelection()
         for (pointer in listOf(false, true)) {
             rule.runOnUiThread { navigation.viewportState.value = Viewport(scale = .2f, panX = 300f, panY = 600f) }
