@@ -3,8 +3,8 @@
   "authority": {
     "issue": 112,
     "baseline_main": "71849bd94005ce986bcf3a884064e97b0df7b19b",
-    "census_total": 272,
-    "note": "Issue #118のdated snapshotにIssue #112の独立回帰を追加。scope rebase後のPR代表4・main詳細5、palette長押しhandoffのPR回帰3、palette展開中の画像resize subslop正常UPのPR回帰1 identityを追加。actual discoveryはAndroidJUnitRunnerに委ね、receiptはselector生成に使わない。quarantine/filterは不変。Issue #141のsimulated diagnostic plumbing検証をPR/mainへ1 identity追加。 Issue #148のlauncher geometry記録・strict failure保持・selected-node freshnessの模擬契約検証を同じConditional familyのPR/mainへ3 identity追加。原因再現ではない。 Issue #110でpending ack/Running/Failed時の囲み名外側確定境界テストを追加し、full_only identityを同期。"
+    "census_total": 277,
+    "note": "Issue #118のdated snapshotにIssue #112の独立回帰を追加。scope rebase後のPR代表4・main詳細5、palette長押しhandoffのPR回帰3、palette展開中の画像resize subslop正常UPのPR回帰1 identityを追加。actual discoveryはAndroidJUnitRunnerに委ね、receiptはselector生成に使わない。quarantine/filterは不変。Issue #141のsimulated diagnostic plumbing検証をPR/mainへ1 identity追加。 Issue #148のlauncher geometry記録・strict failure保持・selected-node freshnessの模擬契約検証を同じConditional familyのPR/mainへ3 identity追加。原因再現ではない。 Issue #110でpending ack/Running/Failed時の囲み名外側確定境界テストを追加し、full_only identityを同期。 Issue #185の混在選択tap回帰5 identityを追加（PR代表3、main詳細2）。"
   },
   "suites": {
     "smoke": [
@@ -52,6 +52,9 @@
       "com.thinkcanvas.canvas.LongPressGestureTest#paletteImageResizeWithinSlopCommitsOnce",
       "com.thinkcanvas.canvas.LongPressGestureTest#shapeCreationConfirmsOnceAndPreservesUndoRedo",
       "com.thinkcanvas.canvas.LongPressGestureTest#touchAndStylusStrokeCompletionIsSilentAndUndoable",
+      "com.thinkcanvas.canvas.MultiSelectionTapTest#blankTapClearsSelectionAndItsPreviousCount",
+      "com.thinkcanvas.canvas.MultiSelectionTapTest#pointerAddsAndRemovesEveryOrdinaryElementKindWithoutSaving",
+      "com.thinkcanvas.canvas.MultiSelectionTapTest#semanticsAddsAndRemovesEveryOrdinaryElementKindWithoutSaving",
       "com.thinkcanvas.canvas.NeutralInteractionTest#changedNewTextContinueDialogBackAndOutsideKeepDraft",
       "com.thinkcanvas.canvas.NeutralInteractionTest#editorWaitsForWindowOwnerAndDoesNotReshowHiddenImeOnWindowReturn",
       "com.thinkcanvas.canvas.NeutralInteractionTest#endedPendingEditorDoesNotRegainFocusBeforeRecomposition",
@@ -165,6 +168,8 @@
       "com.thinkcanvas.canvas.LongPressGestureTest#pickupSurvivesNotificationTimeoutAndCancelClearsIt",
       "com.thinkcanvas.canvas.LongPressGestureTest#regionCreationConfirmsOnce",
       "com.thinkcanvas.canvas.LongPressGestureTest#regionEntryAndExitKeepGuidanceWithoutExtraFeedback",
+      "com.thinkcanvas.canvas.MultiSelectionTapTest#farRegionStillNavigatesInsteadOfTogglingSelection",
+      "com.thinkcanvas.canvas.MultiSelectionTapTest#returningToSingleSelectionRestoresTextEditingAndRegionRename",
       "com.thinkcanvas.canvas.NeutralInteractionTest#armedSpatialToolAndInkToolSurviveActivityRecreation",
       "com.thinkcanvas.canvas.NeutralInteractionTest#backBeforeCanvasTapClosesMenuSearchAndExpandedToolsWithoutForwarding",
       "com.thinkcanvas.canvas.NeutralInteractionTest#backBeforeSelectionPreviewRejectsOldTapMoveAndResize",
