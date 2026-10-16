@@ -282,10 +282,10 @@ class CanvasStore private constructor(context: Context) {
             snapshot.texts.isEmpty() && snapshot.shapes.isEmpty() &&
             snapshot.arrows.isEmpty() && snapshot.ink.isEmpty() && snapshot.images.isEmpty()
 
-    fun dismissGuide() {
+    suspend fun dismissGuide() = submit {
         check(preferences.edit().putBoolean("guideDismissed", true)
             .remove("guideEligibleBoardId").commit()) { "利用状態を保存できません" }
-    }
+    }.await()
 
     companion object {
         @Volatile private var instance: CanvasStore? = null

@@ -33,6 +33,7 @@ import com.thinkcanvas.board.BoardImageRenderer
 import com.thinkcanvas.board.BoardListScreen
 import com.thinkcanvas.board.ExportTypography
 import com.thinkcanvas.board.GuideSheet
+import com.thinkcanvas.board.GuideViewModel
 import com.thinkcanvas.board.ImageDelivery
 import com.thinkcanvas.board.ShareSheet
 import com.thinkcanvas.board.planShare
@@ -147,7 +148,7 @@ class MainActivity : ComponentActivity() {
         val boardListActions = ViewModelProvider(this)[BoardListActionViewModel::class.java]
         val page = mutableStateOf<Page>(Page.Loading)
         val cards = mutableStateOf<List<StoredBoard>>(emptyList())
-        val guideVisible = mutableStateOf(false)
+        val guide = ViewModelProvider(this)[GuideViewModel::class.java]
         val transientPending = mutableStateOf(false)
         val errorMessage = mutableStateOf<String?>(null)
         val startupLoadFailed = mutableStateOf(false)
@@ -264,15 +265,15 @@ class MainActivity : ComponentActivity() {
             navigationTargetIsList = false
             page.value = Page.Board(stored.details.id, stored.details.name,
                 boardSessions.stateFor(stored.details.id, stored.snapshot))
-            guideVisible.value = shareImports.state.request == null &&
+            if (shareImports.state.request == null &&
                 imageImports.state.phase == com.thinkcanvas.image.ImageImportPhase.IDLE &&
-                store.shouldShowGuide(stored.details.id, stored.snapshot)
+                store.shouldShowGuide(stored.details.id, stored.snapshot)) guide.show()
         }
 
-        suspend fun showList() {
+        suspend fun showList(preserveGuide: Boolean = false) {
             cards.value = store.boardsWithContent()
             navigationTargetIsList = true
-            guideVisible.value = false
+            if (!preserveGuide) guide.dismiss()
             page.value = Page.List
         }
 
@@ -318,7 +319,7 @@ class MainActivity : ComponentActivity() {
                         if (boardListActions.state.value == failed) {
                             cards.value = restoredCards
                             navigationTargetIsList = true
-                            guideVisible.value = false
+                            guide.dismiss()
                             page.value = Page.List
                             boardListActions.acknowledgeFailure(failed)
                             errorMessage.value = null
@@ -356,7 +357,7 @@ class MainActivity : ComponentActivity() {
             val imageState = imageImports.state
             fun baseImportReady(ignoreImage: Boolean = false): Boolean {
                 if (!ignoreImage && imageImports.state.blocksCanvas) return false
-                if (transientPending.value || guideVisible.value || errorMessage.value != null ||
+                if (transientPending.value || guide.state.visible || errorMessage.value != null ||
                     shareDialog.value != null || shareBusy.value ||
                     boardListActions.state.value != BoardListActionState.Idle) return false
                 return when (val shown = page.value) {
@@ -367,7 +368,7 @@ class MainActivity : ComponentActivity() {
             }
             LaunchedEffect(imageState.phase, imageState.request?.requestId, imageState.launchNeeded,
                 page.value, canvasReady.value, canvasOwnerId.value, transientPending.value,
-                guideVisible.value, errorMessage.value, shareDialog.value, shareBusy.value, listActionState) {
+                guide.state.visible, errorMessage.value, shareDialog.value, shareBusy.value, listActionState) {
                 val request = imageImports.state.request ?: return@LaunchedEffect
                 try {
                     when (imageImports.state.phase) {
@@ -424,7 +425,7 @@ class MainActivity : ComponentActivity() {
             }
             LaunchedEffect(importState.phase, importState.request?.requestId,
                 importState.request?.destinationId, importState.writing, imageState.phase, imageState.hidden, page.value,
-                canvasReady.value, canvasOwnerId.value, listReady.value, transientPending.value, guideVisible.value,
+                canvasReady.value, canvasOwnerId.value, listReady.value, transientPending.value, guide.state.visible,
                 errorMessage.value, shareDialog.value, shareBusy.value, listActionState) {
                 val request = shareImports.state.request ?: return@LaunchedEffect
                 if (shareImports.state.writing) return@LaunchedEffect
@@ -529,7 +530,7 @@ class MainActivity : ComponentActivity() {
                                 if (boardListActions.state.value == current) {
                                     cards.value = restoredCards
                                     navigationTargetIsList = true
-                                    guideVisible.value = false
+                                    guide.dismiss()
                                     page.value = Page.List
                                     if (current.action is BoardListAction.Delete)
                                         boardSessions.discard(current.action.boardId)
@@ -588,7 +589,7 @@ class MainActivity : ComponentActivity() {
                                 showShare(stored.details.name, stored.snapshot, shareTypography)
                             }
                         } },
-                        onHelp = { if (!shareImports.state.blocksCanvas && !imageImports.state.blocksCanvas) guideVisible.value = true },
+                        onHelp = { if (!shareImports.state.blocksCanvas && !imageImports.state.blocksCanvas) guide.show() },
                     )
                     is Page.Board -> key(current.id) {
                         CanvasScreen(current.state,
@@ -651,7 +652,7 @@ class MainActivity : ComponentActivity() {
                         }) { Text(if (imageState.request?.accepted == null) "閉じて選び直す" else "再試行") } },
                         dismissButton = { TextButton(onClick = { imageImports.hideFailure() }) { Text("閉じる") } })
                 }
-                if (!guideVisible.value && errorMessage.value == null && shareDialog.value == null && !imageState.blocksCanvas) {
+                if (!guide.state.visible && errorMessage.value == null && shareDialog.value == null && !imageState.blocksCanvas) {
                     ShareImportDialog(importState, importBoards.value,
                     destinationName = importBoards.value.firstOrNull { it.id == importState.request?.destinationId }?.name,
                     destinationReady = baseImportReady(),
@@ -681,22 +682,20 @@ class MainActivity : ComponentActivity() {
                         onShare = { deliver(2) },
                         onDismiss = { if (!shareBusy.value) dismissShare() })
                 }
-                if (guideVisible.value) GuideSheet(
-                    onStart = {
-                        try {
-                            store.dismissGuide()
-                            guideVisible.value = false
-                        } catch (error: Exception) {
-                            errorMessage.value = error.message ?: "案内の状態を保存できません"
-                        }
-                    },
-                    onDismiss = { guideVisible.value = false },
+                if (guide.state.visible) GuideSheet(
+                    saving = guide.state.saving,
+                    onStart = guide::start,
+                    onDismiss = guide::dismiss,
                 )
-                errorMessage.value?.let { message ->
-                    AlertDialog(onDismissRequest = { dismissListActionFailure() },
+                (errorMessage.value ?: guide.state.error)?.let { message ->
+                    fun dismissFailure() {
+                        if (errorMessage.value != null) dismissListActionFailure()
+                        else guide.acknowledgeFailure()
+                    }
+                    AlertDialog(onDismissRequest = { dismissFailure() },
                         title = { Text("操作を完了できません") },
                         text = { Text(message) },
-                        confirmButton = { TextButton(onClick = { dismissListActionFailure() }) {
+                        confirmButton = { TextButton(onClick = { dismissFailure() }) {
                             Text(if (startupLoadFailed.value) "一覧へ" else "閉じる")
                         } },
                         dismissButton = if (startupLoadFailed.value) ({
@@ -711,11 +710,11 @@ class MainActivity : ComponentActivity() {
             performTransient {
                 try {
                     shareImports.awaitInitialized()
-                    if (navigationTargetIsList) showList()
+                    if (navigationTargetIsList) showList(preserveGuide = true)
                     else {
                         val restored = if (shareImports.state.request != null || initialShareAttempt)
                             store.lastOpenedBoard() else store.restore()
-                        if (restored == null) showList() else openBoard(restored)
+                        if (restored == null) showList(preserveGuide = true) else openBoard(restored)
                     }
                 } catch (error: Exception) {
                     startupLoadFailed.value = true

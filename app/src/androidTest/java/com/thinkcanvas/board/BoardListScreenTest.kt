@@ -303,6 +303,9 @@ class BoardListScreenTest {
                 context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
                     .getBoolean("guideDismissed", false)
             }
+            composeRule.waitUntil(5_000) {
+                composeRule.onAllNodesWithText("基本の操作").fetchSemanticsNodes().isEmpty()
+            }
             composeRule.onNodeWithContentDescription("ボード一覧を開く").performClick()
             awaitDescription("最初のボード、", substring = true)
             composeRule.onNodeWithContentDescription("新しいボード").performClick()
@@ -341,6 +344,9 @@ class BoardListScreenTest {
             composeRule.waitUntil(5_000) {
                 context.getSharedPreferences("thinkcanvas.settings", Context.MODE_PRIVATE)
                     .getBoolean("guideDismissed", false)
+            }
+            composeRule.waitUntil(5_000) {
+                composeRule.onAllNodesWithText("基本の操作").fetchSemanticsNodes().isEmpty()
             }
             assertTrue(composeRule.onAllNodesWithText("基本の操作").fetchSemanticsNodes().isEmpty())
             assertTrue("CTA activation persists dismissal through onStart",

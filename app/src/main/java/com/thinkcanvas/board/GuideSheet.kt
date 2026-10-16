@@ -12,8 +12,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -23,8 +27,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GuideSheet(onStart: () -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White,
+fun GuideSheet(saving: Boolean = false, onStart: () -> Unit, onDismiss: () -> Unit) {
+    val savePending by rememberUpdatedState(saving)
+    val sheetState = rememberModalBottomSheetState(
+        confirmValueChange = { it != SheetValue.Hidden || !savePending })
+    ModalBottomSheet(onDismissRequest = { if (!saving) onDismiss() },
+        sheetState = sheetState, containerColor = Color.White,
         shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
             .padding(start = 22.dp, end = 22.dp, bottom = 22.dp)) {
@@ -40,7 +48,8 @@ fun GuideSheet(onStart: () -> Unit, onDismiss: () -> Unit) {
             Text("ペン・図形・囲みは右下の＋から、検索は右上から。この案内はボード一覧の「使い方」でまた見られます",
                 fontSize = 12.sp, color = Color(0xFF8D8882))
             Spacer(Modifier.height(18.dp))
-            Button(onClick = onStart, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            Button(onClick = onStart, enabled = !saving,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF23211E))) {
                 Text("はじめる")
             }

@@ -13,10 +13,10 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "scripts/android-test-suites.json"
 CATEGORIES = ("smoke", "full_only", "jvm_candidate", "review_required")
-MIGRATION_COUNTS = dict(smoke=88, full_only=180, jvm_candidate=9, review_required=0)
+MIGRATION_COUNTS = dict(smoke=90, full_only=181, jvm_candidate=9, review_required=0)
 SMOKE_ANNOTATION = "com.thinkcanvas.test.PrSmoke"
 FLAKY_ANNOTATION = "androidx.test.filters.FlakyTest"
-LANE_COUNTS = {"smoke": 71, "non-quarantined": 239, "quarantine": 38, "full": 277}
+LANE_COUNTS = {"smoke": 73, "non-quarantined": 242, "quarantine": 38, "full": 280}
 IDENTIFIER = r"[A-Za-z_][A-Za-z0-9_]*"
 IDENTITY_RE = re.compile(rf"^(?:{IDENTIFIER}\.)+{IDENTIFIER}#{IDENTIFIER}$")
 
