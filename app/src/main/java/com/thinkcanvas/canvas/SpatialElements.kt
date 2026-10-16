@@ -61,7 +61,7 @@ fun SpatialElements(
     canvasWidthPx: Int,
     onHandle: (String, HandleKind) -> Boolean,
     onConnect: (String, HandleKind) -> Boolean,
-    onSelect: (String) -> Unit,
+    onSelect: (String) -> Boolean,
     onAdd: (String) -> Boolean,
     onRemove: (String) -> Boolean,
     onRename: (String) -> Boolean,
@@ -259,7 +259,11 @@ fun SpatialElements(
             y.roundToInt() - 24.dp.roundToPx()) }.size(48.dp).semantics {
             contentDescription = if (shape.name.isBlank()) kind else "$kind: ${shape.name}"
             stateDescription = if (shape.id in selected) "選択中" else "未選択"
-            onClick(label = "選択") { onSelect(shape.id); true }
+            val primaryLabel = if (shape.kind == ShapeKind.REGION && projection.farLikeRegion(shape.id))
+                "囲みへ移動"
+            else selectionTapLabel(shape.id, selected,
+                if (shape.kind == ShapeKind.REGION && shape.id in selected) "囲みの名前を編集" else "選択")
+            onClick(label = primaryLabel) { onSelect(shape.id) }
             customActions = listOf(
                 if (shape.id in selected) CustomAccessibilityAction("選択から外す") { onRemove(shape.id) }
                 else CustomAccessibilityAction("選択に追加") { onAdd(shape.id) },
@@ -283,7 +287,7 @@ fun SpatialElements(
             y.roundToInt() - 24.dp.roundToPx()) }.size(48.dp).semantics {
             contentDescription = "矢印"
             stateDescription = if (arrow.id in selected) "選択中" else "未選択"
-            onClick(label = "選択") { onSelect(arrow.id); true }
+            onClick(label = selectionTapLabel(arrow.id, selected)) { onSelect(arrow.id) }
             customActions = listOf(
                 if (arrow.id in selected) CustomAccessibilityAction("選択から外す") { onRemove(arrow.id) }
                 else CustomAccessibilityAction("選択に追加") { onAdd(arrow.id) },

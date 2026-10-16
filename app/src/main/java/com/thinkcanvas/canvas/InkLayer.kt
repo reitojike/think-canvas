@@ -57,7 +57,7 @@ fun InkLayer(
     moving: Set<String>,
     preview: InkPreview?,
     dimmed: Boolean = false,
-    onSelect: (String) -> Unit,
+    onSelect: (String) -> Boolean,
     onMove: (String, Float, Float) -> Boolean,
     onDelete: (String) -> Boolean,
 ) {
@@ -103,7 +103,7 @@ fun InkLayer(
             y.roundToInt() - 24.dp.roundToPx()) }.size(48.dp).semantics {
             contentDescription = if (kind == InkKind.PEN) "ペンの線" else "マーカーの線"
             stateDescription = if (element.id in selected) "選択中" else "未選択"
-            onClick(label = "選択") { onSelect(element.id); true }
+            onClick(label = selectionTapLabel(element.id, selected)) { onSelect(element.id) }
             customActions = listOf(
                 CustomAccessibilityAction("左へ移動") { onMove(element.id, -16f, 0f) },
                 CustomAccessibilityAction("右へ移動") { onMove(element.id, 16f, 0f) },
