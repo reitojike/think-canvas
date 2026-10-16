@@ -72,13 +72,37 @@ class ImageResourcesTest {
             }
             val resources = ImageResources.get(store)
             val keys = images.map { ImageResourceKey(it.assetId, 2048) }
-            keys.forEach(resources::ensure)
-            val deadline = SystemClock.uptimeMillis() + 20_000
-            while (keys.any(resources::loading) && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(20)
-            assertFalse(keys.any(resources::loading))
+            fun load(key: ImageResourceKey) {
+                resources.ensure(key)
+                val deadline = SystemClock.uptimeMillis() + 20_000
+                while (resources.loading(key) && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(20)
+                assertFalse(resources.loading(key))
+                assertFalse(resources.failed(key))
+            }
+            keys.forEach(::load)
             assertFalse(keys.any(resources::failed))
             assertTrue(resources.byteCount <= ImageDecodePolicy.CACHE_BYTES)
-            assertTrue(keys.count { resources.bitmap(it) != null } in 1..4)
+            val displayed = keys.map(resources::bitmap)
+            assertEquals(4, displayed.count { it != null })
+            assertEquals(ImageDecodePolicy.CACHE_BYTES.toLong(), resources.byteCount)
+
+            // A read promotes the oldest image; an ensure-only demand does not.
+            val recent = checkNotNull(displayed[4])
+            val evicted = checkNotNull(displayed[5])
+            assertSame(recent, resources.bitmap(keys[4]))
+            resources.ensure(keys[5])
+            load(keys[0])
+            assertNull(resources.bitmap(keys[5]))
+            assertSame(recent, resources.bitmap(keys[4]))
+            assertFalse(evicted.isRecycled)
+            assertEquals(Color.RED, evicted.getPixel(0, 0))
+
+            load(keys[5])
+            val reacquired = checkNotNull(resources.bitmap(keys[5]))
+            assertNotSame(evicted, reacquired)
+            assertEquals(Color.RED, reacquired.getPixel(0, 0))
+            assertFalse(evicted.isRecycled)
+            assertTrue(resources.byteCount <= ImageDecodePolicy.CACHE_BYTES)
             assertEquals(8, database.canvasDao().images(board.details.id).size)
         } finally {
             store.delete(board.details.id)
