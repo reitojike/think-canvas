@@ -27,8 +27,9 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class MultiSelectionTapTest {
     @get:Rule val rule = createEmptyComposeRule()
+    private val imageId = "00000000-0000-0000-0000-000000000185"
     private val labels = listOf("Extra", "四角", "丸", "囲み: Group", "矢印", "ペンの線", "マーカーの線", "Picture")
-    private val ids = listOf("extra", "rect", "ellipse", "region", "arrow", "pen", "marker", "image")
+    private val ids = listOf("extra", "rect", "ellipse", "region", "arrow", "pen", "marker", imageId)
 
     private inner class Harness(val scenario: ActivityScenario<MainActivity>, val board: BoardState,
                                 val editor: TextEditorSession, val navigation: ViewportHistory) {
@@ -85,7 +86,7 @@ class MultiSelectionTapTest {
 
     private fun withBoard(block: Harness.() -> Unit) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val image = seedImage(context, "Picture").copy(id = "image", x = 170f, y = 530f, width = 70f, height = 35f)
+        val image = seedImage(context, "Picture").copy(id = imageId, x = 170f, y = 530f, width = 70f, height = 35f)
         val texts = listOf(TextElement("first", "First", x = 30f, y = 190f),
             TextElement("second", "Second", x = 170f, y = 190f), TextElement("extra", "Extra", x = 30f, y = 270f))
         val database = CanvasDatabase.open(context)
@@ -97,7 +98,8 @@ class MultiSelectionTapTest {
             rule.waitUntil(10_000) { rule.onAllNodesWithContentDescription("First").fetchSemanticsNodes().isNotEmpty() }
             val shapes = listOf(ShapeElement("rect", ShapeKind.RECTANGLE, 170f, 270f, 70f, 40f),
                 ShapeElement("ellipse", ShapeKind.ELLIPSE, 30f, 350f, 70f, 40f),
-                ShapeElement("region", ShapeKind.REGION, 170f, 350f, 75f, 70f, name = "Group"))
+                // Ordinary named regions must exceed the existing collapsed-region thresholds.
+                ShapeElement("region", ShapeKind.REGION, 170f, 350f, 130f, 100f, name = "Group"))
             fun stroke(id: String, kind: InkKind, x: Float, y: Float) = InkElement(id, kind, listOf(
                 InkStroke(startedAt = 1, endedAt = 101, inputType = InkInputType.TOUCH,
                     points = listOf(InkPoint(x, y, 0), InkPoint(x + 70f, y, 100)))))
@@ -148,7 +150,7 @@ class MultiSelectionTapTest {
         val canvas = rule.onNodeWithContentDescription("キャンバス")
         canvas.performTouchInput { click(Offset(width * .85f, height * .75f)) }
         // Advance only the existing double-tap confirmation, not the 1.8s guidance expiry.
-        rule.mainClock.advanceTimeBy(400)
+        rule.mainClock.advanceTimeBy(canvas.fetchSemanticsNode().layoutInfo.viewConfiguration.doubleTapTimeoutMillis + 1)
         rule.waitForIdle()
         rule.onNodeWithContentDescription("選択範囲を画像で共有").assertDoesNotExist()
         rule.onNodeWithText("3個を選択").assertDoesNotExist()
