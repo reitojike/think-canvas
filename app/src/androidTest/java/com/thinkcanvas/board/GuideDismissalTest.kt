@@ -1,8 +1,8 @@
 package com.thinkcanvas.board
 
-import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
+import android.view.KeyEvent
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
@@ -63,7 +63,8 @@ class GuideDismissalTest {
         composeRule.onAllNodesWithText("基本の操作").fetchSemanticsNodes().isEmpty()
     }
     private fun back() {
-        assertTrue(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+        // Wait for platform key delivery before releasing a queue that can close the sheet.
+        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         composeRule.waitForIdle()
     }
 
