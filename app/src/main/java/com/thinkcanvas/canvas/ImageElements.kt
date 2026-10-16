@@ -88,7 +88,7 @@ fun ImageElements(snapshot: BoardSnapshot, viewport: Viewport, projection: Seman
                 stateDescription = if (image.id in selected) "選択中" else "未選択"
                 if (!enabled) disabled()
                 else {
-                    onClick(label = "選択") { onSelect(image.id) }
+                    onClick(label = selectionTapLabel(image.id, selected)) { onSelect(image.id) }
                     customActions = listOf(
                         if (image.id in selected) CustomAccessibilityAction("選択から外す") { onRemove(image.id) }
                         else CustomAccessibilityAction("選択に追加") { onAdd(image.id) },

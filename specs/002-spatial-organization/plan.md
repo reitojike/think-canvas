@@ -48,6 +48,8 @@
 
 ### 画面と gesture
 
+- [#185](https://github.com/reitojike/think-canvas/issues/185) の承認済み統一では、既存の選択集合が2件以上の間だけ全種類の通常tapを追加・解除にする。`CanvasScreen` 内で非textの主操作をpointerとsemanticsから共用し、FAR囲みの視点移動を先に判定する。解除は既存 `removeSelection` を使い、空白での全解除時には件数案内を消す。単一選択・編集・長押し・drag・投げ縄・stylusの調停、保存・Undoは変更しない。独立した混在選択のAndroid回帰で主操作と案内・保存要求・履歴を観測する。新しいgesture基盤や依存関係は不要で、Constitutionの標準semantics・空間配置・端末内保存の境界を保つ。
+
 - `CanvasScreen` の入力を `tap`、`pan`、`zoom`、`move`、`resize`、`arrow-end`、`arrow-bend`、`lasso`、`gap`、`create` の状態に分ける。down 時の判定順は [操作契約](contracts/interaction.md) に従う。子 UI が消費した event を尊重し、引き受けた操作だけを消費する。
 - 通常 drag は #2 のパンを維持する。要素長押し後の drag は移動、動かず release したらメニュー。空白長押し後の drag は余白。図形・矢印・囲み選択ツールでは一筆の drag をそれぞれの作成操作へ渡す。2 指入力や cancel 時は preview を捨てる。
 - 図形・矢印は Canvas 描画と個別の透明な semantics 対象を組み合わせる。選択枠、操作つまみ、ツール、案内、余白帯は HTML モックの色と配置を基準にする。新しい操作つまみとメニューのボタンは 48dp 以上のタッチ領域を確保する。

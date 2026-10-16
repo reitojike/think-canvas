@@ -514,7 +514,11 @@ fun CanvasScreen(
         val live = blankTapIsLive(pending)
         cancelBlankTap()
         if (!live) return
-        if (selectedIds.isNotEmpty()) { selectedId = null; selectedIds = emptySet() }
+        if (selectedIds.isNotEmpty()) {
+            selectedId = null
+            selectedIds = emptySet()
+            guidance = null
+        }
         else if (!searchOpen) writeTracedDraft("confirmedBlank", Draft(null, pending.world.x, pending.world.y))
     }
 
@@ -1064,14 +1068,24 @@ fun CanvasScreen(
         }
     }
 
-    fun textPrimaryActionAllowed(): Boolean = !exitBlocked() &&
+    fun elementPrimaryActionAllowed(): Boolean = !exitBlocked() &&
         editorSession.draft.value == null && editorSession.regionNameDraft.value == null &&
         editorSession.imageDescriptionDraft.value == null && !imagePickerOpen &&
         discardTarget == null && attachmentEditor == null && menuTarget == null &&
         latestInkTool.value == null && latestTool.value == SpatialTool.NONE
 
+    fun removeSelection(id: String): Boolean {
+        stopFling()
+        if (saveBlocked()) return false
+        if (id !in selectedIds) return false
+        selectedIds = selectedIds - id
+        if (selectedId == id) selectedId = null
+        guidance = "${selectedIds.size}個を選択"
+        return true
+    }
+
     fun activateText(id: String): Boolean {
-        if (!textPrimaryActionAllowed() || !latestProjection.value.visible(id)) return false
+        if (!elementPrimaryActionAllowed() || !latestProjection.value.visible(id)) return false
         val element = board.elements.firstOrNull { it.id == id } ?: return false
         stopFling()
         cancelBlankTap()
@@ -1087,11 +1101,29 @@ fun CanvasScreen(
                 selectedIds = selection + id
                 guidance = "${selectedIds.size}個を選択"
             }
-            TextPrimaryAction.REMOVE_FROM_SELECTION -> {
-                selectedIds = selection - id
-                if (selectedId == id) selectedId = null
-                guidance = "${selectedIds.size}個を選択"
-            }
+            TextPrimaryAction.REMOVE_FROM_SELECTION -> removeSelection(id)
+        }
+        return true
+    }
+
+    fun activateNonText(id: String): Boolean {
+        if (!elementPrimaryActionAllowed() || !latestProjection.value.visible(id)) return false
+        val region = board.shapes.firstOrNull { it.id == id && it.kind == ShapeKind.REGION }
+        stopFling()
+        cancelBlankTap()
+        // FAR region navigation retains priority over selection toggling.
+        if (region != null && latestProjection.value.farLikeRegion(id) && canvasSize != IntSize.Zero) {
+            animateViewport(latestViewport.value.fitRegion(region,
+                canvasSize.width.toFloat(), canvasSize.height.toFloat(), density.density))
+        } else if (selectedIds.size > 1) {
+            if (id in selectedIds) return removeSelection(id)
+            selectedIds = selectedIds + id
+            guidance = "${selectedIds.size}個を選択"
+        } else if (id in selectedIds && region != null) {
+            openRegionName(id, region.name)
+        } else {
+            selectedId = null
+            selectedIds = setOf(id)
         }
         return true
     }
@@ -1115,18 +1147,7 @@ fun CanvasScreen(
                 confirmBlankTap(pending)
             }
         } else if (element == null && spatial != null) {
-            cancelBlankTap()
-            val region = board.shapes.firstOrNull { it.id == spatial && it.kind == ShapeKind.REGION }
-            if (region != null && latestProjection.value.farLikeRegion(spatial) && canvasSize != IntSize.Zero) {
-                animateViewport(latestViewport.value.fitRegion(region,
-                    canvasSize.width.toFloat(), canvasSize.height.toFloat(), density.density))
-                return
-            }
-            if (latestSelectedIds.value.size > 1 && spatial in latestSelectedIds.value) {
-                selectedIds = latestSelectedIds.value - spatial
-            } else if (spatial in latestSelectedIds.value && board.shapes.any { it.id == spatial && it.kind == ShapeKind.REGION }) {
-                openRegionName(spatial, board.shapes.first { it.id == spatial }.name)
-            } else { selectedId = null; selectedIds = setOf(spatial) }
+            activateNonText(spatial)
         } else if (element != null) activateText(element.id)
     }
 
@@ -1137,16 +1158,6 @@ fun CanvasScreen(
         val ids = if (id in selectedIds) selectedIds else setOf(id)
         if (!board.moveSelection(ids, dx, dy)) return false
         saveSnapshot()
-        return true
-    }
-
-    fun removeSelection(id: String): Boolean {
-        stopFling()
-        if (saveBlocked()) return false
-        if (id !in selectedIds) return false
-        selectedIds = selectedIds - id
-        if (selectedId == id) selectedId = null
-        guidance = "${selectedIds.size}個を選択"
         return true
     }
 
@@ -1988,9 +1999,7 @@ fun CanvasScreen(
         }
         ImageElements(displaySnapshot, viewport, displayProjection, selectedIds, canvasSize,
             imageResources, enabled = indicatorsAllowed() && !searchOpen, moving = movingIds,
-            onSelect = { id -> if (!admitImageAction(id)) false else {
-                selectedIds = setOf(id); selectedId = null; true
-            } },
+            onSelect = { id -> admitImageAction(id) && activateNonText(id) },
             onAdd = { id -> if (!admitImageAction(id) || id in selectedIds) false else {
                 selectedIds = selectedIds + id; selectedId = null; true
             } },
@@ -2008,7 +2017,7 @@ fun CanvasScreen(
             onDescribe = { id -> if (admitImageAction(id)) openImageDescription(id) else false })
         InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.MARKER,
             viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
-            onSelect = { id -> if (!saveBlocked()) { selectedIds = setOf(id); selectedId = null } },
+            onSelect = { id -> activateNonText(id) },
             onMove = { id, dx, dy ->
                 if (saveBlocked()) false else board.moveSelection(
                     if (id in selectedIds) selectedIds else setOf(id), dx, dy,
@@ -2051,15 +2060,7 @@ fun CanvasScreen(
                     true
                 }
             },
-            onSelect = { id ->
-                if (!saveBlocked()) {
-                    val region = board.shapes.firstOrNull { it.id == id && it.kind == ShapeKind.REGION }
-                    if (region != null && projection.farLikeRegion(id) && canvasSize != IntSize.Zero)
-                        animateViewport(viewport.fitRegion(region,
-                            canvasSize.width.toFloat(), canvasSize.height.toFloat(), density.density))
-                    else { selectedIds = setOf(id); selectedId = null }
-                }
-            },
+            onSelect = { id -> activateNonText(id) },
             onAdd = { id ->
                 if (saveBlocked() || id in selectedIds) false else {
                     selectedIds = selectedIds + id
@@ -2178,7 +2179,7 @@ fun CanvasScreen(
                             contentDescription = element.text
                             stateDescription = if (selected) selectedLabel else unselectedLabel
                             if (elementActionsEnabled) {
-                                if (textPrimaryActionAllowed()) {
+                                if (elementPrimaryActionAllowed()) {
                                     val primaryLabel = when (textPrimaryAction(element.id, selectedIds)) {
                                         TextPrimaryAction.EDIT -> editLabel
                                         TextPrimaryAction.ADD_TO_SELECTION -> "選択に追加"
@@ -2281,7 +2282,7 @@ fun CanvasScreen(
 
         InkLayer(displaySnapshot.ink.filter { displayProjection.visible(it.id) }, InkKind.PEN,
             viewport, selectedIds, movingIds, inkPreview, dimmed = searchOpen && searchQuery.isNotBlank(),
-            onSelect = { id -> if (!saveBlocked()) { selectedIds = setOf(id); selectedId = null } },
+            onSelect = { id -> activateNonText(id) },
             onMove = { id, dx, dy ->
                 if (saveBlocked()) false else board.moveSelection(
                     if (id in selectedIds) selectedIds else setOf(id), dx, dy,

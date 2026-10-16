@@ -140,7 +140,7 @@ class MultiSelectionTapTest {
         click("四角", pointer = false)
         assertSelection(setOf("first", "second", "rect"))
         val canvas = rule.onNodeWithContentDescription("キャンバス")
-        canvas.performTouchInput { click(Offset(size.width * .85f, size.height * .75f)) }
+        canvas.performTouchInput { click(Offset(width * .85f, height * .75f)) }
         // Advance only the existing double-tap confirmation, not the 1.8s guidance expiry.
         rule.mainClock.advanceTimeBy(400)
         rule.waitForIdle()
