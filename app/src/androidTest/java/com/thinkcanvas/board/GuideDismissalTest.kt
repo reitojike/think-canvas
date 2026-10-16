@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
@@ -88,8 +89,14 @@ class GuideDismissalTest {
             assertTrue(queue.trySend { started.complete(Unit); release.await() }.isSuccess)
             runBlocking { withTimeout(5_000) { started.await() } }
 
+            lateinit var dismiss: () -> Boolean
+            composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.Dismiss))
+                .performSemanticsAction(SemanticsActions.Dismiss) { dismiss = it }
             composeRule.onNodeWithText("はじめる").performSemanticsAction(SemanticsActions.OnClick) { click ->
-                composeRule.runOnUiThread { assertTrue(click()); assertTrue(click()) }
+                composeRule.runOnUiThread {
+                    assertTrue(click()); assertTrue(click())
+                    dismiss() // Start and dismiss occur before the busy UI can recompose.
+                }
             }
             composeRule.onNodeWithText("はじめる").assertIsNotEnabled()
             scenario.onActivity { assertTrue(firstOwner.state.saving) }

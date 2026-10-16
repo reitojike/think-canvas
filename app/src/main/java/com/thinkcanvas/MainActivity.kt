@@ -683,7 +683,7 @@ class MainActivity : ComponentActivity() {
                         onDismiss = { if (!shareBusy.value) dismissShare() })
                 }
                 if (guide.state.visible) GuideSheet(
-                    saving = guide.state.saving,
+                    saving = { guide.state.saving },
                     onStart = guide::start,
                     onDismiss = guide::dismiss,
                 )

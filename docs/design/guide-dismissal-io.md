@@ -24,7 +24,8 @@ Spec005 Story3 / FR008 / FR014 の初回 empty-board guide と一覧からの re
 - GuideState は純粋な状態遷移だけを持つ。ViewModel は Main thread 上で状態を更新し、
   viewModelScope で一つの保存を所有する。Activity やその callback を保存処理に渡さない。
 - 保存待ち中は CTA を無効にし、Back・外側 tap・swipe による Hidden 遷移を止める。
-  UI state 更新前の再入も start の状態検査で拒否する。
+  UI state 更新前の再入も start の状態検査で拒否する。Hidden の admission では ViewModel の
+  最新状態を直接読み、保存開始後の再描画前に届く dismiss も拒否する。
 - 再生成後も表示・保存待ち・エラーは同じ ViewModel に残る。startup の eligibility 読取は
   保持済みガイドを閉じない。成功した owner だけがガイドを閉じる。
 - task 終了・process death では画面所有者を破棄する。既にキューに入った設定保存は継続し得る。

@@ -16,8 +16,6 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -27,11 +25,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GuideSheet(saving: Boolean = false, onStart: () -> Unit, onDismiss: () -> Unit) {
-    val savePending by rememberUpdatedState(saving)
+fun GuideSheet(saving: () -> Boolean, onStart: () -> Unit, onDismiss: () -> Unit) {
+    // Read the owner at admission, including before the next recomposition after Start.
     val sheetState = rememberModalBottomSheetState(
-        confirmValueChange = { it != SheetValue.Hidden || !savePending })
-    ModalBottomSheet(onDismissRequest = { if (!saving) onDismiss() },
+        confirmValueChange = { it != SheetValue.Hidden || !saving() })
+    ModalBottomSheet(onDismissRequest = { if (!saving()) onDismiss() },
         sheetState = sheetState, containerColor = Color.White,
         shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
@@ -48,7 +46,7 @@ fun GuideSheet(saving: Boolean = false, onStart: () -> Unit, onDismiss: () -> Un
             Text("ペン・図形・囲みは右下の＋から、検索は右上から。この案内はボード一覧の「使い方」でまた見られます",
                 fontSize = 12.sp, color = Color(0xFF8D8882))
             Spacer(Modifier.height(18.dp))
-            Button(onClick = onStart, enabled = !saving,
+            Button(onClick = onStart, enabled = !saving(),
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF23211E))) {
                 Text("はじめる")
