@@ -51,7 +51,11 @@ class MultiSelectionTapTest {
             else {
                 val canvas = rule.onNodeWithContentDescription("キャンバス")
                 val origin = canvas.fetchSemanticsNode().boundsInRoot.topLeft
-                val center = if (label == "囲み: Group") {
+                val center = if (label == "矢印") {
+                    // Keep the ordinary stroke tap outside all three 48dp handle targets.
+                    val (x, y) = navigation.viewportState.value.worldToScreen(52.5f, 460f)
+                    origin + Offset(x, y)
+                } else if (label == "囲み: Group") {
                     val region = board.shapes.single { it.id == "region" }
                     val (x, y) = navigation.viewportState.value.worldToScreen(region.x, region.y + region.height / 2)
                     origin + Offset(x, y)
@@ -97,7 +101,7 @@ class MultiSelectionTapTest {
             fun stroke(id: String, kind: InkKind, x: Float, y: Float) = InkElement(id, kind, listOf(
                 InkStroke(startedAt = 1, endedAt = 101, inputType = InkInputType.TOUCH,
                     points = listOf(InkPoint(x, y, 0), InkPoint(x + 70f, y, 100)))))
-            val board = BoardState(texts, shapes, listOf(ArrowElement("arrow", ArrowEnd.Free(30f, 460f), ArrowEnd.Free(100f, 460f))),
+            val board = BoardState(texts, shapes, listOf(ArrowElement("arrow", ArrowEnd.Free(20f, 460f), ArrowEnd.Free(150f, 460f))),
                 listOf(stroke("pen", InkKind.PEN, 170f, 460f), stroke("marker", InkKind.MARKER, 30f, 550f)), listOf(image))
             val editor = TextEditorSession()
             val navigation = ViewportHistory()
@@ -117,9 +121,11 @@ class MultiSelectionTapTest {
     private fun exerciseKinds(pointer: Boolean) = withBoard {
         seedSelection()
         for ((label, id) in labels.zip(ids)) {
+            assertEquals(label, "選択に追加", node(label).fetchSemanticsNode().config[SemanticsActions.OnClick].label)
             click(label, pointer)
             assertSelection(setOf("first", "second", id))
             rule.onNodeWithText("3個を選択").assertExists()
+            assertEquals(label, "選択から外す", node(label).fetchSemanticsNode().config[SemanticsActions.OnClick].label)
             click(label, pointer)
             assertSelection(setOf("first", "second"))
             rule.onNodeWithText("3個を選択").assertDoesNotExist()
