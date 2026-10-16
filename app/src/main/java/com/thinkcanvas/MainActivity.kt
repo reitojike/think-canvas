@@ -2,7 +2,6 @@ package com.thinkcanvas
 
 import android.graphics.Bitmap
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -161,7 +160,6 @@ class MainActivity : ComponentActivity() {
         var canvasNeutralGuard: (() -> Boolean)? = null
         var listNeutralGuard: (() -> Boolean)? = null
         var shareRequestId = 0L
-        val pendingDocument = File(cacheDir, "pending-board-image.png")
 
         fun notice(message: String) = Toast.makeText(this@MainActivity, message,
             Toast.LENGTH_SHORT).show()
@@ -169,31 +167,6 @@ class MainActivity : ComponentActivity() {
         if (!restoringTask && initialShareAttempt && initialText == null)
             notice("この共有内容は取り込めません")
 
-        val createDocument = registerForActivityResult(
-            ActivityResultContracts.CreateDocument("image/png")) { uri ->
-            if (uri == null) {
-                shareBusy.value = false
-                pendingDocument.delete()
-                notice("画像の保存を取り消しました")
-            } else if (pendingDocument.isFile) {
-                lifecycleScope.launch {
-                    try {
-                        ImageDelivery.writeDocument(this@MainActivity, uri,
-                            withContext(Dispatchers.IO) { pendingDocument.readBytes() })
-                        shareDialog.value = null
-                        notice("画像を保存しました")
-                    } catch (error: Exception) {
-                        errorMessage.value = error.message ?: "画像を保存できません"
-                    } finally {
-                        pendingDocument.delete()
-                        shareBusy.value = false
-                    }
-                }
-            } else {
-                shareBusy.value = false
-                errorMessage.value = "画像の準備が失われました。もう一度お試しください"
-            }
-        }
         val shareResult = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()) {
             notice("共有メニューを閉じました")
@@ -254,18 +227,13 @@ class MainActivity : ComponentActivity() {
             val bitmap = shareDialog.value?.bitmap ?: return
             shareBusy.value = true
             lifecycleScope.launch {
-                var waitingForDocument = false
                 try {
                     val bytes = ImageDelivery.png(bitmap)
                     when (kind) {
-                        0 -> if (Build.VERSION.SDK_INT >= 29) {
+                        0 -> {
                             ImageDelivery.saveToPhotos(this@MainActivity, bytes)
                             dismissShare()
                             notice("画像を保存しました")
-                        } else {
-                            withContext(Dispatchers.IO) { pendingDocument.writeBytes(bytes) }
-                            createDocument.launch("think-canvas-${System.currentTimeMillis()}.png")
-                            waitingForDocument = true
                         }
                         1 -> {
                             val uri = ImageDelivery.cacheUri(this@MainActivity, bytes)
@@ -287,10 +255,7 @@ class MainActivity : ComponentActivity() {
                 } catch (error: Exception) {
                     errorMessage.value = error.message ?: "画像を渡せません"
                 } finally {
-                    if (!waitingForDocument) {
-                        if (kind == 0 && Build.VERSION.SDK_INT < 29) pendingDocument.delete()
-                        shareBusy.value = false
-                    }
+                    shareBusy.value = false
                 }
             }
         }
