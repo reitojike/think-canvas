@@ -26,6 +26,8 @@ Spec005 Story3 / FR008 / FR014 の初回 empty-board guide と一覧からの re
 - 保存待ち中は CTA を無効にし、Back・外側 tap・swipe による Hidden 遷移を止める。
   UI state 更新前の再入も start の状態検査で拒否する。Hidden の admission では ViewModel の
   最新状態を直接読み、保存開始後の再描画前に届く dismiss も拒否する。
+  逆順では CTA が標準 SheetState.targetValue を開始時にも読み、既に Hidden へ向かう間の
+  保存開始を拒否する。animation の中断・再展開は標準状態に任せ、独自の dismiss latch は持たない。
 - 再生成後も表示・保存待ち・エラーは同じ ViewModel に残る。startup の eligibility 読取は
   保持済みガイドを閉じない。成功した owner だけがガイドを閉じる。
 - task 終了・process death では画面所有者を破棄する。既にキューに入った設定保存は継続し得る。

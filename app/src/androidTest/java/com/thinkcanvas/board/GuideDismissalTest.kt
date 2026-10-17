@@ -172,6 +172,30 @@ class GuideDismissalTest {
         try {
             awaitText("‹ 案内のボード")
             awaitText("基本の操作")
+            var attempts = 0
+            scenario.onActivity { owner(it).save = { attempts++ } }
+            lateinit var dismiss: () -> Boolean
+            lateinit var start: () -> Boolean
+            composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.Dismiss))
+                .performSemanticsAction(SemanticsActions.Dismiss) { dismiss = it }
+            composeRule.onNodeWithText("はじめる")
+                .performSemanticsAction(SemanticsActions.OnClick) { start = it }
+            val autoAdvance = composeRule.mainClock.autoAdvance
+            try {
+                composeRule.mainClock.autoAdvance = false
+                composeRule.runOnUiThread { dismiss() }
+                composeRule.mainClock.advanceTimeByFrame()
+                scenario.onActivity { assertTrue(owner(it).state.visible) }
+                composeRule.onNodeWithText("はじめる").assertIsNotEnabled()
+                // Invoke the old CTA while the admitted hide animation is still running.
+                composeRule.runOnUiThread { start() }
+                scenario.onActivity { assertEquals(0, attempts) }
+            } finally { composeRule.mainClock.autoAdvance = autoAdvance }
+            awaitClosed()
+            assertFalse(preferences.getBoolean("guideDismissed", false))
+            scenario.recreate()
+            awaitText("‹ 案内のボード")
+            awaitText("基本の操作")
             back()
             awaitClosed()
             assertFalse(preferences.getBoolean("guideDismissed", false))

@@ -29,6 +29,7 @@ fun GuideSheet(saving: () -> Boolean, onStart: () -> Unit, onDismiss: () -> Unit
     // Read the owner at admission, including before the next recomposition after Start.
     val sheetState = rememberModalBottomSheetState(
         confirmValueChange = { it != SheetValue.Hidden || !saving() })
+    fun canStart() = !saving() && sheetState.targetValue != SheetValue.Hidden
     ModalBottomSheet(onDismissRequest = { if (!saving()) onDismiss() },
         sheetState = sheetState, containerColor = Color.White,
         shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)) {
@@ -46,7 +47,7 @@ fun GuideSheet(saving: () -> Boolean, onStart: () -> Unit, onDismiss: () -> Unit
             Text("ペン・図形・囲みは右下の＋から、検索は右上から。この案内はボード一覧の「使い方」でまた見られます",
                 fontSize = 12.sp, color = Color(0xFF8D8882))
             Spacer(Modifier.height(18.dp))
-            Button(onClick = onStart, enabled = !saving(),
+            Button(onClick = { if (canStart()) onStart() }, enabled = canStart(),
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF23211E))) {
                 Text("はじめる")
