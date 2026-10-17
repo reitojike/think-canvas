@@ -127,7 +127,7 @@ class ImageAssetStore internal constructor(private val directory: File,
                 bitmap.recycle()
                 throw IOException("画像の読込み上限を超えました")
             }
-            val matrix = orientationMatrix(facts.orientation)
+            val matrix = orientationMatrix(facts.rotationDegrees, facts.flipped)
             if (matrix.isIdentity) return bitmap
             try {
                 return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
@@ -140,11 +140,12 @@ class ImageAssetStore internal constructor(private val directory: File,
         } finally { decodePermit.release() }
     }
 
-    private data class SourceFacts(val width: Int, val height: Int, val orientation: Int)
+    private data class SourceFacts(val width: Int, val height: Int,
+                                   val rotationDegrees: Int, val flipped: Boolean)
 
     private fun describeFile(source: File, assetId: String): ImageAsset {
         val facts = sourceFacts(source)
-        val (width, height) = ImageDecodePolicy.orientedSize(facts.width, facts.height, facts.orientation)
+        val (width, height) = ImageDecodePolicy.orientedSize(facts.width, facts.height, facts.rotationDegrees)
         return ImageAsset(assetId, width, height)
     }
 
@@ -156,10 +157,11 @@ class ImageAssetStore internal constructor(private val directory: File,
         BitmapFactory.decodeFile(source.absolutePath, options)
         if (options.outMimeType != mime || !ImageDecodePolicy.validSource(options.outWidth, options.outHeight))
             throw IOException("対応する静止画像ではないか、画像が大きすぎます")
-        val orientation = ExifInterface(source).getAttributeInt(ExifInterface.TAG_ORIENTATION, 1)
+        val exif = ExifInterface(source)
+        val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, 1)
             .let { if (it == 0) 1 else it }
         if (orientation !in 1..8) throw IOException("画像の向きを確認できません")
-        return SourceFacts(options.outWidth, options.outHeight, orientation)
+        return SourceFacts(options.outWidth, options.outHeight, exif.rotationDegrees, exif.isFlipped)
     }
 
     private fun staticMime(source: File): String = DataInputStream(FileInputStream(source)).use { input ->
@@ -224,15 +226,8 @@ class ImageAssetStore internal constructor(private val directory: File,
         }
     }
 
-    private fun orientationMatrix(orientation: Int) = Matrix().apply {
-        when (orientation) {
-            2 -> setScale(-1f, 1f)
-            3 -> setRotate(180f)
-            4 -> setScale(1f, -1f)
-            5 -> { setRotate(90f); postScale(-1f, 1f) }
-            6 -> setRotate(90f)
-            7 -> { setRotate(-90f); postScale(-1f, 1f) }
-            8 -> setRotate(-90f)
-        }
+    private fun orientationMatrix(rotationDegrees: Int, flipped: Boolean) = Matrix().apply {
+        if (flipped) setScale(-1f, 1f)
+        postRotate(rotationDegrees.toFloat())
     }
 }
