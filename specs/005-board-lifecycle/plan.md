@@ -70,3 +70,11 @@ app/src/androidTest/java/com/thinkcanvas/
 ## Complexity Tracking
 
 外部サービスや新たな DB schema は追加しない。専用の画像描画面は全体/範囲画像に画面 UI が混入しないために必要で、プレビューと出力で同じ描画計画を使う。
+
+## ガイド設定保存の限定リファクタリング（#191）
+
+FR008 / FR014 の製品契約は維持し、UI thread の commit を既存 IO キューに移す。
+保存成功前の close を防ぎ、連打・Back・再生成・失敗後 retry の所有者を保持するため、
+ガイド表示と保存試行を小さな ViewModel に置く。
+比較案・所有者境界・検証と採用条件は [設計記録](../../docs/design/guide-dismissal-io.md) を参照する。
+#164 の startup readiness や過去 failure 原因 UNKNOWN、#190 の valid RED は変更しない。
