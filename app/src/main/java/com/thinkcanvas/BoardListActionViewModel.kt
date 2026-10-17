@@ -2,6 +2,7 @@ package com.thinkcanvas
 
 import android.app.Application
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -32,7 +33,7 @@ internal sealed interface BoardListActionState {
 
 class BoardListActionViewModel(application: Application) : AndroidViewModel(application) {
     private val mutableState: MutableState<BoardListActionState> = mutableStateOf(BoardListActionState.Idle)
-    internal val state: MutableState<BoardListActionState> get() = mutableState
+    internal val state: State<BoardListActionState> get() = mutableState
     internal var execute: suspend (BoardListAction) -> BoardListActionOutcome = { action ->
         val store = CanvasStore.get(getApplication())
         when (action) {

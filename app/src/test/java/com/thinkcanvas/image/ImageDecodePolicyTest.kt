@@ -27,9 +27,9 @@ class ImageDecodePolicyTest {
     }
 
     @Test fun orientationSwapsOnlyQuarterTurnDimensionsAndBucketsAreBounded() {
-        (1..8).forEach { orientation ->
-            assertEquals(if (orientation >= 5) 20 to 40 else 40 to 20,
-                ImageDecodePolicy.orientedSize(40, 20, orientation))
+        listOf(0, 90, 180, 270).forEach { rotationDegrees ->
+            assertEquals(if (rotationDegrees % 180 != 0) 20 to 40 else 40 to 20,
+                ImageDecodePolicy.orientedSize(40, 20, rotationDegrees))
         }
         assertEquals(64, ImageDecodePolicy.bucket(1))
         assertEquals(512, ImageDecodePolicy.bucket(257))
