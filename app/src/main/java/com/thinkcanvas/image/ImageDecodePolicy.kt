@@ -22,9 +22,9 @@ object ImageDecodePolicy {
         }
     }
 
-    fun orientedSize(width: Int, height: Int, orientation: Int): Pair<Int, Int> {
-        require(orientation in 1..8)
-        return if (orientation in 5..8) height to width else width to height
+    fun orientedSize(width: Int, height: Int, rotationDegrees: Int): Pair<Int, Int> {
+        require(rotationDegrees in 0..270 && rotationDegrees % 90 == 0)
+        return if (rotationDegrees % 180 != 0) height to width else width to height
     }
 
     fun bucket(requestedSide: Int): Int = listOf(64, 128, 256, 512, 1024, 2048)
