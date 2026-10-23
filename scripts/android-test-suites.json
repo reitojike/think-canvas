@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "authority": {
-    "issue": 112,
-    "baseline_main": "71849bd94005ce986bcf3a884064e97b0df7b19b",
-    "census_total": 280,
-    "note": "Issue #118のdated snapshotにIssue #112の独立回帰を追加。scope rebase後のPR代表4・main詳細5、palette長押しhandoffのPR回帰3、palette展開中の画像resize subslop正常UPのPR回帰1 identityを追加。actual discoveryはAndroidJUnitRunnerに委ね、receiptはselector生成に使わない。quarantine/filterは不変。Issue #141のsimulated diagnostic plumbing検証をPR/mainへ1 identity追加。 Issue #148のlauncher geometry記録・strict failure保持・selected-node freshnessの模擬契約検証を同じConditional familyのPR/mainへ3 identity追加。原因再現ではない。 Issue #110でpending ack/Running/Failed時の囲み名外側確定境界テストを追加し、full_only identityを同期。 Issue #185の混在選択tap回帰5 identityを追加（PR代表3、main詳細2）。 Issue #191のガイド保存owner境界をPR代表2・main詳細1 identityとして追加。過去failure再現・filter変更ではない。"
+    "issue": 198,
+    "baseline_main": "2111803c8976ef4e9c13fdc0cf11fd91e741cb35",
+    "census_total": 278,
+    "note": "Issue #118のdated snapshotにIssue #112の独立回帰を追加。scope rebase後のPR代表4・main詳細5、palette長押しhandoffのPR回帰3、palette展開中の画像resize subslop正常UPのPR回帰1 identityを追加。actual discoveryはAndroidJUnitRunnerに委ね、receiptはselector生成に使わない。quarantine/filterは不変。Issue #141のsimulated diagnostic plumbing検証をPR/mainへ1 identity追加。 Issue #198で#148のlogging-only fixture 2 identityを削除し、launcher refresh・strict geometry・deadlineのnegative契約検証は保持。#148原因はUNKNOWN、元の未達ACは未達のまま。 Issue #110でpending ack/Running/Failed時の囲み名外側確定境界テストを追加し、full_only identityを同期。 Issue #185の混在選択tap回帰5 identityを追加（PR代表3、main詳細2）。 Issue #191のガイド保存owner境界をPR代表2・main詳細1 identityとして追加。過去failure再現・filter変更ではない。"
   },
   "suites": {
     "smoke": [
@@ -25,8 +25,6 @@
       "com.thinkcanvas.board.GuideDismissalTest#queuedCommitKeepsGuideThroughBackAndRecreationUntilSuccess",
       "com.thinkcanvas.board.GuideDismissalTest#replayFailureAndRetryKeepSameOwnerAcrossRecreation",
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#collapsedAndExpandedToolFormerCentersAdmitPersistedInkAndAllowReentry",
-      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#launcherGeometryRecordIgnoresEqualAndOtherControls",
-      "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#launcherGeometryRecordPreservesStrictBoundsFailure",
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#launcherRefreshPreservesStrictPlatformFailures",
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteNativeControlsAndDismissedBoundsRemainActionable",
       "com.thinkcanvas.canvas.ConditionalChromeLifecycleTest#paletteOpeningInvalidatesAdmittedOutsidePointer",

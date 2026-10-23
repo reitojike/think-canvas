@@ -55,51 +55,6 @@ class ConditionalChromeLifecycleTest {
 
     @PrSmoke
     @Test
-    fun launcherGeometryRecordPreservesStrictBoundsFailure() {
-        // #148 の原因再現ではなく、実際の記録・assert 境界を既取得 Rect で検証する。
-        val label = "図形ツールを開く"
-        val descriptionBounds = Rect(912, 1085, 1038, 1211)
-        val controlBounds = Rect(912, 1142, 1038, 1268)
-        val original = assertThrows(AssertionError::class.java) {
-            assertEquals("$label の description と control は同じ bounds",
-                descriptionBounds, controlBounds)
-        }
-        val records = mutableListOf<String>()
-        for (sinkThrows in listOf(false, true)) {
-            val actual = assertThrows(AssertionError::class.java) {
-                assertControlBounds(label, descriptionBounds, controlBounds, 2, record = { record ->
-                    records += record
-                    if (sinkThrows) throw AssertionError("記録 sink の失敗")
-                })
-            }
-            assertEquals(original.message, actual.message)
-        }
-        // 模擬 test 自身の logcat で default sink と既存 artifact への保持を確認する。
-        val emitted = assertThrows(AssertionError::class.java) {
-            assertControlBounds(label, descriptionBounds, controlBounds, 2)
-        }
-        assertEquals(original.message, emitted.message)
-        assertEquals(listOf(
-            "label=$label parentHops=2 description=$descriptionBounds control=$controlBounds",
-            "label=$label parentHops=2 description=$descriptionBounds control=$controlBounds",
-        ), records)
-    }
-
-    @PrSmoke
-    @Test
-    fun launcherGeometryRecordIgnoresEqualAndOtherControls() {
-        val records = mutableListOf<String>()
-        val equal = Rect(10, 20, 30, 40)
-        assertControlBounds("図形ツールを開く", equal, Rect(equal), 0, records::add)
-        val actual = assertThrows(AssertionError::class.java) {
-            assertControlBounds("ペン", equal, Rect(10, 21, 30, 41), 1, records::add)
-        }
-        assertTrue(actual.message!!.startsWith("ペン の description と control は同じ bounds"))
-        assertTrue(records.isEmpty())
-    }
-
-    @PrSmoke
-    @Test
     fun launcherRefreshPreservesStrictPlatformFailures() {
         val label = "図形ツールを開く"
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -130,7 +85,6 @@ class ConditionalChromeLifecycleTest {
             val description = platformNodeFixture(label, rect, false, control, boundsReads)
             var descriptionRefreshes = 0
             var controlRefreshes = 0
-            var records = 0
             var actions = 0
             assertThrows(AssertionError::class.java) {
                 clickNode(instrumentation, description, label,
@@ -140,12 +94,11 @@ class ConditionalChromeLifecycleTest {
                             controlRefreshes++
                             refresh(it)
                         }
-                    }, record = { records++ }, click = { beforeOnClick -> beforeOnClick(); actions++ })
+                    }, click = { beforeOnClick -> beforeOnClick(); actions++ })
             }
             assertEquals(1, descriptionRefreshes)
             assertEquals(1, controlRefreshes)
             assertEquals(0, boundsReads[0])
-            assertEquals(0, records)
             assertEquals(0, actions)
         }
         rejectedControl { false }
@@ -688,7 +641,7 @@ class ConditionalChromeLifecycleTest {
             waitForRegionState(instrumentation, "選択中"))
         assertEquals("DOWN後に開いたeditorは元の囲み名を保持", "Cluster",
             editor.regionNameDraft.value?.name)
-        waitForGone(instrumentation, "選択範囲を画像で共有", recordPostRenameShareDecision = true)
+        waitForGone(instrumentation, "選択範囲を画像で共有")
         composeRule.onNodeWithContentDescription("囲みの名前")
             .performTextReplacement("Renamed")
         val renamed = "Renamed"
@@ -1748,33 +1701,28 @@ class ConditionalChromeLifecycleTest {
         return null
     }
 
-    private data class RefreshBounds(val before: Rect, val after: Rect)
-
     // Layer A: exact description と同じ control の platform exposure / geometry を確認する。
     private fun assertPlatformControl(
         description: AccessibilityNodeInfo,
         label: String,
         refresh: (AccessibilityNodeInfo) -> Boolean = AccessibilityNodeInfo::refresh,
-        record: (String) -> Unit = { Log.e("ConditionalGeometry", it) },
         checkExternalGeometry: Boolean = true,
     ): AccessibilityNodeInfo {
         // 一度とはこの Layer A 検証ごと。取得時と clickNode の直前で各々再検証する。
-        val descriptionRefreshBounds = if (label == "図形ツールを開く") {
-            refreshLauncherInfo(description, label, "description", refresh, checkExternalGeometry)
-        } else null
+        if (label == "図形ツールを開く") {
+            refreshLauncherInfo(description, label, "description", refresh)
+        }
         assertEquals(label, description.contentDescription?.toString())
         assertTrue("$label の description は有効", description.isEnabled)
         assertTrue("$label の description は利用者に見える", description.isVisibleToUser)
         var node: AccessibilityNodeInfo? = description
-        var parentHops = 0
         while (node != null && !node.isClickable) {
             node = node.parent
-            parentHops++
         }
         val actionable = checkNotNull(node) { "$label に対応する clickable node がありません" }
-        val controlRefreshBounds = if (label == "図形ツールを開く" && actionable !== description) {
-            refreshLauncherInfo(actionable, label, "control", refresh, checkExternalGeometry)
-        } else null
+        if (label == "図形ツールを開く" && actionable !== description) {
+            refreshLauncherInfo(actionable, label, "control", refresh)
+        }
         assertTrue("$label の control は有効", actionable.isEnabled)
         assertTrue("$label の control は利用者に見える", actionable.isVisibleToUser)
         assertTrue("$label の control は clickable", actionable.isClickable)
@@ -1783,8 +1731,7 @@ class ConditionalChromeLifecycleTest {
         if (checkExternalGeometry) {
             val descriptionBounds = bounds(description)
             val controlBounds = bounds(actionable)
-            assertControlBounds(label, descriptionBounds, controlBounds, parentHops, record,
-                descriptionRefreshBounds, controlRefreshBounds)
+            assertControlBounds(label, descriptionBounds, controlBounds)
         }
         return actionable
     }
@@ -1889,8 +1836,7 @@ class ConditionalChromeLifecycleTest {
         label: String,
         role: String,
         refresh: (AccessibilityNodeInfo) -> Boolean,
-        captureBounds: Boolean,
-    ): RefreshBounds? {
+    ) {
         val before = AccessibilityNodeInfo(node)
         assertTrue("$label の $role を一度 refresh できる", refresh(node))
         val after = AccessibilityNodeInfo(node)
@@ -1903,35 +1849,13 @@ class ConditionalChromeLifecycleTest {
         assertEquals("$label の $role ACTION_CLICK は変わらない",
             before.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK },
             after.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK })
-        // 既存コピーだけを読む。診断値の取得失敗は元の geometry oracle を妨げない。
-        return if (captureBounds) {
-            try { RefreshBounds(bounds(before), bounds(after)) } catch (_: Throwable) { null }
-        } else null
     }
 
     private fun assertControlBounds(
         label: String,
         descriptionBounds: Rect,
         controlBounds: Rect,
-        parentHops: Int,
-        record: (String) -> Unit = { Log.e("ConditionalGeometry", it) },
-        descriptionRefreshBounds: RefreshBounds? = null,
-        controlRefreshBounds: RefreshBounds? = null,
     ) {
-        if (label == "図形ツールを開く" && descriptionBounds != controlBounds) {
-            // 既取得値だけを記録する。記録 failure は native oracle の failure を置き換えない。
-            try {
-                val refreshRecord = if (descriptionRefreshBounds != null && controlRefreshBounds != null) {
-                    " descriptionBefore=${descriptionRefreshBounds.before}" +
-                        " descriptionAfter=${descriptionRefreshBounds.after}" +
-                        " controlBefore=${controlRefreshBounds.before}" +
-                        " controlAfter=${controlRefreshBounds.after}"
-                } else ""
-                record("label=$label parentHops=$parentHops description=$descriptionBounds control=$controlBounds$refreshRecord")
-            } catch (_: Throwable) {
-                // 元の exact assertion は guard の外で必ず実行する。
-            }
-        }
         assertEquals("$label の description と control は同じ bounds",
             descriptionBounds, controlBounds)
     }
@@ -2042,7 +1966,6 @@ class ConditionalChromeLifecycleTest {
         node: AccessibilityNodeInfo,
         label: String,
         refresh: (AccessibilityNodeInfo) -> Boolean = AccessibilityNodeInfo::refresh,
-        record: (String) -> Unit = { Log.e("ConditionalGeometry", it) },
         activity: MainActivity? = null,
         deadline: Long? = null,
         uptimeMillis: () -> Long = { SystemClock.uptimeMillis() },
@@ -2059,7 +1982,7 @@ class ConditionalChromeLifecycleTest {
         val acceptanceDeadline = if (label == "図形ツールを開く") {
             deadline ?: (uptimeMillis() + 4_000L)
         } else null
-        val actionable = assertPlatformControl(node, label, refresh, record,
+        val actionable = assertPlatformControl(node, label, refresh,
             checkExternalGeometry = !useAppProcessGeometry)
         if (useAppProcessGeometry) {
             check(label == "図形ツールを開く") { "App-process geometry is limited to the launcher" }
@@ -2090,7 +2013,6 @@ class ConditionalChromeLifecycleTest {
     private fun waitForGone(
         instrumentation: android.app.Instrumentation,
         label: String,
-        recordPostRenameShareDecision: Boolean = false,
     ) {
         repeat(40) {
             composeRule.waitForIdle()
@@ -2098,10 +2020,6 @@ class ConditionalChromeLifecycleTest {
             val root = instrumentation.uiAutomation.rootInActiveWindow
             val gone = findExact(root, label) == null
             if (gone) {
-                // 元の消失判定の成功sampleだけを、return前に記録する。
-                if (recordPostRenameShareDecision) {
-                    Log.i("ConditionalAbsence", "postRenameShare rootNull=${root == null} gone=$gone")
-                }
                 return
             }
             Thread.sleep(100)
