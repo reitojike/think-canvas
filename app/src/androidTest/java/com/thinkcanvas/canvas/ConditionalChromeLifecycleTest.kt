@@ -545,15 +545,24 @@ class ConditionalChromeLifecycleTest {
         composeRule.waitForIdle()
         assertEquals("Back clears only selection", "未選択", waitForRegionState(instrumentation, "未選択"))
         clickActionable(instrumentation, launcher)
+        var finalDismissElapsed = -1L
+        var nextTapElapsed = -1L
         composeRule.mainClock.autoAdvance = false
         try {
-            nativeGesture(instrumentation, listOf(blank))
+            finalDismissElapsed = nativeGesture(instrumentation, listOf(blank))
             repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
             assertNull(editor.draft.value)
-            nativeGesture(instrumentation, listOf(blank))
+            nextTapElapsed = nativeGesture(instrumentation, listOf(blank))
             composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
         } finally { composeRule.mainClock.autoAdvance = true }
-        composeRule.waitUntil(5_000) { editor.draft.value != null }
+        composeRule.waitUntil(
+            conditionDescription = "#199 draft after native taps: dismiss=${finalDismissElapsed}ms next=${nextTapElapsed}ms longPress=${configuration.longPressTimeoutMillis}ms",
+            timeoutMillis = 5_000,
+        ) { editor.draft.value != null }
+        assertTrue("#199 final dismissal is a short tap: ${finalDismissElapsed}ms",
+            finalDismissElapsed >= 0 && finalDismissElapsed < configuration.longPressTimeoutMillis)
+        assertTrue("#199 next input is a short tap: ${nextTapElapsed}ms",
+            nextTapElapsed >= 0 && nextTapElapsed < configuration.longPressTimeoutMillis)
         assertEquals("next tap creates new text", null, editor.draft.value?.id)
         assertEquals("next tap is not double-tap zoom", viewBefore.scale, navigation.viewportState.value.scale)
         composeRule.onNodeWithContentDescription("キャンバス").assertExists()
