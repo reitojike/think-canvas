@@ -549,10 +549,10 @@ class ConditionalChromeLifecycleTest {
         var nextTapElapsed = -1L
         composeRule.mainClock.autoAdvance = false
         try {
-            finalDismissElapsed = nativeGesture(instrumentation, listOf(blank))
+            finalDismissElapsed = nativeGesture(instrumentation, listOf(blank), asyncStationaryFingerTap = true)
             repeat(3) { composeRule.mainClock.advanceTimeByFrame() }
             assertNull(editor.draft.value)
-            nextTapElapsed = nativeGesture(instrumentation, listOf(blank))
+            nextTapElapsed = nativeGesture(instrumentation, listOf(blank), asyncStationaryFingerTap = true)
             composeRule.mainClock.advanceTimeBy(configuration.doubleTapTimeoutMillis + 1)
         } finally { composeRule.mainClock.autoAdvance = true }
         composeRule.waitUntil(
