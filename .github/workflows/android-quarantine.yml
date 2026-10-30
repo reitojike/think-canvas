@@ -95,9 +95,9 @@ jobs:
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const body = [marker, 'IME temporary quarantine の strict failure を記録します。',
               `run: ${url} / attempt: ${process.env.GITHUB_RUN_ATTEMPT} / event: ${context.eventName}`,
-              `head: ${context.sha}`, `expected=38 / ${counters}`,
+              `head: ${context.sha}`, `expected=5 / ${counters}`,
               `sample: ${result.sample_status ?? 'infra-invalid'} / ${result.reason ?? 'instrumentation開始前 failure または XML missing/incomplete'}`,
-              'test failure が XML に記録された complete fresh exact38 は valid red です。SUCCESS へ変換しません。',
-              'owner: #106 / review date: 2026-10-23。valid scheduled run >=14 を確認し continue / narrow / remove quarantine を明示判断します。自動解除しません。'
+              'test failure が XML に記録された complete fresh exact5 は valid red です。SUCCESS へ変換しません。',
+              'owner: #106 / review decision: 2026-10-30。承認済みの縮小後も失敗証拠を保持します。追加調査・自動解除・期限の自動延長は行いません。'
             ].join('\n\n');
             await github.rest.issues.createComment({...issue, body});

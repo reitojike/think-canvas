@@ -898,7 +898,6 @@ class EdgeAutoPanTest {
         }
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun editorAndDiscardDialogDoNotAdmitTheMoveTicker() = withBoard {
         select(moving.text)
         composeRule.onNodeWithContentDescription(moving.text).performClick()

@@ -211,7 +211,6 @@ class ImageCanvasInteractionTest {
     }
 
     @PrSmoke
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun descriptionCancelDirtyBackEmptyCommitUndoAndRecreationKeepExpectedText() = withBoard {
         action("代替テキストを編集")
         compose.onNode(hasSetTextAction()).performTextReplacement("一時説明")

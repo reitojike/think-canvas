@@ -16,7 +16,7 @@ CATEGORIES = ("smoke", "full_only", "jvm_candidate", "review_required")
 MIGRATION_COUNTS = dict(smoke=90, full_only=181, jvm_candidate=9, review_required=0)
 SMOKE_ANNOTATION = "com.thinkcanvas.test.PrSmoke"
 FLAKY_ANNOTATION = "androidx.test.filters.FlakyTest"
-LANE_COUNTS = {"smoke": 73, "non-quarantined": 242, "quarantine": 38, "full": 280}
+LANE_COUNTS = {"smoke": 87, "non-quarantined": 275, "quarantine": 5, "full": 280}
 IDENTIFIER = r"[A-Za-z_][A-Za-z0-9_]*"
 IDENTITY_RE = re.compile(rf"^(?:{IDENTIFIER}\.)+{IDENTIFIER}#{IDENTIFIER}$")
 
@@ -53,12 +53,12 @@ def validate_manifest(path: Path) -> dict:
         fail("ANDROID_TEST_SUITE_MIGRATION_SNAPSHOT_DRIFT")
     quarantine = manifest.get("quarantine", {})
     expected = quarantine.get("expected")
-    if (quarantine.get("issue") != 106 or quarantine.get("review_date") != "2026-10-23"
+    if (quarantine.get("issue") != 106 or quarantine.get("review_date") != "2026-10-30"
             or not isinstance(expected, list) or not all(isinstance(v, str) for v in expected)):
         fail("ANDROID_TEST_SUITE_QUARANTINE_INVALID")
-    if (len(expected) != 38 or expected != sorted(set(expected))
+    if (len(expected) != 5 or expected != sorted(set(expected))
             or not set(expected) <= set(partition)
-            or len(set(expected) & set(suites["smoke"])) != 17):
+            or len(set(expected) & set(suites["smoke"])) != 3):
         fail("ANDROID_TEST_SUITE_QUARANTINE_SNAPSHOT_DRIFT")
     return manifest
 

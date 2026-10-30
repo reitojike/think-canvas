@@ -784,7 +784,6 @@ class TextEditorDismissalTest {
     }
 
     @PrSmoke
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun outsideDoubleTapSlopConfirmsBothSinglesInOrder() = withBoard {
         val saves = trackSaves()
         // 選択paddingの表示変化を固定referenceのcamera比較に混ぜない。
