@@ -43,7 +43,7 @@ runbookに変動する総数・lane別件数は固定しません。過去のcen
 | unfiltered full | filterなし | android-full.ymlのmanualのみ |
 
 完全修飾名は `com.thinkcanvas.test.PrSmoke` / `androidx.test.filters.FlakyTest` です。
-quarantineの裁定、strict failure、sample判定、2026-10-23 review gateは
+quarantineの裁定、strict failure、sample判定、見直し判断は
 [IME quarantine手順](ime-quarantine.md)を参照します。targeted契約は変更しません。
 
 | Event | Basic | PR smoke | main regression | Quarantine | Unfiltered full |

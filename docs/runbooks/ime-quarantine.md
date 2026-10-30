@@ -5,11 +5,11 @@ owner は [#106](https://github.com/reitojike/think-canvas/issues/106)、CI arch
 [#125](https://github.com/reitojike/think-canvas/issues/125)は test-only helper commonization を扱い、
 root-cause investigation は #106 に戻します。PR #131 の Slice C は実行eventとrunbookの最小同期だけを扱います。
 
-## Fresh adjudication（2026-10-09）
+## 導入時の裁定（2026-10-09）
 
 main `c8b3b7a53bff247456acdcc26d604d247f582d95` の source を読み、
 「入力可能になった後、actual IME visibility / positive IME inset を wait/assert する test」
-を helper の呼び出し経路も含めて個別に裁定しました。exact identities は
+を helper の呼び出し経路も含めて個別に裁定しました。現在のexact identitiesは
 [既存 receipt の quarantine.expected](../../scripts/android-test-suites.json)に保存します。
 これは XML inventory を照合する静的 receipt であり、実行 selector を生成しません。
 
@@ -29,6 +29,34 @@ dated census、実行件数、再発分布は[#106](https://github.com/reitojike
 Neutralのtool-only / hidden-only、TextEditorDismissalのfocus-only awaitEditor、
 Offscreen/SemanticNavigationのhidden-only cleanupは含めません。クラス単位では除外しません。
 annotationはmembership全体でfailureを再現したという主張ではありません。
+
+## 承認済みの縮小（2026-10-30）
+
+#106の既存scheduled観測を見直し、導入時の38 methodsから33 methodsをrequired laneへ戻し、
+再発した次の5 methodsだけをmethod単位で隔離します。10/23の34件復帰・4件隔離案は、
+後続failureを含めたこの33件復帰・5件隔離の判断で置き換えます。
+manifestの`baseline_main`はこの裁定のsource、`review_date`は裁定日です。
+新たな調査期限や自動延長を意味しません。
+
+| Class | 隔離を継続するexact method |
+| --- | --- |
+| com.thinkcanvas.board.BoardListScreenTest | renameReloadsTheListAfterActivityRecreation |
+| com.thinkcanvas.canvas.NeutralInteractionTest | backDuringOutsideDownKeepsChangedDraftInConfirmationWithoutCommitting |
+| com.thinkcanvas.canvas.NeutralInteractionTest | changedNewTextContinueDialogBackAndOutsideKeepDraft |
+| com.thinkcanvas.canvas.NeutralInteractionTest | lateWindowLossDuringInputFrameResumesTextRegionAndSearch |
+| com.thinkcanvas.canvas.ViewportHistoryInteractionTest | staleViewActionRejectsSaveEditorToolAndNextGestureUsesCurrentState |
+
+10/30の監査はvalid scheduled 42 runs、32 PASS / 10 RED、失敗は5 methodsです。
+直近8 PASSを過去failureの解消証拠にはしません。
+5番目の[run40221191770](https://github.com/reitojike/think-canvas/actions/runs/40221191770)は
+`changedNewTextContinueDialogBackAndOutsideKeepDraft`のContinue editing後のIME-visible待機timeoutです。
+製品原因や保存破損の証拠ではありません。renameの初期待機失敗やpan量の不一致も、
+同じ原因と証明された扱いにはしません。原因分類の未達ACと過去REDは保持します。
+
+この変更はannotation、静的receipt、通知、手順の同期だけです。
+production、test body、assertion、timeout、retry、採用済み診断は変更しません。
+追加dispatch／rerun／新診断／原因調査の拡張は行いません。required laneへの復帰は原因解決や
+統計的安定性の主張ではなく、既存観測に基づく隔離範囲の明示判断です。
 
 ## 実行契約
 
@@ -76,16 +104,16 @@ manual dispatch も default branch を指定します。runごとのartifactを2
 - `android-quarantine-verification.json` とXMLをartifactで確認します。valid greenもartifactで記録します。
   manual dispatchはscheduled sample数に加算しません。
 
-## Review gate: 2026-10-23
+## 導入時のreview gateと見直し判断
 
-14日目のreviewでは **valid scheduled run >=14** を要求します。green/redの両方を数え、
+導入時の2026-10-23 reviewでは **valid scheduled run >=14** を要求しました。green/redの両方を数え、
 infra-invalid、manual、cancelled、未完了runは数えません。同一run IDはattemptが増えても1 sampleです。
 GitHub Actionsのschedule run一覧と各artifactのverification receipt / XMLを照合して、
 run URL、head、counter、valid/infra-invalidを #106 のreview commentに記録します。
 21日retentionの期限内に保存・確認してください。
 
-14 samples未満なら根拠不足として記録し、quarantineを自動解除しません。
-14 samples以上でも自動解除は禁止です。owner #106 が原因調査と失敗分布を根拠に
+この条件を満たした10/23の判断と、後続failureを含む10/30の承認済み縮小は#106と上記に記録します。
+sample数による自動解除は禁止です。owner #106 が既存証拠と失敗分布を根拠に
 **continue / narrow / remove quarantine** のいずれかを明示判断し、対象identitiesと理由を記録します。
 範囲やfilterを変える場合は別の承認済み変更で、current sourceとexact inventoryを再検証します。
 

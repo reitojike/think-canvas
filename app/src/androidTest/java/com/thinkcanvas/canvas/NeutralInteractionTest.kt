@@ -248,7 +248,6 @@ class NeutralInteractionTest {
     }
 
     @PrSmoke
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test
     fun systemBackWhileImeVisibleOnlyHidesKeyboardAndRetainsDraft() = withBoard {
         startNew("Keep this draft")
@@ -275,7 +274,6 @@ class NeutralInteractionTest {
         assertEquals(listOf(note), rows().map { it.toModel() })
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test
     fun blankNewAndUnchangedExistingEditorsCloseWithoutSavingOrNavigating() = withBoard {
         startNew()
@@ -313,7 +311,6 @@ class NeutralInteractionTest {
         assertEquals(listOf(note), rows().map { it.toModel() })
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test
     fun changedNewWhitespaceRequiresConfirmationAndDiscardDoesNotCreateHistory() = withBoard {
         startNew("   \n")
@@ -330,7 +327,6 @@ class NeutralInteractionTest {
         assertCanvasStillOpen()
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test
     fun existingTextKindAndColorChangesDiscardWithoutChangingElementOrHistory() = withBoard {
         startExisting()
@@ -347,7 +343,6 @@ class NeutralInteractionTest {
         assertFalse(board.canUndo)
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test
     fun existingDraftRevertedToOriginalClosesWithoutConfirmation() = withBoard {
         startExisting()
@@ -360,7 +355,6 @@ class NeutralInteractionTest {
         assertFalse(board.canUndo)
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test
     fun changedRegionNameContinuesAndBackDiscardsOnlyName() = withBoard {
         renameRegion()
@@ -379,7 +373,6 @@ class NeutralInteractionTest {
         assertFalse(board.canUndo)
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test
     fun newRegionNameDiscardLeavesCreatedRegionPersisted() = withBoard {
         composeRule.onNodeWithContentDescription("図形ツールを開く").performClick()
@@ -404,7 +397,6 @@ class NeutralInteractionTest {
     }
 
     @PrSmoke
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test
     fun textAndDiscardConfirmationSurviveActivityRecreation() = withBoard {
         startNew("Survives recreation")
@@ -420,7 +412,6 @@ class NeutralInteractionTest {
         assertEquals(listOf(note), rows().map { it.toModel() })
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test
     fun regionNameSessionSurvivesRecreationWithoutAutoCommit() = withBoard {
         renameRegion()
@@ -443,7 +434,6 @@ class NeutralInteractionTest {
         assertEquals("Cluster", shapes().single().toModel().name)
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test
     fun runningSaveAndPendingAcknowledgementRejectBackWithoutRetryOrNavigation() = withBoard {
         val blocked = CompletableDeferred<Unit>()
@@ -461,7 +451,6 @@ class NeutralInteractionTest {
         blocked.complete(Unit)
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test
     fun failedSaveBackDoesNotCloseOrAutomaticallyRetry() = withBoard {
         sessions.setSaveOperation { _, _ -> CompletableDeferred<Unit>().also {
@@ -622,7 +611,6 @@ class NeutralInteractionTest {
         composeRule.onNodeWithContentDescription("図形ツールを開く").assertExists()
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test
     fun penAndMarkerKeepArmedAcrossConsecutiveStrokes() = withBoard {
         composeRule.onNodeWithContentDescription("図形ツールを開く").performClick()
@@ -665,7 +653,6 @@ class NeutralInteractionTest {
         waitEditor("新しいテキスト")
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun staleDiscardConfirmationCannotCancelReplacementSession() = withBoard {
         startNew("Old draft")
         back()
@@ -684,7 +671,6 @@ class NeutralInteractionTest {
         verifyPreviewCancellation("ペン")
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun backDuringSpatialPreviewCancelsLaterUpAndAllowsNextBlankTap() = withBoard {
         verifyPreviewCancellation("四角")
         tapCanvas(.78f, .74f)
@@ -692,7 +678,6 @@ class NeutralInteractionTest {
         assertEquals(1, board.shapes.size)
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun backBeforeSelectionPreviewRejectsOldTapMoveAndResize() = withBoard {
         for (label in listOf(note.text, "要素を移動", "移動", "サイズ変更")) {
             if (label == note.text || label == "要素を移動") {
@@ -716,7 +701,6 @@ class NeutralInteractionTest {
         waitEditor("新しいテキスト")
     }
 
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun backBeforeCanvasTapClosesMenuSearchAndExpandedToolsWithoutForwarding() = withBoard {
         for (stage in listOf("menu", "search", "expanded")) {
             when (stage) {
@@ -757,7 +741,6 @@ class NeutralInteractionTest {
     }
 
     @PrSmoke
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun editorWaitsForWindowOwnerAndDoesNotReshowHiddenImeOnWindowReturn() = withBoard {
         val first = blockingWindow()
         try {
@@ -871,7 +854,6 @@ class NeutralInteractionTest {
     }
 
     @PrSmoke
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun endedPendingEditorDoesNotRegainFocusBeforeRecomposition() = withBoard {
         val blocker = blockingWindow()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -936,7 +918,6 @@ class NeutralInteractionTest {
     }
 
     @PrSmoke
-    @androidx.test.filters.FlakyTest(bugId = 106)
     @Test fun pendingInputIsCanceledByConfirmationAndAcceptedImeBack() = withBoard {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val blocker = blockingWindow()
