@@ -1,26 +1,35 @@
-name: Android manual full GMD
+name: Android AGP paired comparison
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.run_id }}
+  group: think-canvas-agp-pair-20261031
   cancel-in-progress: false
 
 jobs:
-  full:
-    name: Android 17 unfiltered full GMD
+  pair:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/investigate/agp-pair-20261031' && github.run_attempt == 1
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.sha }}
           persist-credentials: false
-      - name: exact identity receipt を確認
-        run: python3 scripts/check-android-test-suites.py validate --suite full --receipt-out "$RUNNER_TEMP/android-full-receipt.json"
+      - uses: actions/checkout@v7
+        with:
+          ref: 2448f83e4f1e7b1872d9aa909b54f9feaa70a292
+          path: variants/agp95
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          ref: 9d3715ad14b427541f4a816f7addb1835fcde439
+          path: variants/agp94
+          persist-credentials: false
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -28,38 +37,176 @@ jobs:
       - uses: android-actions/setup-android@v4
         with:
           log-accepted-android-sdk-licenses: false
-      - uses: gradle/actions/setup-gradle@v6
-        with:
-          cache-provider: basic
-      - name: エミュレーターの KVM を有効化
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: filterなし full を実行
-        id: gmd
+      - name: 固定 source と既存275件の順序を確認
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          test ! -d app/build/outputs/androidTest-results/managedDevice
-          date -u +%s > "$RUNNER_TEMP/android-full-started-at"
-          ./gradlew :app:pixel9Api37DebugAndroidTest --rerun \
-            -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon
-      - name: fresh XML の identity と counters を確認
-        if: ${{ !cancelled() && steps.gmd.outcome != 'skipped' }}
+          mkdir compare-evidence
+          test "$(git -C variants/agp95 rev-parse HEAD)" = 2448f83e4f1e7b1872d9aa909b54f9feaa70a292
+          test "$(git -C variants/agp94 rev-parse HEAD)" = 9d3715ad14b427541f4a816f7addb1835fcde439
+          test "$(git -C variants/agp95 diff --name-only 9d3715ad14b427541f4a816f7addb1835fcde439 HEAD)" = build.gradle.kts
+          git -C variants/agp95 diff 9d3715ad14b427541f4a816f7addb1835fcde439 HEAD > compare-evidence/source.diff
+          printf 'workflow_sha=%s\nrun_id=%s\nattempt=%s\norder=9.5.0,9.4.1\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > compare-evidence/provenance.txt
+          gh api repos/reitojike/think-canvas/actions/artifacts/13031131509/zip > "$RUNNER_TEMP/agp-baseline.zip"
+          printf 'ac5f3e94cd0261702457f0c15b1f6d9296e22d1fc2737cd810d2ec0c8ad58aa0  %s\n' "$RUNNER_TEMP/agp-baseline.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/agp-baseline.zip" -d "$RUNNER_TEMP/agp-baseline"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          files = list(Path(os.environ["RUNNER_TEMP"]).joinpath("agp-baseline").rglob("TEST-pixel9Api37.xml"))
+          assert len(files) == 1
+          root = ET.parse(files[0]).getroot()
+          ids = [c.get("classname") + "#" + c.get("name") for c in root.findall(".//testcase")]
+          assert len(ids) == len(set(ids)) == 275
+          assert all(root.get(k) == "0" for k in ("failures", "errors", "skipped"))
+          Path("compare-evidence/baseline-order.json").write_text(json.dumps(ids, indent=2) + "\n")
+          PY
+      - name: 共通 SDK と KVM を準備
+        shell: bash
         run: |
-          python3 scripts/check-android-test-suites.py verify-suite --suite full \
-            --started-at "$RUNNER_TEMP/android-full-started-at" \
-            --verification-out "$RUNNER_TEMP/android-full-verification.json"
-      - name: GMD の診断と検証結果を保存
+          set -euo pipefail
+          sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;36.0.0" "emulator" "system-images;android-37.0;google_apis;x86_64"
+          grep -Eq '^Pkg.Revision[[:space:]]*=[[:space:]]*37\.2\.13[[:space:]]*$' "$ANDROID_HOME/emulator/source.properties"
+          grep -Eq '^Pkg.Revision[[:space:]]*=[[:space:]]*7[[:space:]]*$' "$ANDROID_HOME/system-images/android-37.0/google_apis/x86_64/source.properties"
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          printf 'ImageOS=%s\nImageVersion=%s\n' "$ImageOS" "$ImageVersion" > compare-evidence/runner.txt
+          uname -a >> compare-evidence/runner.txt
+          java -version 2> compare-evidence/java.txt
+          (
+            find "$ANDROID_HOME/system-images/android-37.0/google_apis/x86_64" -type f -print0
+            printf '%s\0' "$ANDROID_HOME/emulator/emulator" "$ANDROID_HOME/emulator/source.properties" "$ANDROID_HOME/platforms/android-37.0/source.properties" "$ANDROID_HOME/build-tools/36.0.0/source.properties"
+          ) | sort -z | xargs -0 sha256sum > compare-evidence/sdk.sha256
+          keytool -genkeypair -noprompt -storetype JKS -keystore "$RUNNER_TEMP/agp-debug.keystore" -storepass android -keypass android -alias androiddebugkey -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
+      - name: 比較1回分の実行境界を準備
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/agp-once.sh" <<'SH'
+          set -euo pipefail
+          variant=$1
+          source_dir=$2
+          source_sha=$3
+          evidence="$GITHUB_WORKSPACE/compare-evidence"
+          out="$evidence/$variant"
+          mkdir "$out"
+          export ANDROID_USER_HOME="$RUNNER_TEMP/agp-user-$variant"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          export GRADLE_USER_HOME="$RUNNER_TEMP/agp-gradle-$variant"
+          test ! -e "$ANDROID_USER_HOME"
+          test ! -e "$GRADLE_USER_HOME"
+          mkdir -p "$ANDROID_AVD_HOME"
+          cp "$RUNNER_TEMP/agp-debug.keystore" "$ANDROID_USER_HOME/debug.keystore"
+          sha256sum --check "$evidence/sdk.sha256" > "$out/sdk-before.txt"
+          adb devices > "$out/adb-before.txt"
+          if grep -q '^emulator-' "$out/adb-before.txt"; then
+            echo 'COMPARE_INVALID: emulator from an earlier phase remains' >&2
+            exit 1
+          fi
+          cd "$GITHUB_WORKSPACE/$source_dir"
+          test "$(git rev-parse HEAD)" = "$source_sha"
+          test -z "$(git status --porcelain)"
+          test ! -d app/build/outputs/androidTest-results/managedDevice
+          printf 'workflow_sha=%s\ncheckout_sha=%s\nANDROID_USER_HOME=%s\nANDROID_AVD_HOME=%s\nGRADLE_USER_HOME=%s\n' "$GITHUB_SHA" "$source_sha" "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME" "$GRADLE_USER_HOME" > "$out/provenance.txt"
+          export GITHUB_SHA="$source_sha"
+          python3 scripts/check-android-test-suites.py validate --suite non-quarantined --receipt-out "$out/receipt.json" > "$out/manifest.log"
+          date -u +%s > "$out/started-at"
+          set +e
+          ./gradlew :app:pixel9Api37DebugAndroidTest --rerun --info \
+            -Pandroid.testInstrumentationRunnerArguments.notAnnotation=androidx.test.filters.FlakyTest \
+            -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect --no-daemon 2>&1 | tee "$out/gradle.log"
+          gradle_rc=$?
+          python3 scripts/check-android-test-suites.py verify-suite --suite non-quarantined \
+            --started-at "$out/started-at" --verification-out "$out/verification.json" 2>&1 | tee "$out/verification.log"
+          verify_rc=$?
+          set -e
+          mkdir -p "$out/app/build/outputs/androidTest-results"
+          if test -d app/build/outputs/androidTest-results/managedDevice; then
+            cp -a app/build/outputs/androidTest-results/managedDevice "$out/app/build/outputs/androidTest-results/"
+          fi
+          if test -d app/build/reports/androidTests/managedDevice; then
+            cp -a app/build/reports/androidTests/managedDevice "$out/reports"
+          fi
+          find "$ANDROID_AVD_HOME" -name config.ini -o -name source.properties > "$out/avd-files.txt"
+          adb devices > "$out/adb-after.txt"
+          find "$GRADLE_USER_HOME/caches/modules-2/files-2.1" -type f -name '*.jar' | sort | grep -E '/(com\.android\.tools[^/]*|com\.google\.testing\.platform|androidx\.test[^/]*)/' | xargs -r sha256sum > "$out/resolved-tool-jars.sha256"
+          sha256sum --check "$evidence/sdk.sha256" > "$out/sdk-after.txt"
+          git diff --exit-code -- app/schemas
+          test -z "$(git ls-files --others --exclude-standard app/schemas)"
+          python3 - "$out" "$gradle_rc" "$verify_rc" "$evidence/baseline-order.json" <<'PY'
+          import json, sys
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          out = Path(sys.argv[1])
+          v = json.loads((out / "verification.json").read_text())
+          assert v.get("sample_status") == "valid" and v.get("identity_match") is True
+          assert v.get("tests") == v.get("expected_count") == 275 and v.get("skipped") == 0
+          assert v.get("event") == "workflow_dispatch"
+          failed = v["failures"] + v["errors"] > 0
+          assert (int(sys.argv[2]), int(sys.argv[3])) == ((1, 1) if failed else (0, 0))
+          xml = out / "app/build/outputs/androidTest-results/managedDevice/debug/pixel9Api37/TEST-pixel9Api37.xml"
+          ids = [c.get("classname") + "#" + c.get("name") for c in ET.parse(xml).getroot().findall(".//testcase")]
+          assert ids == json.loads(Path(sys.argv[4]).read_text()), "COMPARE_INVALID: native XML order differs"
+          result = dict(valid=True, result="red" if failed else "green", tests=v["tests"], failures=v["failures"], errors=v["errors"], skipped=v["skipped"], source_sha=v["sha"])
+          (out / "status.json").write_text(json.dumps(result, indent=2) + "\n")
+          print(json.dumps(result))
+          PY
+          echo 'valid=true' >> "$GITHUB_OUTPUT"
+          SH
+      - name: AGP 9.5.0 の275件を1回実行
+        id: agp95
+        shell: bash
+        run: bash "$RUNNER_TEMP/agp-once.sh" 95 variants/agp95 2448f83e4f1e7b1872d9aa909b54f9feaa70a292
+      - name: AGP 9.5.0 の証拠を保存
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: android-17-gmd-full-results
-          path: |
-            app/build/reports/androidTests/managedDevice/
-            app/build/outputs/androidTest-results/managedDevice/
-            ${{ runner.temp }}/android-full-receipt.json
-            ${{ runner.temp }}/android-full-verification.json
-          if-no-files-found: error
+          name: agp-pair-95-evidence
+          path: compare-evidence/95/
+          if-no-files-found: warn
           retention-days: 21
+      - name: AGP 9.4.1 の275件を1回実行
+        id: agp94
+        if: success() && steps.agp95.outputs.valid == 'true'
+        shell: bash
+        run: bash "$RUNNER_TEMP/agp-once.sh" 94 variants/agp94 9d3715ad14b427541f4a816f7addb1835fcde439
+      - name: AGP 9.4.1 の証拠を保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: agp-pair-94-evidence
+          path: compare-evidence/94/
+          if-no-files-found: warn
+          retention-days: 21
+      - name: 共通の比較条件を保存
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: agp-pair-common-evidence
+          path: |
+            compare-evidence/provenance.txt
+            compare-evidence/source.diff
+            compare-evidence/baseline-order.json
+            compare-evidence/runner.txt
+            compare-evidence/java.txt
+            compare-evidence/sdk.sha256
+          if-no-files-found: warn
+          retention-days: 21
+      - name: テスト失敗を成功扱いにしない
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          results = [json.loads(Path(f"compare-evidence/{v}/status.json").read_text()) for v in ("95", "94")]
+          print(json.dumps(results, indent=2))
+          assert all(r["valid"] for r in results)
+          if any(r["result"] == "red" for r in results):
+              raise SystemExit("COMPARE_VALID_RED: test failures preserved")
+          PY
