@@ -1,5 +1,9 @@
 # データモデル: Spatial Organization
 
+> この文書には初期実装時の範囲・schema版が含まれます。現在の保存境界は
+> [ボードの保存とデータ寿命](../../docs/architecture/board-persistence.md)を参照してください。
+> 以下は詳細契約の未移行部分を失わないために保持しており、全項目を現行仕様として扱いません。
+
 **保存形式の更新**: #3 実装時は二表の v1 から四表の v2 へ migration しました。Issue #26 では四表を新しい schema v1 とし、DB ファイルを `thinkcanvas.db` に変更します。旧内部版の DB は読み込みません。
 
 ## Board と TextElement

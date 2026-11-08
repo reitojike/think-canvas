@@ -1,5 +1,8 @@
 # 実装計画: Board Lifecycle
 
+> 過去の実装計画です。現在の保存境界は[保存とデータ寿命](../../docs/architecture/board-persistence.md)を参照します。
+> schema v2・4種の要素表の記述は現在値ではありません。未移行の画像出力設計は以下に保持します。
+
 **Branch**: `codex/issue-6-board-lifecycle` | **Date**: 2026-09-27 | **Spec**: [spec.md](spec.md)
 
 ## Summary

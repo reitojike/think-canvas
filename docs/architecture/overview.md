@@ -17,6 +17,10 @@ ThinkCanvas は単一の Android app module で構成します。製品の振る
 - `app/src/main/java/com/thinkcanvas/image/`: 画像の取り込み、端末内素材、decode、checkpointと資源管理。
 - `app/src/main/java/com/thinkcanvas/share/`: Androidの共有要求の受理、確認、取り込みと保存の境界。
 
+## 詳細設計
+
+- [ボードの保存とデータ寿命](board-persistence.md): 永続化、ID、保存queue、複製、素材の参照寿命。
+
 ## 維持する境界
 
 - 利用者の内容は端末内に保存し、表示や選択だけで保存済み内容を変えません。
