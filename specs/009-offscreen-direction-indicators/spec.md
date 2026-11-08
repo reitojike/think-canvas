@@ -1,14 +1,12 @@
 # Feature Specification: 画面外対象の方向インジケーター
 
-**Feature Branch**: `codex/issue-76-offscreen-indicators`
 
-**Created**: 2026-10-04
 
-**Status**: Draft
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
 
 **Input**: [Issue #76](https://github.com/reitojike/think-canvas/issues/76)。POは現在の検索結果1件と選択対象1まとまりの2対象、条件付き最大2個を承認した。
 
-作業中のSpec009はmergeまでPRDや現行Spec001〜008を置き換えない。
+
 
 ## Clarifications
 

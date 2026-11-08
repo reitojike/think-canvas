@@ -1,9 +1,7 @@
 # Feature Specification: 視点履歴と編集変更の表示補助
 
-**Feature Branch**: `codex/issue-77-viewport-history`
-**Created**: 2026-10-04
-**Status**: Draft
-**Input**: Issue #77 / Roadmap #81。PO承認: 編集と視点の履歴を分離し、画面外の編集Undo/Redo対象へ移動する。現行specをmerge前に暗黙に置き換えない。
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
+**Input**: Issue #77 / Roadmap #81。PO承認: 編集と視点の履歴を分離し、画面外の編集Undo/Redo対象へ移動する。
 
 ## Clarifications
 

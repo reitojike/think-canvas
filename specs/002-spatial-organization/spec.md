@@ -1,8 +1,7 @@
 # 機能仕様: Spatial Organization
 
 **対象 Issue**: [#3 Spatial Organization](https://github.com/reitojike/think-canvas/issues/3)
-**作成日**: 2026-09-26
-**状態**: 設計確定
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
 **入力**: 非公開 PRD の §4〜9、§14、§16〜17 を要件の authority とし、Issue #3 と [Canvas Foundation](../001-canvas-foundation/spec.md) に照合する。非公開 HTML モックは見た目と操作の参考実装とする。元ファイルは公開リポジトリへ追加しない。
 
 ## Clarifications
@@ -121,9 +120,9 @@
 
 ## 前提と範囲
 
-- #2 の単一ボード、世界座標、ローカル保存、80 操作のセッション内 Undo/Redo を引き継ぐ。
+- 世界座標、ローカル保存、80 操作のセッション内 Undo/Redo は [基礎仕様](../001-canvas-foundation/spec.md) に従う。複数ボードの管理は [ボード管理](../005-board-lifecycle/spec.md) に従う。
 - 囲みの中身は中心位置による幾何的な関係であり、別の親子関係は保存しない。自動配置や自動分類は行わない。
 - 矢印は手動で接続・解除し、関係を自動推定しない。
-- Ink、Semantic Zoom、検索、ボード一覧と画像共有は後続 Issue の対象とする。
+- Ink、Semantic Zoom、検索、ボード一覧と画像共有の仕様は、それぞれ Spec 003・004・005 に定める。
 - 操作の時間・距離の閾値は試作値を固定せず、実機で確認して調整する。
-- PRD にある長押しメニューの複製・画像共有と、ボード一覧は #6 で扱う。#3 では図形・矢印の基本操作と、後続機能が参照できる選択・位置の契約を確立する。
+- 長押しメニューの複製・画像共有とボード一覧は [ボード管理](../005-board-lifecycle/spec.md) に従う。本仕様は図形・矢印の基本操作と選択・位置の契約を扱う。

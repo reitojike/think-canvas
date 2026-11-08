@@ -1,8 +1,6 @@
 # 機能仕様: 通常キャンバスへ戻る共通操作
 
-**Feature Branch**: `codex/issue-73-neutral-state`
-**Created**: 2026-10-03
-**Status**: 実装済み（実機確認項目あり。merge後に現行仕様として扱う）
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
 **Input**: [Issue #73](https://github.com/reitojike/think-canvas/issues/73)、親 [#81](https://github.com/reitojike/think-canvas/issues/81)。先行する #71 / Spec 006 は実装・merge・完了済み。
 
 ## Clarifications

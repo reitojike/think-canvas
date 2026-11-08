@@ -1,8 +1,6 @@
 # Feature Specification: Android共有からテキストを取り込む
 
-**Feature Branch**: `codex/issue-79-share-text`
-**Created**: 2026-10-04
-**Status**: Draft（mergeまで現行specを置き換えない）
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
 **Input**: [Issue79](https://github.com/reitojike/think-canvas/issues/79)のdestination/placement A/Aと明示task終了B。PR90/Issue77完了後のslice。
 
 ## Clarifications

@@ -1,8 +1,6 @@
 # 機能仕様: Board Lifecycle
 
-**Feature Branch**: `codex/issue-6-board-lifecycle`
-**Created**: 2026-09-27
-**Status**: 実装済み
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
 **Input**: [Issue #6](https://github.com/reitojike/think-canvas/issues/6)、非公開 PRD、HTML モック
 
 ## User Scenarios & Testing

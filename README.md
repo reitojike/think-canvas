@@ -5,28 +5,30 @@ ThinkCanvas は Android 向けのローカルファーストな思考キャン�
 複数のボードを管理し、検索で見返し、必要な範囲を画像として持ち出せます。
 ボードと要素は Room 3 で端末内に保存し、記録・閲覧・編集・保存はアカウントや AI、通信なしで完結します。
 
-## 現在の状態
+## 現行仕様（Living Spec）
 
-[初期構築 #1](https://github.com/reitojike/think-canvas/issues/1) と Spec 001〜005 の実装、
-[初期ロードマップ #7](https://github.com/reitojike/think-canvas/issues/7) は完了しています。
-[Roadmap v2 #81](https://github.com/reitojike/think-canvas/issues/81) の mobile-first usability / capture wave は完了しました。
-日常利用での検証（dogfooding）は継続し、後続の改善は [#108](https://github.com/reitojike/think-canvas/issues/108)、[#110](https://github.com/reitojike/think-canvas/issues/110)、[#111](https://github.com/reitojike/think-canvas/issues/111) などの独立した Issue で追跡しています。
+以下は現在の製品動作を記載する Living Spec です。変更時には対象の仕様を更新し、
+改修の計画・差分・進捗・検証結果は [Issue](https://github.com/reitojike/think-canvas/issues) と
+[PR](https://github.com/reitojike/think-canvas/pulls) に残します。番号は既存参照を保つために維持します。
+未確認の実機条件や過去の実行結果は、仕様がmainにあるだけで確認済みと判断しません。
 
-| 実装済みの仕様 | 対象 Issue | 公開仕様 |
-| --- | --- | --- |
-| Spec 001: Canvas Foundation | [#2](https://github.com/reitojike/think-canvas/issues/2) | [spec](specs/001-canvas-foundation/spec.md) |
-| Spec 002: Spatial Organization | [#3](https://github.com/reitojike/think-canvas/issues/3) | [spec](specs/002-spatial-organization/spec.md) |
-| Spec 003: Ink & Stylus | [#4](https://github.com/reitojike/think-canvas/issues/4) | [spec](specs/003-ink-stylus/spec.md) |
-| Spec 004: Semantic Navigation | [#5](https://github.com/reitojike/think-canvas/issues/5) | [spec](specs/004-semantic-navigation/spec.md) |
-| Spec 005: Board Lifecycle | [#6](https://github.com/reitojike/think-canvas/issues/6) | [spec](specs/005-board-lifecycle/spec.md) |
-| Spec 006: Text Editor Dismissal | [#71](https://github.com/reitojike/think-canvas/issues/71) | [spec](specs/006-text-editor-dismissal/spec.md) |
-| Spec 007: Neutral Canvas Interaction | [#73](https://github.com/reitojike/think-canvas/issues/73) | [spec](specs/007-neutral-canvas-interaction/spec.md) |
-| Spec 008: Drag Edge Auto-Pan | [#78](https://github.com/reitojike/think-canvas/issues/78) | [spec](specs/008-drag-edge-auto-pan/spec.md) |
-| Spec 009: Offscreen Direction Indicators | [#76](https://github.com/reitojike/think-canvas/issues/76) | [spec](specs/009-offscreen-direction-indicators/spec.md) |
-| Spec 010: Viewport History | [#77](https://github.com/reitojike/think-canvas/issues/77) | [spec](specs/010-viewport-history/spec.md) |
-| Spec 011: Android Share Target | [#79](https://github.com/reitojike/think-canvas/issues/79) | [spec](specs/011-share-text/spec.md) |
-| Spec 012: Blank Tap Arbitration | [#67](https://github.com/reitojike/think-canvas/issues/67) | [spec](specs/012-blank-tap-arbitration/spec.md) |
-| Spec 013: Image Element | [#80](https://github.com/reitojike/think-canvas/issues/80)（実機：小画面・大きい文字は問題なし／TalkBackは未確認・#81今回の完了対象外） | [spec](specs/013-image-element/spec.md) |
+- [Canvas Foundation](specs/001-canvas-foundation/spec.md)
+- [Spatial Organization](specs/002-spatial-organization/spec.md)
+- [Ink & Stylus](specs/003-ink-stylus/spec.md)
+- [Semantic Navigation](specs/004-semantic-navigation/spec.md)
+- [Board Lifecycle](specs/005-board-lifecycle/spec.md)
+- [テキスト入力の外側タップによる確定・終了](specs/006-text-editor-dismissal/spec.md)
+- [通常キャンバスへ戻る共通操作](specs/007-neutral-canvas-interaction/spec.md)
+- [ドラッグ中のedge auto-pan](specs/008-drag-edge-auto-pan/spec.md)
+- [画面外対象の方向インジケーター](specs/009-offscreen-direction-indicators/spec.md)
+- [視点履歴と編集変更の表示補助](specs/010-viewport-history/spec.md)
+- [Android共有からテキストを取り込む](specs/011-share-text/spec.md)
+- [空白 canvas の single / double tap 確定](specs/012-blank-tap-arbitration/spec.md)
+- [ローカル画像要素](specs/013-image-element/spec.md)
+- [操作の意味に合わせたハプティクス](specs/014-semantic-haptics/spec.md)
+- [払いだけに反応する手動panの慣性移動](specs/015-conditional-pan-fling/spec.md)
+- [長押し成立をpickupとして理解できる案内](specs/016-pickup-guidance/spec.md)
+- [テキストの1タップ編集](specs/017-single-tap-text-editing/spec.md)
 
 ## 利用できる主な機能
 
@@ -132,11 +134,10 @@ Constitution は [`.specify/memory/constitution.md`](.specify/memory/constitutio
 開発と PR レビューの手順は [`docs/runbooks/change-review.md`](docs/runbooks/change-review.md)
 にまとめています。`AGENTS.md` はこれらの判断基準を案内します。
 Codex では `$speckit-constitution`、Claude Code では `/speckit-constitution` などの
-skill 名を使います。各機能の成果物は
-[`specs/`](specs/) 内にあり、公開仕様は上の「現在の状態」から参照できます。
-`$speckit-specify` → `$speckit-clarify` → `$speckit-plan` → `$speckit-checklist` →
-`$speckit-tasks` → `$speckit-analyze` → `$speckit-implement` → `$speckit-converge`
-の順に進め、設計判断をその機能の成果物に残します。
+skill 名を使います。必要な検討は標準ワークフローで進め、タスクの一時成果物は
+その作業の範囲に留めます。現在仕様は上の Living Spec、設計は
+[architecture](docs/architecture/overview.md)、手順はrunbookへ反映します。
+計画・進捗・差分・検証結果は Issue / PR に記録し、タスクごとのspecを積み上げません。
 
 ## 要件の基準と公開境界
 

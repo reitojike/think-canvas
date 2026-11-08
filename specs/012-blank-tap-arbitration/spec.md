@@ -1,9 +1,9 @@
 # 空白 canvas の single / double tap 確定
 
 分類: `CONFIRMED_SINGLE_TAP_BEFORE_TEXT_ENTRY`。
-対象 baseline: `047b0a1060e31fad184248bb24d4bfaa6c646d20`。
-今回の明示的な製品判断を Spec 001 / 006 の空白 tap 入口へ適用する作業成果物。
-merge 前に現行仕様を暗黙に置き換えない。
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
+Spec 001 / 006 の空白 tap 入口に適用する現行の操作契約。
+
 
 ## 受け入れ条件
 

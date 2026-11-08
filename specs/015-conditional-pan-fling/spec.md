@@ -1,8 +1,6 @@
 # Feature Specification: 払いだけに反応する手動panの慣性移動
 
-**Feature Branch**: `codex/issue-102-conditional-fling`
-**Created**: 2026-10-06
-**Status**: Draft
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
 **Input**: [Issue #102](https://github.com/reitojike/think-canvas/issues/102)。大きなボードを速い払いで移動でき、ゆっくりの位置合わせは離した位置で止める。
 
 ## Clarifications
@@ -89,4 +87,3 @@
 - read-only checkpointと利用者の方向決定を経て、条件付き慣性のbounded implementationへ進む。実装後の実機比較は未実施。
 - merged Spec010の表示履歴、Spec008のedge auto-pan、Spec014の振動を維持する。
 - 技術上の速度閾値/上限はplanに定義し、実機結果に応じた補正は根拠を残す。
-- full current-head CI、canonical review、fresh main、thread0を確認してmergeする。実機比較未達ならIssueをopenに保つ。

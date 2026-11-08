@@ -1,10 +1,8 @@
 # 機能仕様: ドラッグ中のedge auto-pan
 
-**Feature Branch**: `codex/issue-78-edge-auto-pan`
 
-**Created**: 2026-10-03
 
-**Status**: 実装済み（prototype A採用。final-head CI・review・merge/closureはPR87とIssue78の最新証跡で判定）
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
 
 **Input**: Issue #78 / Roadmap #81。既存の要素移動中に画面端でviewportを自動panし、指を離さず遠くへ運べるようにする。
 
@@ -96,5 +94,5 @@
 
 - Issue #78の既存move拡張だけを扱い、新規要素種別や移動開始gestureを作らない。矢印の端点変更は対象外だが既存の選択移動に含まれる矢印は除外しない。
 - 取消時にviewportを巻き戻さないのは既存pointer cancel/2本指handoffの規則を維持するため。内容Undoとviewport historyは別機能とする。
-- Issue #73と同じpointer owner・preview終了に触れるため、実装前に#73 merge済みのcurrent code/spec・review証跡を再読した。本仕様案はmergeまでWIPであり、PRDや現行Spec 001〜007を置き換えない。
+- pointer owner と preview 終了は [通常操作の契約](../007-neutral-canvas-interaction/spec.md) に従う。
 - band幅・速度・曲線はplan/prototypeの調整値であり、製品の新しいconcept/settingsにしない。数値の比較で製品判断が必要になった場合はPOへエスカレーションし、dependentな実装を停止する。
