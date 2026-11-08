@@ -1,8 +1,6 @@
 # Feature Specification: 操作の意味に合わせたハプティクス
 
-**Feature Branch**: `codex/issue-101-semantic-haptics`
-**Created**: 2026-10-06
-**Status**: Draft
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
 **Input**: [Issue #101](https://github.com/reitojike/think-canvas/issues/101)
 
 ## User Scenarios & Testing
@@ -64,6 +62,5 @@
 ## Assumptions
 
 - Issue #101の方向に従い通常ink/regionの振動は省く。実機評価で調整が必要なら別途根拠を記録する。
-- このfeatureのmerge後はSpec 002 interaction contractの振動規則だけを置き換える。menu/move/gapの意味は#103の判断まで変えない。
+- 振動は本仕様、menu / move / gap の案内は [pickup の仕様](../016-pickup-guidance/spec.md) に従う。
 - 依存関係を上げず、端末差と標準APIのfallbackはplatformに任せる。
-- Task Contractは検証・レビュー収束後のmergeまで。実機未評価なら#101はopenで残す。

@@ -1,8 +1,6 @@
 # 機能仕様: テキストの1タップ編集
 
-**Feature Branch**: `codex/issue-111-single-tap-text-editing`
-**Created**: 2026-10-15
-**Status**: 承認仕様の実装中・未merge
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
 **Input**: [Issue #111](https://github.com/reitojike/think-canvas/issues/111) と2026-10-15のユーザー承認。
 
 ## User Scenarios & Testing
@@ -85,4 +83,3 @@
 - 選択集合の件数による既存の状態境界を使い、1件以下に戻った後の別タップは通常時とする。
 - 従来の通常1タップ選択は明示選択の操作へ移るため、移動grip等へ入る手順は変わる。長押しドラッグは維持する。
 - 新規保存形式、選択mode、gesture framework、editorの見た目の再設計、依存更新、テスト基盤の全面整備は対象外。
-- 本specは#111の作業中の承認仕様で、mergeまでは既存のmerge済みspecを暗黙に置き換えない。

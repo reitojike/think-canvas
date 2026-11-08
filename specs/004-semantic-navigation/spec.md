@@ -1,8 +1,6 @@
 # 機能仕様: Semantic Navigation
 
-**Feature Branch**: `codex/issue-5-semantic-navigation`
-**Created**: 2026-09-27
-**Status**: 実装済み（実機確認待ち）
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
 **Input**: [Issue #5](https://github.com/reitojike/think-canvas/issues/5)、非公開 PRD、HTML モック
 
 ## User Scenarios & Testing

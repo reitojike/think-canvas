@@ -1,8 +1,6 @@
 # 機能仕様: テキスト入力の外側タップによる確定・終了
 
-**Feature Branch**: `codex/issue-71-text-dismiss`
-**Created**: 2026-10-02
-**Status**: 実装済み（実機確認項目あり）
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
 **Input**: [Issue #71](https://github.com/reitojike/think-canvas/issues/71) と [Product decision update](https://github.com/reitojike/think-canvas/issues/71#issuecomment-5954690450)。外側タップは空の新規入力を無保存で終了し、入力済み・既存編集を現在の「完了」の契約で確定する。
 
 ## User Scenarios & Testing

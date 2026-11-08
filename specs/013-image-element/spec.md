@@ -1,8 +1,6 @@
 # 機能仕様: ローカル画像要素
 
-**Feature Branch**: `codex/issue-80-image-element`
-**Created**: 2026-10-05
-**Status**: Draft（mergeまで現行specを置き換えない）
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
 **Input**: [Issue #80](https://github.com/reitojike/think-canvas/issues/80)、任意の代替テキスト編集A。既存の編集・保存・geometry・視点の各authorityを維持する。
 
 ## Clarifications

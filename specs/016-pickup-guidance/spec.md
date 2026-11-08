@@ -1,8 +1,6 @@
 # Feature Specification: 長押し成立をpickupとして理解できる案内
 
-**Feature Branch**: `codex/issue-103-pickup-guidance`
-**Created**: 2026-10-06
-**Status**: Draft
+**状態**: 現行仕様（Living Spec）。検証結果・未確認事項は関連 Issue / PR を参照。
 **Input**: [Issue #103](https://github.com/reitojike/think-canvas/issues/103)。現行release/menu・drag/move/gapを維持し、成立時の案内と表示を明確にする。
 
 ## Clarifications
@@ -88,4 +86,3 @@
 
 - 利用者はpickup-firstを選択済み。Android標準のcontext action成立時menuとの差は、自由配置canvasのrelease-vs-drag契約を守る限定例外とする。
 - 標準platform timeout/slop/haptic/accessibilityを出発点とし、generic gesture frameworkを作らない。
-- #102のmerge後mainを基準に実装する。実機評価とIssue完了はmerge gateと別に記録する。

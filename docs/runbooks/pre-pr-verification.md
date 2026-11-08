@@ -2,7 +2,7 @@
 
 この手順は PR 作成前の検証を扱います。PR 後の CI とレビューの収束は別の手順です。
 
-1. Issue、依頼内容、Constitution、変更対象の現行 spec と plan を確認し、Task Contract の
+1. Issue、依頼内容、Constitution、変更対象の Living Spec と architecture を確認し、Task Contract の
    停止条件と変更範囲を確定します。受け入れ条件ごとに、実装と観測可能な検証結果を対応付けます。
 2. リポジトリの root で、現行 Android CI に対応する基本検証を実行します。
 
