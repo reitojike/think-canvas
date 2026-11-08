@@ -1,13 +1,5 @@
-# UI contract
+# 操作契約の参照先
 
-| 状態・操作 | 結果 | primary操作名 |
-| --- | --- | --- |
-| 通常text tap / primary action | 同じ要素を編集 | 編集 |
-| 複数選択・未選択text tap | 集合へ追加、編集なし | 選択に追加 |
-| 複数選択・選択済text tap | 集合から解除、編集なし | 選択から外す |
-| menuの明示選択 | 対象を単独選択、editorなし | 選択 |
-| 検索結果への移動 | viewport移動のみ | 既存の検索操作 |
-| editor A外側のB tap | Aの確定/終了のみ | 既存終了契約 |
-| その後の独立したB tap | 通常/複数選択の分岐に従う | 上記 |
+現行の操作表は[Living Specの操作契約](../spec.md#操作契約)へ統合しました。
 
-非表示・保存guard・active editor等の所有者を迂回しない。既存の明示編集/取消、長押しドラッグ、lasso、blank、inkのcontractは参照specを維持する。
+移行前の本文は[固定コミット](https://github.com/reitojike/think-canvas/blob/257a2d929aceca8a1e77e67d85a517ee9354d008/specs/017-single-tap-text-editing/contracts/ui.md)に保持しています。
