@@ -21,6 +21,8 @@ ThinkCanvas は単一の Android app module で構成します。製品の振る
 
 - [ボードの保存とデータ寿命](board-persistence.md): 永続化、ID、保存queue、複製、素材の参照寿命。
 
+- [テキスト編集session](editor-session.md): 入力状態、選択分岐、確定と保存成功の境界。
+
 ## 維持する境界
 
 - 利用者の内容は端末内に保存し、表示や選択だけで保存済み内容を変えません。

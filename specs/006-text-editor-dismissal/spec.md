@@ -74,3 +74,18 @@
 - process 終了後の draft 復元、toolbar 再設計、gesture architecture 全体の変更、保存所有者・schema・依存版の変更は対象外。
 - 旧 head `e806f77141439937d94b268325a8676c64dbcba6` の outside cancel 契約と MERGE_READY は Issue #71 の product decision と不一致で撤回した。bounded correction #2 として本 spec と実装を同期する。過去の証跡は PR #75 と Git 履歴に保持する。
 - 物理端末の TalkBack・manufacturer IME・表示/文字倍率は既知の未確認事項として PR に記録し、Roadmap #81 / #73 の mobile dogfooding で後続確認できる。今回の merge blocker へ追加しない。
+
+## 操作契約
+
+| 状態と target | 結果 |
+| --- | --- |
+| Editing、field 内 | 標準テキスト入力の操作 |
+| Editing、editor toolbar | 種類・色・やめる・完了の既存操作 |
+| Editing、新規かつ最新 text が exact empty、外側の短い単一 tap | 無保存で破棄し終了、gesture を消費 |
+| Editing、それ以外、外側の短い単一 tap | 既存 commitDraft() で validation・確定・保存・ack を処理、gesture を消費 |
+| Editing、外側の drag/long press/multitouch/cancel | 入力を保持、他 action へ転送しない |
+| Running/Failed/pending ack、外側 | 入力と同じ要求を保持、重複 commit・自動 retry なし |
+| Activity 再生成・一時 focus loss | draft と保存 continuation を保持 |
+| Idle、次の blank tap | 既存の選択解除/新規入力規則 |
+
+「完了」は explicit commit、「やめる」は無保存の explicit cancel。外側終了は空の新規入力の破棄または既存 Done の確定。空白文字と既存編集の空文字は current Done の validation に従う。DOWN/UP 間の更新後も同じ sessionId の最新内容を用いる。system Backによる終了は [Spec 007](../007-neutral-canvas-interaction/spec.md) の破棄確認に従い、IMEを閉じるだけでは入力を保持する。ボード移動の保存契約は維持する。
