@@ -1,5 +1,10 @@
 # Implementation Plan: 視点履歴と編集変更の表示補助
 
+> 現在の視点履歴と編集変更表示の設計は[architecture](../../docs/architecture/viewport-history.md)、
+> 操作契約は[Living Spec](spec.md)を参照してください。以下は変更計画・当時の判断・検証記録を
+> 含む旧資料です。IMEの表示補助・入力所有権、過去の検証証拠はまだ移設していないため本文を保持します。
+> 当時の依存版・CI件数・作業状態を現在値として扱いません。
+
 **Branch**: `codex/issue-77-viewport-history` | **Date**: 2026-10-04 | **Spec**: [spec.md](spec.md)
 
 ## Summary

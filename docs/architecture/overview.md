@@ -23,6 +23,8 @@ ThinkCanvas は単一の Android app module で構成します。製品の振る
 
 - [テキスト編集session](editor-session.md): 入力状態、選択分岐、確定と保存成功の境界。
 
+- [視点履歴と編集変更の表示補助](viewport-history.md): cameraの状態所有者、履歴境界、Undo/Redoの変更位置表示。
+
 ## 維持する境界
 
 - 利用者の内容は端末内に保存し、表示や選択だけで保存済み内容を変えません。
