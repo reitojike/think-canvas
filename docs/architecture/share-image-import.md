@@ -73,7 +73,9 @@ restore では古い全 snapshot を適用しません。receipt がある再処
   board は不変です。新 onNewIntent は新要求とし、同 task の onCreate は
   trusted checkpoint で復元します。本文をログに出力せず、外部 network への
   送信や URL 取得はしません。
-- 表示中 board → 最後に開いた有効 board → picker の順に宛先を決めます。
+- 表示中 board → 最後に開いた有効 board → picker の順に宛先を決めます。共有起動
+  では通常の初回 restore の board 自動作成を行いません。board が0件の場合は、
+  既存の作成を明示的に実行できるだけです。
   確認前の content 変更はしません。全文と board 名を preview し、
   変更/取消/取り込みを選べます。picker には選択状態と明示的な board 作成があります。
 - 保留中は元の操作を完了でき、preview 以降は live guard が古い Canvas action も拒否します。
