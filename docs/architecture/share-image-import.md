@@ -18,9 +18,13 @@ data-model と実装上の詳細契約の正本です。利用者に見える操
   外部 Intent の ID/token 指定は使いません。
   本文を切り詰めたり URL 変換したりしません。
 - Task checkpoint: taskToken はアプリ生成 UUID で、現在要求または terminal を表し、
-  初期 Intent の処理済みも保持します。本文は private file に置き、Bundle には
-  token のみを入れます。同じ task のみ復元します。本文は取消・成功・task の
-  finishing で消し、不要になった file は新規起動時に掃除します。
+  初期 Intent の処理済みも保持します。本文は backup 対象外の private file に置き、
+  Bundle には token のみを入れます。同じ task のみ復元します。本文は取消・成功・
+  task の finishing で消し、不要になった file は新規起動時に掃除します。
+- checkpoint の書き込み: UI thread 外で AtomicFile を更新し、flush・fd.sync・
+  更新後の read-back 一致で成功とします。UTF-8 往復で原文が変わる入力は成功扱い
+  しません。別の checkpoint writer は増やしません。同一プロセスの checkpoint の
+  read・write（read-back まで）・discard を、共通の JVM monitor で保護します。
 - `ShareImportReceipt`: requestId TEXT PK、boardId INTEGER、elementId TEXT。本文は
   持ちません。board 削除で cascade 削除しません。content transaction で書きます。
 - `BoardSaveAcknowledgement`: 既存 boardId/requestId/completion を持ち、共有 requestId は
@@ -41,6 +45,21 @@ Accepted checkpoint → Saving → Completed。
   commit 済み content は保持します。
 - 完了済み要求の再適用防止: ack 前に成功していた場合、後から Undo/削除された
   場合、OS 復元の場合のいずれでも、旧要求を再適用しません。
+- 復元情報の欠落: token/file が欠落・不明でも初期 Intent を fresh 要求として
+  再処理せず、再共有を案内します。FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY 付きの
+  起動は Bundle がなくても復元として扱い、同 flag の onNewIntent は受信として
+  扱いません。元の task 起動 Intent は新しい受信で置き換えません。onStop は
+  取消の判定に使いません。
+- finishing の消去順序: share VM の進行中 AtomicFile IO が完了してから、Store の
+  IO actor へ terminal 更新を渡します。古い file 更新で本文が戻らないように
+  します。checkpoint 準備・terminal 更新の失敗も Failed とし、明示 retry を
+  待ちます。画面 effect で file 書き込みを反復しません。
+- receipt 照合の範囲: 照合は古い未確定 preview にも適用し、完了 receipt を優先
+  します。request/element の identity 一致を要求し、board ID の一致は確定済み
+  patch にだけ要求します。未確定候補を保存先の根拠にしません。
+- 取消の伝播: 共有専用 Store operation の Deferred cancel は queued/transaction へ
+  伝播します。Store actor と通常保存は cancel せず、coalescing も維持します。
+  commit との競合は receipt で判定します。
 - busy な二件目: 上書きせず再共有を案内します。空/不正/対象外は拒否し board は不変です。
 
 restore では古い全 snapshot を適用しません。receipt がある再処理では全置換しません。
@@ -63,6 +82,15 @@ restore では古い全 snapshot を適用しません。receipt がある再処
   「状態と復元」に従います。
 - 共有 ID の完了と content は同じ Room transaction で保存します。schema 2→3 では
   既存 data を維持します。
+- MainActivity は singleTask とし、documentLaunchMode は never です。送信元の
+  NEW_DOCUMENT / MULTIPLE_TASK 指定でも同じ owner を使います。外部画像出力の
+  result 待ちに共有が届くと、標準 task 挙動で取消 result になり得ます。その
+  場合も既存の result cleanup を通します。
+- Deferred の宛先照会は現在の Page と request を捕捉し、非同期照会の後に同一性と
+  live な中立状態を再確認してから preview を開きます。準備判定には自身の modal
+  block を含めません。Picker/Preview の一覧照会は、await の前後で同じ
+  ShareImportState の場合だけ、一覧と「宛先消失」の判定を反映します。
+- 空の board 名は preview と picker で「無題のボード」と表示します。
 
 ## 画像要素と取り込み（013）
 
@@ -91,6 +119,9 @@ restore では古い全 snapshot を適用しません。receipt がある再処
 - 固定の app-private folder 内に `<UUID>.img` と copy 中の `<UUID>.partial` を置きます。
   ユーザー URI は copy の一時引数としてだけ使います。copy/header 検証/fsync/finalize 後の
   素材は変更しません。元の EXIF は端末内素材には残せますが、出力へ転写しません。
+- staging は flush/fsync の後に atomic rename し、header 検証をした後だけ lease
+  した記述子を返します。失敗・取消時は staging と未参照の完成 file を回収します。
+  新 process 開始時の staging sweep は Store actor 上で取り込みより先に実行します。
 - lease は opaque token と assetId 集合で、取り込み、queued save、表示 decode、
   全画像出力の寿命を保護し、finally/cancel で解除します。
 - owner 別保護 root は BoardSession の全現在/Undo/Redo snapshot で、
@@ -117,12 +148,20 @@ atomic write + readback し、同じ actor で read/cleanup します。Bundle �
 | Failed（受理後） | 同じ patch で retry。閉じても既存未保存状態を勝手に Undo しない | 新たな要素・Undo を追加しない |
 | Completed | 同じ request の durable receipt 確認後に terminal | 保存済み内容を保持 |
 
+例外として、復元した未適用・ack なしの accepted 要求で追加先が消失した場合は、
+checkpoint を終了して素材を回収可能にし、選び直せる Failed へ戻します。適用済み、
+または保存結果が不確かな要求は既存 owner を維持します（013 tasks.md T040 と現行
+実装に基づく）。
+
 receipt は既存 `share_import_receipts` の requestId/boardId/elementId を再利用し、
 歴史的 table 名は保持します。payload は入れません。同じ request の画像が現在
 削除/Undo 済みでも receipt から完了を判断します。Task の明示終了/fresh task は
 未保存 checkpoint を持ち越さず、保存済み receipt を消しません。
 
 ### 取り込み手順の契約
+
+入口は、写真は PickVisualMedia（ImageOnly）、ファイルは画像 MIME の OpenDocument
+です。
 
 1. 開始時に最新の neutral/IME/save Idle/modal なしと board の同一性を確認します。
 2. request/element UUID と開始 board/viewport を固定し、Picker checkpoint 成功後に
@@ -160,7 +199,9 @@ text 共有はその操作を黙って終了せず Deferred とし、開始元�
 - 代替テキスト: menu「代替テキストを編集」→ Draft → 完了/取消。空欄を確定できます。
   変更済み Back は破棄確認、未変更は閉じます。一つの Undo/save とし、読み上げは
   説明または「画像」とします。caption は描かず、ファイル名・asset path・OCR/AI を
-  authority にしません。
+  authority にしません。確定は最新の Draft を使い、破棄確認中は古い入力・完了・
+  取消を拒否します。
+- 選択中の画像は既存の keep-visible 規則に含めます。
 
 ### 素材の保存・表示・出力の上限
 
@@ -176,6 +217,17 @@ text 共有はその操作を黙って終了せず Deferred とし、開始元�
   要求しません。cache eviction は世界 bounds や保存内容を変えません。placeholder にも
   選択/操作と固定 bounds を残します。出力は batch lease で素材を pin し、一枚ずつ
   同じ向き/ratio で描きます。
+- 形式の受理: MIME 申告だけで受理せず、copy 済み header と bounds decoder の結果を
+  照合します。受理前に 256px へ sample した実 decode を行います。PNG は固定
+  32KiB buffer で chunk CRC・zlib 完了・期待 scanline 量・filter を検証し、Adam7・
+  packed bit depth・連続/空 IDAT・標準が許す末尾 padding を扱います。source 大の
+  raster は確保しません。
+- decode は power-of-two sampling と最終 target サイズで行い、software の ARGB_8888
+  と premultiplied alpha を維持します。向き補正の追加 bitmap は最大 16MiB です。
+  OOM と decode 失敗は失敗として扱い、内部 path を表面に出しません。
+  出力の一時 bitmap は一枚ごとに解放します。
+- 一覧 thumbnail の画像は同じ画像資源の 256px bucket を使い、テキストは既存の
+  遠景用簡略表示を維持します。
 - 静止 JPEG/PNG/WebP だけを保証し、不正/animated/上限超過は追加 0 件とします。
   copy 64MiB・source 100MP/65535px・decode 4MP/2048px・cache 32MiB/並列 1 を上限にします。
   8 種類の EXIF 向き、透明 alpha を表示/thumbnail/output で揃えます。
