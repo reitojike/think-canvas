@@ -59,10 +59,8 @@ AndroidSQLiteDriver を使い、`thinkcanvas.db` を開きます。現行 schema
 片方を削除しても、もう片方の参照がある素材を回収しません。回収失敗だけで耐久保存の成功を
 失敗に変えないよう、cleanupと保存結果を分けます。
 
-画像のID・寸法・decode上限・checkpoint各phaseの詳細は
-[画像データ契約](../../specs/013-image-element/data-model.md)、テキスト取り込みの
-task復元とretryは[共有データ契約](../../specs/011-share-text/data-model.md)を参照します。
-これらの詳細までこの文書へ移行したとは扱いません。
+画像のID・寸法・decode上限・checkpoint各phaseの詳細と、テキスト取り込みの
+task復元とretryは[共有・画像取り込みの詳細契約](share-image-import.md)を参照します。
 
 ## 画像出力は読取専用
 
