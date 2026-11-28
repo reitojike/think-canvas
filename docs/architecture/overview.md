@@ -21,6 +21,8 @@ ThinkCanvas は単一の Android app module で構成します。製品の振る
 
 - [ボードの保存とデータ寿命](board-persistence.md): 永続化、ID、保存queue、複製、素材の参照寿命。
 
+- [共有・画像取り込みの詳細契約](share-image-import.md): 共有テキストと画像の取り込み要求、checkpoint、receipt、素材とdecodeの上限。
+
 - [テキスト編集session](editor-session.md): 入力状態、選択分岐、確定と保存成功の境界。
 
 - [視点履歴と編集変更の表示補助](viewport-history.md): cameraの状態所有者、履歴境界、Undo/Redoの変更位置表示。
